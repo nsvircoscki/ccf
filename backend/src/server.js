@@ -43,7 +43,7 @@ app.post('/roles', async (req, res) => {
 
 app.get('/roles', async (req, res) => {
     try {
-        // O Prisma busca todos os registros da tabela Role
+    
         const roles = await prisma.role.findMany();
         res.status(200).json(roles);
     } catch (error) {
@@ -51,7 +51,7 @@ app.get('/roles', async (req, res) => {
     }
 });
 
-// Criar um Workflow (O processo estrutural)
+
 app.post('/workflows', async (req, res) => {
     const { name, description } = req.body;
 
@@ -74,7 +74,7 @@ app.get('/workflows', async (req, res) => {
     }
 });
 
-// Criar uma Etapa dentro do Workflow
+
 app.post('/steps', async (req, res) => {
     const { step_name, sequence_order, workflowId, requiredRoleId } = req.body;
 
@@ -153,14 +153,12 @@ app.post('/tickets/move', async (req, res) => {
     const { ticketId, userId, toStepId } = req.body;
 
     try {
-        // 1. Buscamos o Ticket atual para saber em qual etapa ele está agora (fromStepId)
         const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
         
         if (!ticket) {
             return res.status(404).json({ error: 'Ticket não encontrado.' });
         }
 
-        // 2. Executamos a Transação: Atualiza o Ticket E cria o Histórico ao mesmo tempo
         const [updatedTicket, history] = await prisma.$transaction([
             prisma.ticket.update({
                 where: { id: ticketId },
@@ -170,8 +168,8 @@ app.post('/tickets/move', async (req, res) => {
                 data: {
                     ticketId: ticketId,
                     userId: userId,
-                    fromStepId: ticket.currentStepId, // Pega a etapa antiga
-                    toStepId: toStepId                // Salva a etapa nova
+                    fromStepId: ticket.currentStepId, 
+                    toStepId: toStepId                
                 }
             })
         ]);
