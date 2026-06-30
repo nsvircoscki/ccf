@@ -1,188 +1,158 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '@prisma/client';
 
-
-const pool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL
-});
-
-
+const { Pool } = pg;
+const connectionString = process.env.DATABASE_URL;
+const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 const app = express();
-
-
 app.use(cors());
 app.use(express.json());
 
-
-app.get('/ping', (req, res) => {
-    res.json({ message: 'API do Workflow rodando perfeitamente!' });
-});
-
-app.post('/roles', async (req, res) => {
-    const { name } = req.body;
-
-    try {
-        const newRole = await prisma.role.create({
-            data: {
-                name: name
-            }
-        });
-        
-        res.status(201).json(newRole);
-    } catch (error) {
-        res.status(400).json({ error: 'Erro ao criar cargo. Talvez o nome já exista.' });
-    }
-});
-
-app.get('/roles', async (req, res) => {
-    try {
+const TAREFAS_PADRAO = [
+    { nome: "Aprovação do orcamento", setor: "Coordenação" }, { nome: "emissao contrato", setor: "Coordenação" },
+    { nome: "Assinatura Contrato", setor: "Coordenação" }, { nome: "Conferência Dossiê", setor: "Coordenação" },
+    { nome: "Agendamento Levantamento", setor: "Coordenação" }, { nome: "Conferência Pré-Projeto", setor: "Coordenação" },
+    { nome: "Aprovação do Proprietário", setor: "Coordenação" }, { nome: "Conferência Projeto", setor: "Coordenação" },
+    { nome: "Assinatura do Proprietário", setor: "Coordenação" }, { nome: "Processo Prefeitura", setor: "Coordenação" },
+    { nome: "Assinaturas dos Confrontantes", setor: "Coordenação" }, { nome: "Reconhecimento de Assinaturas", setor: "Coordenação" },
+    { nome: "Processo Cartório", setor: "Coordenação" }, { nome: "SIGEF", setor: "Coordenação" },
+    { nome: "Nota de Exigências", setor: "Coordenação" }, { nome: "Entrega do Serviço", setor: "Coordenação" },
+    { nome: "ART / Assinatura Digital", setor: "Coordenação" }, { nome: "Envio Faturamento", setor: "Coordenação" },
     
-        const roles = await prisma.role.findMany();
-        res.status(200).json(roles);
-    } catch (error) {
-        res.status(500).json({ error: 'Erro ao buscar cargos.' });
-    }
-});
+    { nome: "Solicitação de Documentos", setor: "Desenho" }, { nome: "Solicitação de Taxas", setor: "Desenho" },
+    { nome: "Recebimento Taxas", setor: "Desenho" }, { nome: "Dossiê", setor: "Desenho" },
+    { nome: "Execução do Projeto", setor: "Desenho" }, { nome: "CAR", setor: "Desenho" },
+    { nome: "Orgãos Governamentais", setor: "Desenho" }, { nome: "Montagem do Processo para Prefeitura", setor: "Desenho" },
+    { nome: "Escritura", setor: "Desenho" }, { nome: "Montagem do Processo para Cartório", setor: "Desenho" },
+    { nome: "Preparação do Material de Campo", setor: "Desenho" }, { nome: "Pré-projeto", setor: "Desenho" },
+    { nome: "Monografia", setor: "Desenho" }, { nome: "Impressão", setor: "Desenho" },
+    { nome: "Montagem do processo para SIGEF", setor: "Desenho" }, { nome: "Faturamento", setor: "Desenho" },
+    
+    { nome: "Orçamento", setor: "Charles" }, { nome: "Contrato", setor: "Charles" }, { nome: "Revisão do Processo", setor: "Charles" },
+    
+    { nome: "Levantamento", setor: "Topografia" }, { nome: "Processamento da Base", setor: "Topografia" },
+    { nome: "Croqui", setor: "Topografia" }, { nome: "Locação", setor: "Topografia" }
+];
 
-
-app.post('/workflows', async (req, res) => {
-    const { name, description } = req.body;
-
-    try {
-        const workflow = await prisma.workflow.create({
-            data: { name, description }
-        });
-        res.status(201).json(workflow);
-    } catch (error) {
-        res.status(400).json({ error: 'Erro ao criar fluxo.' });
-    }
-});
-
+// BUSCAR PROJETOS (Corrigido o include)
 app.get('/workflows', async (req, res) => {
     try {
-        const workflows = await prisma.workflow.findMany();
-        res.status(200).json(workflows);
-    } catch (error) {
-        res.status(500).json({ error: 'Erro ao buscar fluxos.' });
+        const workflows = await prisma.workflow.findMany({
+            include: { 
+                steps: { 
+                    include: { requiredRole: true }, // Traz o cargo associado a essa etapa matriz
+                    orderBy: { sequence_order: 'asc' } 
+                } 
+            },
+            orderBy: { created_at: 'desc' }
+        });
+        res.json(workflows);
+    } catch (error) { 
+        console.error(error);
+        res.status(500).json({ error: "Erro ao buscar projetos" }); 
     }
 });
 
-
-app.post('/steps', async (req, res) => {
-    const { step_name, sequence_order, workflowId, requiredRoleId } = req.body;
-
+// A FÁBRICA DE PROJETOS
+app.post('/workflows', async (req, res) => {
+    const { name } = req.body;
     try {
-        const step = await prisma.workflowStep.create({
-            data: { step_name, sequence_order, workflowId, requiredRoleId }
-        });
-        res.status(201).json(step);
-    } catch (error) {
-        res.status(400).json({ error: 'Erro ao criar etapa. Verifique se os IDs informados existem.' });
-    }
-});
+        const roles = await prisma.role.findMany();
+        const roleMap = {};
+        roles.forEach(r => roleMap[r.name] = r.id);
 
+        const workflow = await prisma.workflow.create({ data: { name } });
 
-app.get('/steps', async (req, res) => {
-    try{
-        const steps = await prisma.workflowStep.findMany({
-            include: {
-                workflow: true,
-                requiredRole: true
+        const colunasVisuais = ['Iniciar', 'Em Andamento', 'Concluído'];
+        const etapasCriadas = [];
+        let seq = 1;
+
+        for (const role of roles) {
+            for (const coluna of colunasVisuais) {
+                const etapa = await prisma.workflowStep.create({
+                    data: {
+                        step_name: coluna,
+                        sequence_order: seq++,
+                        workflow: { connect: { id: workflow.id } }, 
+                        requiredRole: { connect: { id: role.id } }  
+                    }
+                });
+                etapasCriadas.push({ ...etapa, roleName: role.name }); 
             }
-        });
-        res.status(200).json(steps);
-    } catch (error ) {
-        res.status(500).json({ error: 'Erro ao buscar etapas.' });
-    }
-});
+        }
 
-app.post('/tickets', async (req, res) => {
-    const { title, workflowId, currentStepId } = req.body;
-
-    try {
-        const ticket = await prisma.ticket.create({
-            data: {
-                title: title,
-                workflowId: workflowId,
-                currentStepId: currentStepId
-            }
+        const ticketsData = TAREFAS_PADRAO.map(t => {
+            const etapaInicialDoSetor = etapasCriadas.find(
+                step => step.step_name === 'Iniciar' && step.roleName === t.setor
+            );
+            return {
+                title: t.nome,
+                workflowId: workflow.id,
+                currentStepId: etapaInicialDoSetor.id
+            };
         });
-        res.status(201).json(ticket);
+
+        await prisma.ticket.createMany({ data: ticketsData });
+        res.status(201).json({ message: "Projeto gerado com sucesso!" });
     } catch (error) {
         console.error(error);
-        res.status(400).json({ error: 'Erro ao criar o projeto. Veririfique se os Id existem.'});
+        res.status(500).json({ error: "Erro ao fabricar o projeto" });
     }
 });
 
+// BUSCAR CARTÕES (Corrigido o include)
 app.get('/tickets', async (req, res) => {
     try {
         const tickets = await prisma.ticket.findMany({
-            include: {
+            include: { 
                 workflow: true,
-                currentStep: true
-            }
+                currentStep: { 
+                    include: { requiredRole: true } // A trava do setor está AQUI, na etapa
+                } 
+            },
+            orderBy: { created_at: 'desc' }
         });
-        res.status(200).json(tickets);
-    } catch (error) {
-        res.status(500).json({ error: 'Erro ao buscar projetos.'});
-    }
-});
-
-app.post('/users', async( req, res) => {
-    const { name, email, password_hash, roleId} = req.body;
-
-    try {
-        const user = await prisma.user.create({
-            data: { name, email, password_hash, roleId }
-        });
-        res.status(201). json(user);
-    } catch (error) {
+        res.json(tickets);
+    } catch (error) { 
         console.error(error);
-        res.status(400).json({ error: 'Erro ao criar usuário. Email pode já estar cadastrado.'})
+        res.status(500).json({ error: "Erro" }); 
     }
 });
 
+// MOVER CARTÃO
 app.post('/tickets/move', async (req, res) => {
-    const { ticketId, userId, toStepId } = req.body;
-
+    const { ticketId, toStepId, userId } = req.body; 
     try {
+        const role = await prisma.role.findUnique({ where: { name: userId } });
+        const user = await prisma.user.findFirst({ where: { roleId: role.id } });
         const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
-        
-        if (!ticket) {
-            return res.status(404).json({ error: 'Ticket não encontrado.' });
-        }
 
-        const [updatedTicket, history] = await prisma.$transaction([
-            prisma.ticket.update({
-                where: { id: ticketId },
-                data: { currentStepId: toStepId }
-            }),
+        const [updatedTicket] = await prisma.$transaction([
+            prisma.ticket.update({ where: { id: ticketId }, data: { currentStepId: toStepId } }),
             prisma.ticketHistory.create({
-                data: {
-                    ticketId: ticketId,
-                    userId: userId,
-                    fromStepId: ticket.currentStepId, 
-                    toStepId: toStepId                
-                }
+                data: { ticketId, fromStepId: ticket.currentStepId, toStepId, userId: user.id }
             })
         ]);
-
-        res.status(200).json({ message: 'Ticket avançado com sucesso!', updatedTicket, history });
-    } catch (error) {
-        console.error(error);
-        res.status(400).json({ error: 'Erro ao movimentar o ticket.' });
-    }
+        res.status(200).json({ message: "Movido", updatedTicket });
+    } catch (error) { res.status(500).json({ error: "Erro ao mover" }); }
 });
 
-
-const PORT = 3000;
-app.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
+// DELETAR CARTÃO
+app.delete('/tickets/:id', async (req, res) => {
+    try {
+        await prisma.$transaction([
+            prisma.ticketHistory.deleteMany({ where: { ticketId: req.params.id } }),
+            prisma.ticket.delete({ where: { id: req.params.id } })
+        ]);
+        res.status(200).json({ message: 'Excluído!' });
+    } catch (error) { res.status(500).json({ error: 'Erro ao excluir.' }); }
 });
+
+app.listen(3000, () => console.log(`🚀 API Fábrica de Projetos rodando na porta 3000`));

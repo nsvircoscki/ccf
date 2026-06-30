@@ -37,48 +37,48 @@ model Workflow {
 }
 
 model WorkflowStep {
-  id               String   @id @default(uuid())
-  step_name        String
-  sequence_order   Int      
+  id             String   @id @default(uuid())
+  step_name      String
+  sequence_order Int      
   
-  workflowId       String
-  workflow         Workflow @relation(fields: [workflowId], references: [id])
+  workflowId     String
+  workflow       Workflow @relation(fields: [workflowId], references: [id])
   
-  requiredRoleId   String
-  requiredRole     Role     @relation(fields: [requiredRoleId], references: [id])
+  requiredRoleId String
+  requiredRole   Role     @relation(fields: [requiredRoleId], references: [id])
 
-  tickets          Ticket[]
-  historyFrom      TicketHistory[] @relation("FromStep")
-  historyTo        TicketHistory[] @relation("ToStep")
+  tickets        Ticket[]
+  historyFrom    TicketHistory[] @relation("FromStep")
+  historyTo      TicketHistory[] @relation("ToStep")
 }
 
 model Ticket {
-  id              String   @id @default(uuid())
-  title           String
-  created_at      DateTime @default(now())
+  id            String   @id @default(uuid())
+  title         String
+  created_at    DateTime @default(now())
 
-  workflowId      String
-  workflow        Workflow @relation(fields: [workflowId], references: [id])
+  workflowId    String
+  workflow      Workflow @relation(fields: [workflowId], references: [id])
 
-  currentStepId   String
-  currentStep     WorkflowStep @relation(fields: [currentStepId], references: [id])
+  currentStepId String
+  currentStep   WorkflowStep @relation(fields: [currentStepId], references: [id])
 
-  history         TicketHistory[]
+  history       TicketHistory[]
 }
 
 model TicketHistory {
-  id              String   @id @default(uuid())
+  id               String   @id @default(uuid())
   action_timestamp DateTime @default(now())
 
-  ticketId        String
-  ticket          Ticket   @relation(fields: [ticketId], references: [id])
+  ticketId         String
+  ticket           Ticket   @relation(fields: [ticketId], references: [id])
 
-  userId          String
-  user            User     @relation(fields: [userId], references: [id])
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
 
-  fromStepId      String?  
-  fromStep        WorkflowStep? @relation("FromStep", fields: [fromStepId], references: [id])
+  fromStepId       String?  
+  fromStep         WorkflowStep? @relation("FromStep", fields: [fromStepId], references: [id])
 
-  toStepId        String
-  toStep          WorkflowStep @relation("ToStep", fields: [toStepId], references: [id])
+  toStepId         String
+  toStep           WorkflowStep @relation("ToStep", fields: [toStepId], references: [id])
 }
