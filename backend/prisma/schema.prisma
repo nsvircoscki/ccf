@@ -24,6 +24,7 @@ model User {
   role          Role   @relation(fields: [roleId], references: [id])
   
   history       TicketHistory[]
+  comments      Comment[]
 }
 
 model Workflow {
@@ -64,6 +65,7 @@ model Ticket {
   currentStep   WorkflowStep @relation(fields: [currentStepId], references: [id])
 
   history       TicketHistory[]
+  comments      Comment[]
 }
 
 model TicketHistory {
@@ -82,3 +84,16 @@ model TicketHistory {
   toStepId         String
   toStep           WorkflowStep @relation("ToStep", fields: [toStepId], references: [id])
 }
+
+model Comment {
+  id         String   @id @default(uuid())
+  text       String
+  created_at DateTime @default(now())
+
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+}
+
