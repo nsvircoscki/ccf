@@ -1,3 +1,11 @@
+@import "tailwindcss";
+
+* {
+  font-family: 'Roboto', sans-serif !important;
+  font-weight: 700;
+}
+
+
 * {
   margin: 0;
   padding: 0;
@@ -8,4 +16,6 @@ body {
   background-color: #FFFFFF;
   /* Garante que o scroll horizontal da página inteira funcione se necessário */
   overflow-x: auto; 
+  font-family: 'Roboto', sans-serif !important;
+  font-weight: 700;
 }
