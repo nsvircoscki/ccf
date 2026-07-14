@@ -67,98 +67,102 @@ export default function App() {
         className="no-print"
         style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#F5F5F5' }}
       >
-        <Topbar
-          telaAtiva={telaAtiva}
-          setTelaAtiva={setTelaAtiva}
-          buscaTexto={buscaTexto}
-          setBuscaTexto={setBuscaTexto}
-          usuarioLogado={usuarioLogado}
-          setUsuarioLogado={setUsuarioLogado}
-          onAbrirNovoProjeto={() => setModais({ ...modais, novoProjeto: true })}
-        />
-
-        <div className="bg-slate-800 text-white px-6 py-2.5 flex items-center justify-between border-b border-slate-700 shadow-sm">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-            <span>Fluxo do Sistema:</span>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => setTelaAtiva('cadastro')}
-              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                telaAtiva === 'cadastro'
-                  ? 'bg-sky-600 text-white shadow'
-                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-              }`}
-            >
-              1. Cadastro de Servico
-            </button>
-
-            <button
-              onClick={() => setTelaAtiva('dashboard')}
-              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                telaAtiva === 'dashboard'
-                  ? 'bg-sky-600 text-white shadow'
-                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-              }`}
-            >
-              2. Dashboard
-            </button>
-
-            <button
-              onClick={() => setTelaAtiva('kanban')}
-              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                telaAtiva === 'kanban'
-                  ? 'bg-sky-600 text-white shadow'
-                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-              }`}
-            >
-              3. Fabrica (Kanban)
-            </button>
-
-            <button
-              onClick={() => setTelaAtiva('orcamento')}
-              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                telaAtiva === 'orcamento'
-                  ? 'bg-sky-600 text-white shadow'
-                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-              }`}
-            >
-              4. Orcamento
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 flex flex-col">
-          {telaAtiva === 'cadastro' && <CadastroServicoView />}
-
-          {telaAtiva === 'dashboard' && (
-            <DashboardView
-              kanban={kanban}
-              usuarioLogado={usuarioLogado}
-              buscaTexto={buscaTexto}
-              onAbrirDetalhe={(ticket) => setModais({ ...modais, ticketDetalhe: ticket })}
-              onAbrirAuditoria={(proj) => setModais({ ...modais, auditoria: proj })}
+        {telaAtiva !== 'cadastro' ? (
+          <>
+            <Topbar
+              telaAtiva={telaAtiva}
               setTelaAtiva={setTelaAtiva}
-            />
-          )}
-
-          {telaAtiva === 'kanban' && (
-            <KanbanView
-              kanban={kanban}
-              usuarioLogado={usuarioLogado}
               buscaTexto={buscaTexto}
-              onAbrirDetalhe={(ticket) => setModais({ ...modais, ticketDetalhe: ticket })}
-              onAbrirAuditoria={(proj) => setModais({ ...modais, auditoria: proj })}
-              onAbrirEdicao={() => setModais({ ...modais, editarProjeto: true })}
-              onAbrirExcluirProjeto={() => setModais({ ...modais, excluirProjeto: true })}
-              onAbrirExcluirCartao={(id) => setModais({ ...modais, excluirCartao: id })}
-              onAvisoDependencia={(aviso) => setModais({ ...modais, avisoDependencia: aviso })}
+              setBuscaTexto={setBuscaTexto}
+              usuarioLogado={usuarioLogado}
+              setUsuarioLogado={setUsuarioLogado}
+              onAbrirNovoProjeto={() => setModais({ ...modais, novoProjeto: true })}
             />
-          )}
 
-          {telaAtiva === 'orcamento' && <Orcamento />}
-        </div>
+            <div className="bg-slate-800 text-white px-6 py-2.5 flex items-center justify-between border-b border-slate-700 shadow-sm">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                <span>Fluxo do Sistema:</span>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setTelaAtiva('cadastro')}
+                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                    telaAtiva === 'cadastro'
+                      ? 'bg-sky-600 text-white shadow'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  1. Cadastro de Servico
+                </button>
+
+                <button
+                  onClick={() => setTelaAtiva('dashboard')}
+                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                    telaAtiva === 'dashboard'
+                      ? 'bg-sky-600 text-white shadow'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  2. Dashboard
+                </button>
+
+                <button
+                  onClick={() => setTelaAtiva('kanban')}
+                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                    telaAtiva === 'kanban'
+                      ? 'bg-sky-600 text-white shadow'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  3. Fabrica (Kanban)
+                </button>
+
+                <button
+                  onClick={() => setTelaAtiva('orcamento')}
+                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                    telaAtiva === 'orcamento'
+                      ? 'bg-sky-600 text-white shadow'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  4. Orcamento
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 flex flex-col">
+              {telaAtiva === 'dashboard' && (
+                <DashboardView
+                  kanban={kanban}
+                  usuarioLogado={usuarioLogado}
+                  buscaTexto={buscaTexto}
+                  onAbrirDetalhe={(ticket) => setModais({ ...modais, ticketDetalhe: ticket })}
+                  onAbrirAuditoria={(proj) => setModais({ ...modais, auditoria: proj })}
+                  setTelaAtiva={setTelaAtiva}
+                />
+              )}
+
+              {telaAtiva === 'kanban' && (
+                <KanbanView
+                  kanban={kanban}
+                  usuarioLogado={usuarioLogado}
+                  buscaTexto={buscaTexto}
+                  onAbrirDetalhe={(ticket) => setModais({ ...modais, ticketDetalhe: ticket })}
+                  onAbrirAuditoria={(proj) => setModais({ ...modais, auditoria: proj })}
+                  onAbrirEdicao={() => setModais({ ...modais, editarProjeto: true })}
+                  onAbrirExcluirProjeto={() => setModais({ ...modais, excluirProjeto: true })}
+                  onAbrirExcluirCartao={(id) => setModais({ ...modais, excluirCartao: id })}
+                  onAvisoDependencia={(aviso) => setModais({ ...modais, avisoDependencia: aviso })}
+                />
+              )}
+
+              {telaAtiva === 'orcamento' && <Orcamento />}
+            </div>
+          </>
+        ) : (
+          <CadastroServicoView onBack={() => setTelaAtiva('dashboard')} />
+        )}
 
         {modais.novoProjeto && (
           <NovoProjetoModal
