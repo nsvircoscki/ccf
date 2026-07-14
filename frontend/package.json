@@ -10,10 +10,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@geoman-io/leaflet-geoman-free": "^2.20.0",
     "framer-motion": "^12.40.0",
+    "leaflet": "^1.9.4",
+    "leaflet-omnivore": "^0.3.4",
     "lucide-react": "^1.24.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "react-leaflet": "^5.0.0",
+    "tokml": "^0.4.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
