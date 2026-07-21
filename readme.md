@@ -1,7 +1,7 @@
-# Sistema de Workflow 
+# Sistema CCF
 
 ##  O Projeto
-Sistema de gestão de projetos estilo Kanban. O objetivo do sistema é ajudar no controle dos processos, atualmente conta com relatórios e com dashboards e interação e controle das etapas.
+Sistema usado para auxiliar os processos de cadastro de orçamento, cadastro de clientes, documentação, notas fiscais, boletos e monografia.
 
 ##  Stack Tecnológica
 * **Frontend:** React + Vite
