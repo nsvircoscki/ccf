@@ -1,49 +1,79 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Building2, Check, FolderPlus, MessageSquare, Save, MapPin } from 'lucide-react';
 import PainelMapa from '../page/PainelMapa.jsx';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const initialServices = [
-  { id: 1, nome: 'Levantamento Topografico', indice: 4.0, ativo: true, selecionado: false },
-  { id: 2, nome: 'Retificacao', indice: 1.5, ativo: true, selecionado: true },
-  { id: 3, nome: 'Desmembramento', indice: 1.0, ativo: true, selecionado: false },
-  { id: 4, nome: 'Unificacao', indice: 1.0, ativo: true, selecionado: false },
-  { id: 5, nome: 'Usucapiao', indice: 1.0, ativo: true, selecionado: false },
-  { id: 6, nome: 'Certificacao', indice: 1.0, ativo: true, selecionado: false },
+  { id: 1, nome: 'Lev Topo', indice: 4.0, ativo: true, selecionado: false },
+  { id: 2, nome: 'Ret', indice: 1.5, ativo: true, selecionado: true },
+  { id: 3, nome: 'Desm', indice: 1.0, ativo: true, selecionado: false },
+  { id: 4, nome: 'Uni', indice: 1.0, ativo: true, selecionado: false },
+  { id: 5, nome: 'Usu', indice: 1.0, ativo: true, selecionado: false },
+  { id: 6, nome: 'Cert', indice: 1.0, ativo: true, selecionado: false },
   { id: 7, nome: 'CAR', indice: 0.5, ativo: true, selecionado: false },
   { id: 8, nome: 'Escritura', indice: 1.0, ativo: true, selecionado: false },
-  { id: 9, nome: 'Cadastral', indice: 1.0, ativo: true, selecionado: false },
-  { id: 10, nome: 'Conferencia', indice: 1.0, ativo: true, selecionado: false },
-  { id: 11, nome: 'Movimentacao de Terra', indice: 1.0, ativo: true, selecionado: false },
-  { id: 12, nome: 'Locacao', indice: 1.0, ativo: true, selecionado: false },
-  { id: 13, nome: 'Atualizacao', indice: 1.0, ativo: true, selecionado: false },
+  { id: 9, nome: 'Cad', indice: 1.0, ativo: true, selecionado: false },
+  { id: 10, nome: 'Conf', indice: 1.0, ativo: true, selecionado: false },
+  { id: 11, nome: 'Mov de Terra', indice: 1.0, ativo: true, selecionado: false },
+  { id: 12, nome: 'Loc', indice: 1.0, ativo: true, selecionado: false },
+  { id: 13, nome: 'At', indice: 1.0, ativo: true, selecionado: false },
+  { id: 14, nome: 'Ext', indice: 1.0, ativo: true, selecionado: false}
 ];
-
 const formatIndex = (value) => value.toFixed(1).replace('.', ',');
+
+const serviceGridVariants = {
+  hidden: {},
+  show: {
+    transition: {
+      staggerChildren: 0.02,
+      delayChildren: 0.01,
+    },
+  },
+};
+
+const serviceCardVariants = {
+  hidden: { opacity: 0, y: 10, scale: 0.98 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.12, ease: 'easeOut' },
+  },
+};
 
 function ServiceCard({ service, selected, onToggle }) {
   return (
-    <button
+    <motion.button
       type="button"
       onClick={() => onToggle(service.id)}
+      variants={serviceCardVariants}
       style={{
         position: 'relative',
         padding: '13px 12px 12px',
         borderRadius: '12px',
         border: selected ? '1px solid #AFC3FF' : '1px solid rgba(15, 23, 42, 0.10)',
-        background: selected ? '#EDF3FF' : '#FFFFFF',
+        background: selected ? '#2D7AFD' : '#FFFFFF',
         textAlign: 'left',
         cursor: 'pointer',
         transition: 'all 0.15s ease',
         boxShadow: selected ? '0 4px 14px rgba(45, 122, 253, 0.08)' : '0 1px 2px rgba(15, 23, 42, 0.03)',
         minHeight: '92px',
+        overflow: 'hidden',
       }}
+      initial="hidden"
+      animate="show"
+      whileHover={{ y: -2, scale: 1.01 }}
+      whileTap={{ scale: 0.985 }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
-        <div style={{ fontSize: '13px', fontWeight: 700, lineHeight: 1.25, color: '#1F2A44', maxWidth: '120px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', paddingRight: '24px' }}>
+        <div style={{ fontSize: '13px', fontWeight: 700, lineHeight: 1.25, color: selected ? '#FFFFFF' : '#1F2A44', maxWidth: '120px' }}>
           {service.nome}
         </div>
         <div
           style={{
+            position: 'absolute',
+            top: '12px',
+            right: '12px',
             width: '20px',
             height: '20px',
             borderRadius: '6px',
@@ -55,25 +85,65 @@ function ServiceCard({ service, selected, onToggle }) {
             flexShrink: 0,
           }}
         >
-          {selected ? <Check size={12} strokeWidth={3} color="#FFFFFF" /> : null}
+          <AnimatePresence mode="wait" initial={false}>
+            {selected ? (
+              <motion.span
+                key="selected-check"
+                initial={{ opacity: 0, scale: 0.7 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.7 }}
+                transition={{ duration: 0.16 }}
+                style={{ display: 'inline-flex' }}
+              >
+                <Check size={12} strokeWidth={3} color="#FFFFFF" />
+              </motion.span>
+            ) : null}
+          </AnimatePresence>
         </div>
       </div>
 
-      <div style={{ marginTop: '18px', fontSize: '12px', color: selected ? '#5B7EEA' : '#7C8AA5', fontWeight: 600 }}>
+      <div style={{ marginTop: '18px', fontSize: '12px', color: selected ? '#DCE8FF' : '#7C8AA5', fontWeight: 600 }}>
         Índice {formatIndex(service.indice)}
       </div>
-    </button>
+    </motion.button>
   );
 }
 
 export default function CadastroServicoView({ onBack }) {
   const [viewMode, setViewMode] = useState('Topografico');
   const [services, setServices] = useState(initialServices);
+  const [contato, setContato] = useState('');
   const [area, setArea] = useState('0,00');
+  const [perimetroLSeca, setPerimetroLSeca] = useState('');
+  const [perimetroRio, setPerimetroRio] = useState('');
   const [municipio, setMunicipio] = useState('Sao Bento do Sul');
   const [codigoServico] = useState(() => `20260714-${Math.floor(100 + Math.random() * 900)}-TOP`);
   const [mensagem, setMensagem] = useState(null);
   const [cliente, setCliente] = useState('');
+  const [notasAberta, setNotasAberta] = useState(false);
+  const [notas, setNotas] = useState('');
+  const [campoAtivo, setCampoAtivo] = useState(null);
+  const [imagensJpg, setImagensJpg] = useState([]);
+  const [arquivosKml, setArquivosKml] = useState([]);
+  const jpgInputRef = useRef(null);
+  const kmlInputRef = useRef(null);
+
+
+  const baseFieldStyle = {
+    height: '44px',
+    borderRadius: '12px',
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    background: '#F8FAFD',
+    padding: '0 14px',
+    fontSize: '14px',
+    outline: 'none',
+    color: '#1F2937',
+  };
+
+  const activeFieldStyle = {
+    border: '1px solid #2D7AFD',
+    boxShadow: '0 0 0 3px rgba(45, 122, 253, 0.12)',
+  };
 
   const selectedServices = useMemo(
     () => services.filter((service) => service.selecionado && service.ativo),
@@ -98,6 +168,20 @@ export default function CadastroServicoView({ onBack }) {
     window.setTimeout(() => setMensagem(null), 2200);
   };
 
+  const handleJpgUpload = (event) => {
+    const files = Array.from(event.target.files || []);
+    const validFiles = files.filter((file) => /\.(jpe?g)$/i.test(file.name));
+    setImagensJpg(validFiles);
+    event.target.value = '';
+  };
+
+  const handleKmlUpload = (event) => {
+    const files = Array.from(event.target.files || []);
+    const validFiles = files.filter((file) => /\.kml$/i.test(file.name));
+    setArquivosKml((current) => [...current, ...validFiles]);
+    event.target.value = '';
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: '#F4F6FA', color: '#2D2A35', display: 'flex', flexDirection: 'column' }}>
       <header
@@ -116,8 +200,10 @@ export default function CadastroServicoView({ onBack }) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
-          <button
+          <motion.button
             type="button"
+            whileHover={{ scale: 1.03, y: -1 }}
+            whileTap={{ scale: 0.98 }}
             onClick={onBack}
             style={{
               width: '40px',
@@ -134,7 +220,7 @@ export default function CadastroServicoView({ onBack }) {
             }}
           >
             <ArrowLeft size={18} />
-          </button>
+          </motion.button>
 
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: '17px', fontWeight: 800, color: '#1F2937', lineHeight: 1.1 }}>
@@ -196,43 +282,52 @@ export default function CadastroServicoView({ onBack }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '26px' }}>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1'}}>
-               <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
                   <Building2 size={14} /> Cliente
-               </span>
+                </span>
               <input
                 value={cliente}
                 onChange={(event) => setCliente(event.target.value)}
-                placeholder='Nome do Cliente'
+                onFocus={() => setCampoAtivo('cliente')}
+                onBlur={() => setCampoAtivo(null)}
+                placeholder="Nome do Cliente"
                 style={{
-                  height: '44px',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(15, 23, 43, 0.12',
-                  background: '#F8FAFD',
-                  padding: '0 14px',
-                  fontSize: '14px',
-                  outline: 'none',
-                  color: '#1F2937',
+                  ...baseFieldStyle,
+                  ...(campoAtivo === 'cliente' ? activeFieldStyle : {}),
                 }}
               />
               
               </label>
 
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
+                  <MessageSquare size={14} /> Contato
+                </span>
+                <input
+                  value={contato}
+                  onChange={(event) => setContato(event.target.value)}
+                  onFocus={() => setCampoAtivo('contato')}
+                  onBlur={() => setCampoAtivo(null)}
+                  placeholder="Contato do Cliente"
+                  style={{
+                    ...baseFieldStyle,
+                    ...(campoAtivo === 'contato' ? activeFieldStyle : {}),
+                  }}
+                />
+              </label>
+
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
-                  <MapPin size={14} /> Área (ha)
+                  <MapPin size={14} /> Área (m²)
                 </span>
                 <input
                   value={area}
                   onChange={(event) => setArea(event.target.value)}
+                  onFocus={() => setCampoAtivo('area')}
+                  onBlur={() => setCampoAtivo(null)}
                   style={{
-                    height: '44px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(15, 23, 42, 0.12)',
-                    background: '#F8FAFD',
-                    padding: '0 14px',
-                    fontSize: '14px',
-                    outline: 'none',
-                    color: '#1F2937',
+                    ...baseFieldStyle,
+                    ...(campoAtivo === 'area' ? activeFieldStyle : {}),
                   }}
                 />
               </label>
@@ -244,15 +339,11 @@ export default function CadastroServicoView({ onBack }) {
                 <select
                   value={municipio}
                   onChange={(event) => setMunicipio(event.target.value)}
+                  onFocus={() => setCampoAtivo('municipio')}
+                  onBlur={() => setCampoAtivo(null)}
                   style={{
-                    height: '44px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(15, 23, 42, 0.12)',
-                    background: '#F8FAFD',
-                    padding: '0 14px',
-                    fontSize: '14px',
-                    outline: 'none',
-                    color: '#1F2937',
+                    ...baseFieldStyle,
+                    ...(campoAtivo === 'municipio' ? activeFieldStyle : {}),
                   }}
                 >
                   <option value="Sao Bento do Sul">São Bento do Sul</option>
@@ -262,6 +353,103 @@ export default function CadastroServicoView({ onBack }) {
                   <option value="Outro">Outro</option>
                 </select>
               </label>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
+                  <MapPin size={14} /> Perímetro L.Seca (km)
+                </span>
+                <input
+                  value={perimetroLSeca}
+                  onChange={(event) => setPerimetroLSeca(event.target.value)}
+                  onFocus={() => setCampoAtivo('perimetro-lseca')}
+                  onBlur={() => setCampoAtivo(null)}
+                  placeholder="Ex.: 1,25"
+                  style={{
+                    ...baseFieldStyle,
+                    ...(campoAtivo === 'perimetro-lseca' ? activeFieldStyle : {}),
+                  }}
+                />
+              </label>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
+                  <MapPin size={14} /> Perímetro Rio (km)
+                </span>
+                <input
+                  value={perimetroRio}
+                  onChange={(event) => setPerimetroRio(event.target.value)}
+                  onFocus={() => setCampoAtivo('perimetro-rio')}
+                  onBlur={() => setCampoAtivo(null)}
+                  placeholder="Ex.: 0,80"
+                  style={{
+                    ...baseFieldStyle,
+                    ...(campoAtivo === 'perimetro-rio' ? activeFieldStyle : {}),
+                  }}
+                />
+              </label>
+              <div style={{ gridColumn: '1 / -1', border: '1px solid rgba(15, 23, 42, 0.08)', borderRadius: '14px', padding: '14px', background: '#FAFBFE' }}>
+                <div style={{ fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase', marginBottom: '12px' }}>
+                  Arquivos do orçamento
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#5F6B83' }}>Imagem JPG</span>
+                    <input
+                      ref={jpgInputRef}
+                      type="file"
+                      accept=".jpg,.jpeg,image/jpeg"
+                      onChange={handleJpgUpload}
+                      style={{ display: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => jpgInputRef.current?.click()}
+                      style={{
+                        ...baseFieldStyle,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Selecionar imagem JPG
+                    </button>
+                  </label>
+
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#5F6B83' }}>Arquivos KML</span>
+                    <input
+                      ref={kmlInputRef}
+                      type="file"
+                      accept=".kml,application/vnd.google-earth.kml+xml"
+                      multiple
+                      onChange={handleKmlUpload}
+                      style={{ display: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => kmlInputRef.current?.click()}
+                      style={{
+                        ...baseFieldStyle,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Selecionar arquivos KML
+                    </button>
+                  </label>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                  <div style={{ fontSize: '12px', color: '#5F6B83' }}>
+                    {imagensJpg.length ? `JPG anexado: ${imagensJpg[0].name}` : 'Nenhuma imagem JPG anexada.'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#5F6B83' }}>
+                    {arquivosKml.length ? `${arquivosKml.length} KML(s) anexado(s)` : 'Nenhum KML anexado.'}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
@@ -273,7 +461,12 @@ export default function CadastroServicoView({ onBack }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px', paddingBottom: '8px' }}>
+            <motion.div
+              variants={serviceGridVariants}
+              initial="hidden"
+              animate="show"
+              style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px', paddingBottom: '8px' }}
+            >
               {services.map((service) => (
                 <ServiceCard
                   key={service.id}
@@ -282,7 +475,7 @@ export default function CadastroServicoView({ onBack }) {
                   onToggle={toggleService}
                 />
               ))}
-            </div>
+            </motion.div>
           </div>
 
           <div style={{ borderTop: '1px solid rgba(15, 23, 42, 0.08)', background: '#FFFFFF', padding: '16px 20px 20px' }}>
@@ -300,31 +493,52 @@ export default function CadastroServicoView({ onBack }) {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: 800, color: '#5A6780' }}>
                 SELECIONADOS
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    minWidth: '28px',
-                    height: '28px',
-                    borderRadius: '999px',
-                    background: '#E8EEFF',
-                    color: '#3D63F1',
-                    fontSize: '12px',
-                    fontWeight: 800,
-                  }}
-                >
-                  {selectedCount}
-                </span>
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span
+                    key={selectedCount}
+                    initial={{ opacity: 0, scale: 0.75, y: 4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.75, y: -4 }}
+                    transition={{ duration: 0.16 }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: '28px',
+                      height: '28px',
+                      borderRadius: '999px',
+                      background: '#E8EEFF',
+                      color: '#3D63F1',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {selectedCount}
+                  </motion.span>
+                </AnimatePresence>
               </div>
               <div style={{ fontSize: '13px', color: '#7B879B', fontWeight: 700, textAlign: 'right' }}>
-                Índice total <span style={{ color: '#1F2937', fontSize: '14px' }}>{formatIndex(totalIndice)}</span>
+                Índice total{' '}
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span
+                    key={totalIndice.toFixed(1)}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.16 }}
+                    style={{ color: '#1F2937', fontSize: '14px' }}
+                  >
+                    {formatIndex(totalIndice)}
+                  </motion.span>
+                </AnimatePresence>
               </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.25fr', gap: '12px' }}>
-              <button
+              <motion.button
                 type="button"
+                whileHover={{ scale: 1.03, y: -1 }}
+                whileTap={{ scale: 0.98 }}
                 style={{
                   height: '46px',
                   borderRadius: '12px',
@@ -342,9 +556,12 @@ export default function CadastroServicoView({ onBack }) {
               >
                 <FolderPlus size={16} />
                 Pasta
-              </button>
-              <button
+              </motion.button>
+              <motion.button
                 type="button"
+                onClick={() => setNotasAberta(true)}
+                whileHover={{ scale: 1.03, y: -1 }}
+                whileTap={{ scale: 0.98 }}
                 style={{
                   height: '46px',
                   borderRadius: '12px',
@@ -362,9 +579,11 @@ export default function CadastroServicoView({ onBack }) {
               >
                 <MessageSquare size={16} />
                 Notas
-              </button>
-              <button
+              </motion.button>
+              <motion.button
                 type="button"
+                whileHover={{ scale: 1.03, y: -1 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={handleSalvar}
                 style={{
                   height: '46px',
@@ -384,11 +603,75 @@ export default function CadastroServicoView({ onBack }) {
               >
                 <Save size={16} />
                 Salvar Cadastro
-              </button>
+              </motion.button>
             </div>
           </div>
         </aside>
       </div>
+        <AnimatePresence>
+        {notasAberta ? (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '24px',
+            }}
+            onClick={() => setNotasAberta(false)}
+          >
+            <div
+              style={{
+                width: 'min(720px, 100%)',
+                background: '#FFFFFF',
+                borderRadius: '18px',
+                padding: '20px',
+                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.22)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800 }}>Notas do Serviço</h3>
+                <button type="button" onClick={() => setNotasAberta(false)}>
+                  Fechar
+                </button>
+              </div>
+
+              <textarea
+                value={notas}
+                onChange={(e) => setNotas(e.target.value)}
+                placeholder="Digite aqui suas notas..."
+                style={{
+                  width: '100%',
+                  minHeight: '220px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(15, 23, 42, 0.12)',
+                  padding: '14px',
+                  outline: 'none',
+                  resize: 'vertical',
+                }}
+              />
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+                <button type="button" onClick={() => setNotasAberta(false)}>
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotasAberta(false);
+                  }}
+                >
+                  Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
