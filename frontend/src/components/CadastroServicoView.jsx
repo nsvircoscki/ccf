@@ -109,6 +109,35 @@ function ServiceCard({ service, selected, onToggle }) {
   );
 }
 
+function OptionButton ({ ativo, onClick, children }) {
+  return(
+    <motion.button
+      type="button"
+      whileHover={{ scale: 1.03, y: -1 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      style={{
+        flex: 1,
+        height: '36px',
+        borderRadius: '8px',
+        border: ativo ? '1px solid #2D7AFD' : '1px solid rgba(15, 23, 42, 0.12)',
+        background: ativo ? '#2D7AFD' : '#FFFFFF',
+        color: ativo ? '#FFFFFF' : '#5F6B83',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 700,
+        fontSize: '13px',
+        flexShrink: 0,
+        transition: 'all 0.15s ease',
+      }}
+    >
+      {children}
+    </motion.button>
+  );
+}
+
 export default function CadastroServicoView({ onBack }) {
   const [viewMode, setViewMode] = useState('Topografico');
   const [services, setServices] = useState(initialServices);
@@ -127,7 +156,15 @@ export default function CadastroServicoView({ onBack }) {
   const [arquivosKml, setArquivosKml] = useState([]);
   const jpgInputRef = useRef(null);
   const kmlInputRef = useRef(null);
+  const [terreno, setTerreno] = useState('');
+  const [possuiCar, setPossuiCar] = useState('');
+  const [possuiCertificacao, setPossuiCertificacao] = useState('');
+  const [confrontaCertificacao, setConfrontaCertificacao] = useState('');
+  const [codRespTecn, setCodRespTecn] = useState('');
+  const [respTecn, setRespTecn] = useState('');
+  const [matricula, setMatricula] = useState('');
 
+  
 
   const baseFieldStyle = {
     height: '44px',
@@ -141,6 +178,39 @@ export default function CadastroServicoView({ onBack }) {
   };
 
   const activeFieldStyle = {
+    border: '1px solid #2D7AFD',
+    boxShadow: '0 0 0 3px rgba(45, 122, 253, 0.12)',
+  };
+
+  const labelStyle = {
+    fontSize: '12px',
+    fontWeight: 800,
+    color: '#5F6B83',
+    textTransform: 'uppercase',
+  };
+
+  const optionRowStyle = {
+    display: 'flex',
+    gap: '8px'
+  };
+
+
+  const toggleBtnStyle = (ativo) => ({
+    flex: 1,
+    height: '38px',
+    borderRadius: '8px',
+    border: ativo ? '1px solid #2D7AFD' : '1px solid rgba(15, 23, 42, 0.12)',
+    background: ativo ? '#E8F0FF' : '#FFFFFF',
+    color: ativo ? '#2D7AFD' : '#5F6B83',
+    fontWeight: 700,
+    fontSize: '13px',
+    cursor: 'pointer',
+    transition: 'all 0.15 ease',
+  });
+
+
+  const inputStyle = {
+    ...baseFieldStyle,
     border: '1px solid #2D7AFD',
     boxShadow: '0 0 0 3px rgba(45, 122, 253, 0.12)',
   };
@@ -316,6 +386,107 @@ export default function CadastroServicoView({ onBack }) {
                 />
               </label>
 
+               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
+                  <MessageSquare size={14} /> Matrícula
+                </span>
+                <input
+                  value={matricula}
+                  onChange={(event) => setMatricula(event.target.value)}
+                  onFocus={() => setCampoAtivo('matricula')}
+                  onBlur={() => setCampoAtivo(null)}
+                  placeholder="Matrícula do Imóvel"
+                  style={{
+                    ...baseFieldStyle,
+                    ...(campoAtivo === 'matricula' ? activeFieldStyle : {}),
+                  }}
+                />
+              </label>
+
+              <div style={{ gridColumn: '1 / -1', display: 'grid', gap: '16px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={labelStyle}>Terreno</span>
+                  <div style={optionRowStyle}>
+                    <OptionButton ativo={terreno === 'Urbano'} onClick={() => setTerreno('Urbano')}>
+                      Urbano
+                    </OptionButton>
+                    <OptionButton ativo={terreno === 'Rural'} onClick={() => setTerreno('Rural')}>
+                      Rural
+                    </OptionButton>
+                  </div>
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={labelStyle}>Possui CAR</span>
+                  <div style={optionRowStyle}>
+                    <OptionButton ativo={possuiCar === 'Sim'} onClick={() => setPossuiCar('Sim')}>
+                      Sim
+                    </OptionButton>
+                    <OptionButton ativo={possuiCar === 'Não'} onClick={() => setPossuiCar('Não')}>
+                      Não
+                    </OptionButton>
+                  </div>
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={labelStyle}>Possui Certificação</span>
+                  <div style={optionRowStyle}>
+                    <OptionButton ativo={possuiCertificacao === 'Sim'} onClick={() => setPossuiCertificacao('Sim')}>
+                      Sim
+                    </OptionButton>
+                    <OptionButton ativo={possuiCertificacao === 'Não'} onClick={() => setPossuiCertificacao('Não')}>
+                      Não
+                    </OptionButton>
+                  </div>
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={labelStyle}>Confronta com Certificação</span>
+                  <div style={optionRowStyle}>
+                    <OptionButton ativo={confrontaCertificacao === 'Sim'} onClick={() => setConfrontaCertificacao('Sim')}>
+                      Sim
+                    </OptionButton>
+                    <OptionButton ativo={confrontaCertificacao === 'Não'} onClick={() => setConfrontaCertificacao('Não')}>
+                      Não
+                    </OptionButton>
+                  </div>
+                </label>
+
+                {confrontaCertificacao === 'Sim' ? (
+                  <>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={labelStyle}>Cód do Res Técn</span>
+                      <input
+                        value={codRespTecn}
+                        onChange={(e) => setCodRespTecn(e.target.value)}
+                        onFocus={() => setCampoAtivo('codRespTecn')}
+                        onBlur={() => setCampoAtivo(null)}
+                        placeholder="Código do Técnico"
+                        style={{
+                          ...baseFieldStyle,
+                          ...(campoAtivo === 'codRespTecn' ? activeFieldStyle : {}),
+                        }}
+                      />
+                    </label>
+
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={labelStyle}>Resp Técn</span>
+                      <input
+                        value={respTecn}
+                        onChange={(e) => setRespTecn(e.target.value)}
+                        onFocus={() => setCampoAtivo('respTecn')}
+                        onBlur={() => setCampoAtivo(null)}
+                        placeholder="Nome do Técnico"
+                        style={{
+                          ...baseFieldStyle,
+                          ...(campoAtivo === 'respTecn' ? activeFieldStyle : {}),
+                        }}
+                      />
+                    </label>
+                  </>
+                ) : null}
+              </div>
+
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
                   <MapPin size={14} /> Área (m²)
@@ -344,13 +515,14 @@ export default function CadastroServicoView({ onBack }) {
                   style={{
                     ...baseFieldStyle,
                     ...(campoAtivo === 'municipio' ? activeFieldStyle : {}),
+                    cursor: 'pointer',
                   }}
                 >
-                  <option value="Sao Bento do Sul">São Bento do Sul</option>
-                  <option value="Campo Alegre">Campo Alegre</option>
-                  <option value="Rio Negrinho">Rio Negrinho</option>
-                  <option value="Corupa">Corupá</option>
-                  <option value="Outro">Outro</option>
+                  <option value="Sao Bento do Sul" style={{ background: '#FFFFFF', color: '#1F2937', padding: '8px' }}>São Bento do Sul</option>
+                  <option value="Campo Alegre" style={{ background: '#FFFFFF', color: '#1F2937', padding: '8px' }}>Campo Alegre</option>
+                  <option value="Rio Negrinho" style={{ background: '#FFFFFF', color: '#1F2937', padding: '8px' }}>Rio Negrinho</option>
+                  <option value="Corupa" style={{ background: '#FFFFFF', color: '#1F2937', padding: '8px' }}>Corupá</option>
+                  <option value="Outro" style={{ background: '#FFFFFF', color: '#1F2937', padding: '8px' }}>Outro</option>
                 </select>
               </label>
 
@@ -373,7 +545,7 @@ export default function CadastroServicoView({ onBack }) {
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
-                  <MapPin size={14} /> Perímetro Rio (km)
+                  <MapPin size={14} /> Perímetro Rio (km) 
                 </span>
                 <input
                   value={perimetroRio}
@@ -518,7 +690,7 @@ export default function CadastroServicoView({ onBack }) {
                 </AnimatePresence>
               </div>
               <div style={{ fontSize: '13px', color: '#7B879B', fontWeight: 700, textAlign: 'right' }}>
-                Índice total{' '}
+                Índice total
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.span
                     key={totalIndice.toFixed(1)}
@@ -554,8 +726,7 @@ export default function CadastroServicoView({ onBack }) {
                   gap: '8px',
                 }}
               >
-                <FolderPlus size={16} />
-                Pasta
+                <FolderPlus size={16} /> Pasta
               </motion.button>
               <motion.button
                 type="button"
@@ -577,8 +748,7 @@ export default function CadastroServicoView({ onBack }) {
                   gap: '8px',
                 }}
               >
-                <MessageSquare size={16} />
-                Notas
+                <MessageSquare size={16} /> Notas
               </motion.button>
               <motion.button
                 type="button"
@@ -601,8 +771,7 @@ export default function CadastroServicoView({ onBack }) {
                   boxShadow: '0 10px 20px rgba(15, 163, 127, 0.22)',
                 }}
               >
-                <Save size={16} />
-                Salvar Cadastro
+                <Save size={16} /> Salvar Cadastro
               </motion.button>
             </div>
           </div>
@@ -661,9 +830,7 @@ export default function CadastroServicoView({ onBack }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setNotasAberta(false);
-                  }}
+                  onClick={() => { setNotasAberta(false); }}
                 >
                   Salvar
                 </button>
