@@ -6,6 +6,7 @@
 
 body {
   background-color: #FFFFFF;
+  font-family: 'Roboto', sans-serif;
   /* Garante que o scroll horizontal da página inteira funcione se necessário */
-  overflow-x: auto; 
+  overflow-x: auto;
 }

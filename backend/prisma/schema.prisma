@@ -35,6 +35,9 @@ model Workflow {
 
   steps       WorkflowStep[]
   tickets     Ticket[]
+  details     String?
+  matricula   String?
+  endereco    String?
 }
 
 model WorkflowStep {

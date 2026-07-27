@@ -1,15 +1,12 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import pg from 'pg';
-import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
-const { Pool } = pg;
-const connectionString = process.env.DATABASE_URL;
-const pool = new Pool({ connectionString });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
+const prisma = new PrismaClient({
+  adapter: new PrismaPg(process.env.DATABASE_URL)
+});
 
 const app = express();
 app.use(cors());
@@ -22,28 +19,30 @@ const MAPEAMENTO_SETORES = {
     "Aprovação do Proprietário": "Coordenação", "Conferência Projeto": "Coordenação", "ART / Assinatura Digital": "Coordenação", 
     "Assinatura do Proprietário": "Coordenação", "Processo Prefeitura": "Coordenação", "Assinaturas dos Confrontantes": "Coordenação", 
     "Reconhecimento de Assinaturas": "Coordenação", "Processo Cartório": "Coordenação", "SIGEF": "Coordenação", 
+    "Montagem do Processo para Cartório": "Coordenação", "Processo RI": "Coordenação","Recebimento Taxas": "Coordenação", "Escritura": "Coordenação", 
     "Nota de Exigências": "Coordenação", "Entrega do Serviço": "Coordenação", "Solicitação de Taxas": "Coordenação",
-    "Solicitação de Documentos": "Desenho", "Recebimento Taxas": "Desenho", "Dossiê": "Desenho", 
-    "Faturamento": "Desenho", "Preparação do Material de Campo": "Desenho", "Pré-projeto": "Desenho", "Monografia": "Desenho", 
-    "Execução do Projeto": "Desenho", "Impressão": "Desenho", "Orgãos Governamentais": "Desenho", "Montagem do Processo para Prefeitura": "Desenho", 
-    "Escritura": "Desenho", "Montagem do Processo para Cartório": "Desenho", "Montagem do processo para SIGEF": "Desenho", "CAR": "Desenho",
+    "Solicitação de Documentos": "Coordenação", "Dossiê": "Desenho", "Pré-aprovação no Sigef": "Desenho",
+    "Faturamento": "Desenho", "Preparação do Material de Campo": "Desenho", "Pré-projeto": "Desenho", "Monografia": "Desenho", "Confecção de Escritura": "Desenho",
+    "Execução do Projeto": "Desenho", "Impressão": "Desenho", "Orgãos Governamentais": "Desenho", "Montagem do Processo para Prefeitura": "Desenho", "Atualização IPTU" : "Desenho",
+    "Montagem do processo para SIGEF": "Desenho", "CAR": "Desenho",
     "Levantamento": "Topografia", "Processamento da Base": "Topografia", "Croqui": "Topografia", "Locação": "Topografia",
     "Revisão Processo": "Charles" 
 };
 
 const CATALOGO_PROCESSOS = {
-    "Retificação": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura", "Assinaturas dos Confrontantes", "Reconhecimento de Assinaturas", "Montagem do Processo para Cartório", "Nota de Exigências", "Entrega do Serviço"],
-    "Desmembramento": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Locação", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura", "Reconhecimento de Assinaturas", "Montagem do Processo para Cartório", "Nota de Exigências", "Entrega do Serviço"],
-    "Unificação": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura", "Reconhecimento de Assinaturas", "Montagem do Processo para Cartório", "Nota de Exigências", "Entrega do Serviço"],
-    "Usucapião": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura", "Reconhecimento de Assinaturas", "Montagem do Processo para Cartório", "Nota de Exigências", "Entrega do Serviço"],
-    "Alteração de Divisas": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Locação", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura", "Reconhecimento de Assinaturas", "Escritura", "Montagem do Processo para Cartório", "Nota de Exigências", "Entrega do Serviço"],
+    "Retificação": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura", "Assinaturas dos Confrontantes", "Reconhecimento de Assinaturas", "Montagem do Processo para Cartório", "Processo RI", "Nota de Exigências", "Entrega do Serviço"],
+    "Desmembramento": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Locação", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura",  "Processo Prefeitura", "Reconhecimento de Assinaturas", "Confecção de Escritura", "Montagem do Processo para Cartório", "Processo RI", "Nota de Exigências", "Entrega do Serviço"],
+    "Unificação": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura", "Reconhecimento de Assinaturas", "Montagem do Processo para Cartório", "Processo RI", "Nota de Exigências", "Entrega do Serviço"],
+    "Usucapião": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura",  "Reconhecimento de Assinaturas", "Montagem do Processo para Cartório", "Processo RI", "Nota de Exigências", "Entrega do Serviço"],
+    "Alteração de Divisas": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Locação", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura",  "Processo Prefeitura", "Reconhecimento de Assinaturas", "Confecção de Escritura", "Montagem do Processo para Cartório", "Processo RI", "Nota de Exigências", "Entrega do Serviço"],
     "CAR": ["Aprovação do Orçamento", "Solicitação de Documentos", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Aprovação do Proprietário", "Execução do Projeto", "CAR", "Entrega do Serviço"],
     "Certificação INCRA": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Execução do Projeto", "ART / Assinatura Digital", "Montagem do processo para SIGEF", "SIGEF", "Entrega do Serviço"],
-    "Escritura": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Escritura", "Montagem do Processo para Cartório", "Processo Cartório", "Nota de Exigências", "Entrega do Serviço"],
+    "Escritura": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Escritura", "Montagem do Processo para Cartório", "Processo RI", "Processo Cartório", "Nota de Exigências", "Entrega do Serviço"],
     "Conferência": ["Aprovação do Orçamento", "Solicitação de Documentos", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Execução do Projeto", "Conferência Projeto", "Entrega do Serviço"],
     "Cadastral": ["Aprovação do Orçamento", "Solicitação de Documentos", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Execução do Projeto", "Conferência Projeto", "Entrega do Serviço"],
     "Locação": ["Aprovação do Orçamento", "Solicitação de Documentos", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Locação", "Execução do Projeto", "Conferência Projeto", "Entrega do Serviço"],
-    "Movimentação de Terra": ["Aprovação do Orçamento", "Solicitação de Documentos", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Entrega do Serviço"]
+    "Movimentação de Terra": ["Aprovação do Orçamento", "Solicitação de Documentos", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Entrega do Serviço"],
+    "Danc": ["Aprovação do Orçamento", "Recebimento Taxas", "Faturamento", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Orgãos Governamentais", "Entrega do Serviço"]
 };
 
 app.get('/workflows', async (req, res) => {
@@ -57,7 +56,7 @@ app.get('/workflows', async (req, res) => {
 });
 
 app.post('/workflows', async (req, res) => {
-    const { name, types } = req.body; 
+    const { name, types, terreno } = req.body; 
     try {
         if (!types || types.length === 0) return res.status(400).json({ error: "Selecione pelo menos um tipo de processo" });
 
@@ -74,7 +73,25 @@ app.post('/workflows', async (req, res) => {
                 lista.forEach(tarefa => tarefasUnicas.add(tarefa));
             }
         });
-        const listaTarefasMesclada = Array.from(tarefasUnicas);
+
+        // 1. Converte o Set em Array ANTES de manipular a ordem
+        let listaTarefasMesclada = Array.from(tarefasUnicas);
+
+        // 2. Injeta o Sigef se for Rural
+        if (terreno === 'Rural'){
+            listaTarefasMesclada.push("Pré-aprovação no Sigef");
+        }
+
+        // 3. Injeta a Atualização IPTU se for Urbano
+        if (terreno === 'Urbano') {
+            const indexRI = listaTarefasMesclada.indexOf("Processo RI");
+            if (indexRI !== -1) {
+                // Insere logo na sequência do Processo RI
+                listaTarefasMesclada.splice(indexRI + 1, 0, "Atualização IPTU");
+            } else {
+                listaTarefasMesclada.push("Atualização IPTU");
+            }
+        }
 
         const roles = await prisma.role.findMany();
         const roleMap = {};
@@ -118,7 +135,7 @@ app.post('/workflows', async (req, res) => {
 // 2. NOVA ROTA: Editar Projeto (Adicionar/Remover Tipos)
 app.put('/workflows/:id', async (req, res) => {
     const { id } = req.params;
-    const { types } = req.body;
+    const { types, terreno } = req.body;
     try {
         if (!types || types.length === 0) return res.status(400).json({ error: "Selecione pelo menos um tipo." });
 
@@ -126,6 +143,11 @@ app.put('/workflows/:id', async (req, res) => {
         types.forEach(type => {
             if (CATALOGO_PROCESSOS[type]) CATALOGO_PROCESSOS[type].forEach(t => tarefasUnicas.add(t));
         });
+
+        if (terreno === 'Rural'){
+            tarefasUnicas.add("Pré-aprovação no Sigef");
+        }
+
         const novaListaNomes = Array.from(tarefasUnicas);
 
         const ticketsAtuais = await prisma.ticket.findMany({ where: { workflowId: id } });
@@ -158,6 +180,40 @@ app.put('/workflows/:id', async (req, res) => {
     } catch (error) { res.status(500).json({ error: "Erro ao editar projeto." }); }
 });
 
+//Editar detalhes gerais do projeto
+app.put('/workflows/:id/details', async (req, res) => {
+    const { id } = req.params;
+    const { matricula, endereco, details } = req.body;
+    try {
+        const workflowAtualizado = await prisma.workflow.update({
+            where: { id },
+            data: { matricula, endereco, details }
+        });
+        res.status(200).json(workflowAtualizado);
+    } catch (error) { 
+        console.error('Erro ao atualizar dados do projeto:', error);
+        res.status(500).json({ error: 'Erro ao atualizar projeto.' }); 
+    }
+});
+
+
+app.put('/tickets/:id', async(req, res) =>{
+    const { id } = req.params;
+    const { description } = req.body;
+    try{
+        const updatedTicket = await prisma.ticket.update({
+            where: { id },
+            data: { description }
+        });
+        res.status(200).json(updatedTicket);
+    } catch (error) {
+        console.error('Erro ao atualizar descrição:', error);
+        res.status(500).json({ error: 'Errro ao atualizar detalhes da tarefa.' });
+    }
+    
+});
+
+
 app.delete('/workflows/:id', async (req, res) => {
     try {
         const workflowId = req.params.id;
@@ -188,6 +244,29 @@ app.get('/tickets', async (req, res) => {
         });
         res.json(tickets);
     } catch (error) { res.status(500).json({ error: "Erro" }); }
+});
+
+app.post('/tickets', async (req, res) => {
+    const { title, workflowId, currentStepId } = req.body;
+    try {
+        if (!title || !workflowId || !currentStepId) {
+            return res.status(400).json({ error: 'Título, workflowId e currentStepId são obrigatórios.' });
+        }
+
+        const ticket = await prisma.ticket.create({
+            data: { title, workflowId, currentStepId },
+            include: {
+                workflow: true,
+                currentStep: { include: { requiredRole: true } },
+                history: { include: { user: true, fromStep: true, toStep: true }, orderBy: { action_timestamp: 'desc' } },
+                comments: { include: { user: true }, orderBy: { created_at: 'desc' } }
+            }
+        });
+        res.status(201).json(ticket);
+    } catch (error) {
+        console.error('Erro ao criar ticket:', error);
+        res.status(500).json({ error: "Erro ao criar ticket." });
+    }
 });
 
 app.post('/tickets/:id/comments', async (req, res) => {
