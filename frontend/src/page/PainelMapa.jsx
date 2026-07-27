@@ -27,7 +27,7 @@ function PainelMapa({ viewMode, setViewMode }) {
   const activeLayer = tileLayers[viewMode] || tileLayers.Vetorial;
 
   return (
-    <div style={{ background: '#F4F6FA', position: 'relative', height: 'calc(100vh - 64px)', minHeight: '520px', width: '100%', overflow: 'hidden' }}>
+    <div style={{ background: '#F4F6FA', position: 'relative', height: '100%', minHeight: 0, width: '100%', overflow: 'hidden' }}>
       <MapContainer
         center={[-26.2295, -49.3855]}
         zoom={15}

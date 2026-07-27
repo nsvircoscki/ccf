@@ -65,7 +65,7 @@ export default function App() {
       {globalCss}
       <div
         className="no-print"
-        style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#F5F5F5' }}
+        style={{ height: '100vh', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#F5F5F5' }}
       >
         {telaAtiva !== 'cadastro' ? (
           <>
@@ -79,7 +79,7 @@ export default function App() {
               onAbrirNovoProjeto={() => setModais({ ...modais, novoProjeto: true })}
             />
 
-            <div className="bg-slate-800 text-white px-6 py-2.5 flex items-center justify-between border-b border-slate-700 shadow-sm">
+            <div className="bg-slate-800 text-white px-6 py-2.5 flex items-center justify-between border-b border-slate-700 shadow-sm" style={{ flexShrink: 0 }}>
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
                 <span>Fluxo do Sistema:</span>
               </div>
@@ -131,7 +131,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-h-0" style={{ minHeight: 0, overflow: 'hidden' }}>
               {telaAtiva === 'dashboard' && (
                 <DashboardView
                   kanban={kanban}
@@ -157,7 +157,7 @@ export default function App() {
                 />
               )}
 
-              {telaAtiva === 'orcamento' && <Orcamento />}
+              {telaAtiva === 'orcamento' && <Orcamento onBack={() => setTelaAtiva('dashboard')} />}
             </div>
           </>
         ) : (

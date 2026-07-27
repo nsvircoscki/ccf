@@ -17,7 +17,7 @@ export function Topbar({
   onAbrirNovoProjeto 
 }) {
   return (
-    <div style={{ background: '#FFFFFF', padding: '15px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0px 2px 10px rgba(0,0,0,0.05)', zIndex: 10 }}>
+    <div style={{ background: '#FFFFFF', padding: '15px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0px 2px 10px rgba(0,0,0,0.05)', zIndex: 10, flexShrink: 0 }}>
       <div style={{ display: 'flex', gap: '30px', alignItems: 'center', flex: 1 }}>
         <h2 style={{ margin: 0, color: '#333', fontSize: '20px', fontWeight: '900' }}>WORKSPACE</h2>
         <div style={{ display: 'flex', gap: '10px', background: '#F0F0F0', padding: '5px', borderRadius: '10px' }}>
