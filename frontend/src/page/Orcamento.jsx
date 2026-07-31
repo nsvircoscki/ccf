@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowLeft,
   Building2,
   Check,
+  ChevronDown,
   CreditCard,
   FileText,
   MapPin,
@@ -30,6 +31,7 @@ const initialServices = [
   { id: 12, nome: 'Loc', indice: 1.0, ativo: true, selecionado: false },
   { id: 13, nome: 'At', indice: 1.0, ativo: true, selecionado: false },
   { id: 14, nome: 'Ext', indice: 1.0, ativo: true, selecionado: false },
+  { id: 15, nome: 'Outros', indice: 0, ativo: true, selecionado: false, editavel: true },
 ];
 
 const savedOrcamentos = [
@@ -99,6 +101,164 @@ const serviceCardVariants = {
   },
 };
 
+const dropdownWrapperVariants = {
+  open: { opacity: 1, scaleY: 1, transition: { duration: 0.18, ease: 'easeOut' } },
+  closed: { opacity: 0, scaleY: 0, transition: { duration: 0.16, ease: 'easeIn' } },
+};
+
+const dropdownItemVariants = {
+  open: { opacity: 1, y: 0, transition: { duration: 0.14, ease: 'easeOut' } },
+  closed: { opacity: 0, y: -6, transition: { duration: 0.12, ease: 'easeIn' } },
+};
+
+const dropdownIconVariants = {
+  open: { rotate: 180, transition: { duration: 0.18, ease: 'easeOut' } },
+  closed: { rotate: 0, transition: { duration: 0.18, ease: 'easeOut' } },
+};
+
+function AnimatedDropdown({ value, onChange, options, searchable = false, placeholder = 'Buscar...' }) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const dropdownRef = useRef(null);
+  const selectedLabel = options.find((option) => option.value === value)?.label || 'Selecionar...';
+
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery('');
+      return undefined;
+    }
+
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  const filteredOptions = searchable
+    ? options.filter((option) => option.label.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : options;
+
+  return (
+    <div ref={dropdownRef} style={{ position: 'relative', width: '100%' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '10px',
+          height: '44px',
+          borderRadius: '12px',
+          border: '1px solid rgba(15, 23, 42, 0.12)',
+          background: '#F8FAFD',
+          padding: '0 14px',
+          cursor: 'pointer',
+          color: '#1F2937',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: '14px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {selectedLabel}
+        </span>
+        <motion.span animate={open ? 'open' : 'closed'} variants={dropdownIconVariants} style={{ display: 'flex' }}>
+          <ChevronDown size={18} color="#64748B" />
+        </motion.span>
+      </button>
+
+      <motion.div
+        initial="closed"
+        animate={open ? 'open' : 'closed'}
+        variants={dropdownWrapperVariants}
+        style={{
+          position: 'absolute',
+          top: 'calc(100% + 8px)',
+          left: 0,
+          width: '100%',
+          zIndex: 60,
+          borderRadius: '14px',
+          border: '1px solid rgba(15, 23, 42, 0.08)',
+          background: '#FFFFFF',
+          boxShadow: '0 16px 42px rgba(15, 23, 42, 0.12)',
+          overflow: 'hidden',
+          transformOrigin: 'top center',
+          pointerEvents: open ? 'auto' : 'none',
+        }}
+      >
+        {searchable ? (
+          <div style={{ padding: '12px 12px 8px', borderBottom: '1px solid #EEF2F7' }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={placeholder}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                height: '38px',
+                borderRadius: '10px',
+                border: '1px solid rgba(15, 23, 42, 0.12)',
+                background: '#F8FAFD',
+                padding: '0 12px',
+                outline: 'none',
+                fontSize: '13px',
+                color: '#061733',
+              }}
+            />
+          </div>
+        ) : null}
+
+        <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option) => (
+              <motion.button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+                variants={dropdownItemVariants}
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '11px 12px',
+                  border: 'none',
+                  background: '#FFFFFF',
+                  color: '#061733',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {option.label}
+              </motion.button>
+            ))
+          ) : (
+            <div style={{ padding: '12px', color: '#64748B', fontSize: '13px' }}>Nenhum orçamento encontrado</div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function FieldLabel({ icon: Icon, children }) {
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: '6px', ...labelTextStyle }}>
@@ -137,7 +297,7 @@ function OptionButton({ ativo, onClick, children }) {
   );
 }
 
-function ServiceCard({ service, selected, salarioMinimo, onToggle, onIndiceChange, onTopographicChange }) {
+function ServiceCard({ service, selected, salarioMinimo, onToggle, onIndiceChange, onTopographicChange, onNameChange }) {
   const isTopographic = service.id === 1;
 
   return (
@@ -210,57 +370,51 @@ function ServiceCard({ service, selected, salarioMinimo, onToggle, onIndiceChang
       </button>
 
       <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {service.editavel ? (
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#7C8AA5' }}>Nome do serviço</span>
+            <input
+              value={service.nome}
+              onChange={(event) => onNameChange(service.id, event.target.value)}
+              style={{
+                height: '40px',
+                borderRadius: '10px',
+                border: '1px solid rgba(15, 23, 42, 0.15)',
+                background: '#FFFFFF',
+                padding: '0 12px',
+                fontSize: '13px',
+                fontWeight: 700,
+                color: '#1F2937',
+                outline: 'none',
+              }}
+            />
+          </label>
+        ) : null}
+
         {isTopographic ? (
-          <>
-            {[
-              ['indice_r', 'Indice R'],
-              ['indice_s', 'Indice S'],
-            ].map(([field, label]) => (
-              <label key={field} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', alignItems: 'center' }}>
-                <span style={{ color: '#7C8AA5', fontSize: '12px', fontWeight: 800 }}>{label}</span>
-                <input
-                  type="text"
-                  value={service[field] || ''}
-                  onChange={(event) => onTopographicChange(field, event.target.value)}
-                  style={{
-                    width: '60px',
-                    height: '32px',
-                    borderRadius: '8px',
-                    border: '1px solid rgba(15, 23, 42, 0.12)',
-                    background: '#FFFFFF',
-                    textAlign: 'center',
-                    fontSize: '13px',
-                    fontWeight: 800,
-                    color: '#1F2937',
-                    outline: 'none',
-                  }}
-                />
-              </label>
-            ))}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', alignItems: 'center' }}>
-              <span style={{ color: '#7C8AA5', fontSize: '12px', fontWeight: 800 }}>Indice</span>
-              <input
-                type="text"
-                value={formatIndex(service.indice)}
-                readOnly
-                style={{
-                  width: '60px',
-                  height: '32px',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(15, 23, 42, 0.12)',
-                  background: '#ECEEF4',
-                  textAlign: 'center',
-                  fontSize: '13px',
-                  fontWeight: 800,
-                  color: '#1F2937',
-                  outline: 'none',
-                }}
-              />
-            </div>
-          </>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', alignItems: 'center' }}>
+            <span style={{ color: '#7C8AA5', fontSize: '12px', fontWeight: 800 }}>Índice Topo</span>
+            <input
+              type="text"
+              value={formatIndex(service.indice)}
+              readOnly
+              style={{
+                width: '60px',
+                height: '32px',
+                borderRadius: '8px',
+                border: '1px solid rgba(15, 23, 42, 0.12)',
+                background: '#ECEEF4',
+                textAlign: 'center',
+                fontSize: '13px',
+                fontWeight: 800,
+                color: '#1F2937',
+                outline: 'none',
+              }}
+            />
+          </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', alignItems: 'center' }}>
-            <span style={{ color: '#7C8AA5', fontSize: '12px', fontWeight: 800 }}>Indice</span>
+            <span style={{ color: '#7C8AA5', fontSize: '12px', fontWeight: 800 }}>Índice</span>
             <input
               type="text"
               value={formatIndex(service.indice)}
@@ -345,7 +499,8 @@ function NotesModal({ notas, setNotas, onClose }) {
   );
 }
 
-function Orcamento({ onBack }) {
+function Orcamento({ onBack, buscaTexto = '', setBuscaTexto = () => { } }) {
+  const normalize = (s) => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
   const [services, setServices] = useState(initialServices);
   const [viewMode, setViewMode] = useState('Topografico');
   const [numero, setNumero] = useState(savedOrcamentos[0].numero);
@@ -362,8 +517,9 @@ function Orcamento({ onBack }) {
   const [possuiCar, setPossuiCar] = useState('');
   const [possuiCertificacao, setPossuiCertificacao] = useState('');
   const [confrontaCertificacao, setConfrontaCertificacao] = useState('');
-  const [codRespTecn, setCodRespTecn] = useState('');
-  const [respTecn, setRespTecn] = useState('');
+  const [certificacaoCodigo, setCertificacaoCodigo] = useState('');
+  const [certificacaoNome, setCertificacaoNome] = useState('');
+  const [confrontaCertificacoes, setConfrontaCertificacoes] = useState([{ id: 1, codigo: '', nome: '' }]);
   const [municipio, setMunicipio] = useState('Sao Bento do Sul');
   const [perimetroLSeca, setPerimetroLSeca] = useState('');
   const [perimetroRio, setPerimetroRio] = useState('');
@@ -399,10 +555,42 @@ function Orcamento({ onBack }) {
   );
   const totalIndice = useMemo(() => selectedServices.reduce((acc, service) => acc + service.indice, 0), [selectedServices]);
 
-  const numerosOrcamento = useMemo(() => uniqueValues(savedOrcamentos, 'numero'), []);
-  const clientes = useMemo(() => uniqueValues(savedOrcamentos, 'cliente'), []);
-  const matriculas = useMemo(() => uniqueValues(savedOrcamentos, 'matricula'), []);
-  const mostrarRespTecnico = possuiCertificacao === 'Sim' || confrontaCertificacao === 'Sim';
+  // Filtrar savedOrcamentos pelo texto de busca (numero, cliente, matricula)
+  const savedOrcamentosFiltrados = useMemo(() => {
+    const q = normalize(buscaTexto.trim());
+    if (!q) return savedOrcamentos;
+    return savedOrcamentos.filter(b =>
+      normalize(b.numero).includes(q) ||
+      normalize(b.cliente).includes(q) ||
+      normalize(b.matricula).includes(q)
+    );
+  }, [buscaTexto]);
+
+  const numerosOrcamento = useMemo(() => uniqueValues(savedOrcamentosFiltrados, 'numero'), [savedOrcamentosFiltrados]);
+  const clientes = useMemo(() => uniqueValues(savedOrcamentosFiltrados, 'cliente'), [savedOrcamentosFiltrados]);
+  const matriculas = useMemo(() => uniqueValues(savedOrcamentosFiltrados, 'matricula'), [savedOrcamentosFiltrados]);
+
+  useEffect(() => {
+    if (confrontaCertificacao !== 'Sim') {
+      setConfrontaCertificacoes([{ id: 1, codigo: '', nome: '' }]);
+    }
+  }, [confrontaCertificacao]);
+
+  useEffect(() => {
+    if (confrontaCertificacao !== 'Sim') return;
+    const last = confrontaCertificacoes[confrontaCertificacoes.length - 1];
+    if (!last) return;
+
+    const lastFilled = last.codigo.trim() !== '' || last.nome.trim() !== '';
+    const hasEmptyAfter = confrontaCertificacoes.some((item, index) => index !== confrontaCertificacoes.length - 1 && item.codigo.trim() === '' && item.nome.trim() === '');
+
+    if (lastFilled && !hasEmptyAfter) {
+      setConfrontaCertificacoes((current) => [
+        ...current,
+        { id: Math.max(0, ...current.map((item) => item.id)) + 1, codigo: '', nome: '' },
+      ]);
+    }
+  }, [confrontaCertificacoes, confrontaCertificacao]);
 
   const fieldStyle = (name) => ({
     ...baseFieldStyle,
@@ -445,6 +633,16 @@ function Orcamento({ onBack }) {
   const updateServiceIndice = (id, value) => {
     const newIndice = parseNumberInput(value);
     setServices((current) => current.map((service) => (service.id === id ? { ...service, indice: newIndice } : service)));
+  };
+
+  const updateServiceName = (id, value) => {
+    setServices((current) => current.map((service) => (service.id === id ? { ...service, nome: value } : service)));
+  };
+
+  const updateConfrontaCertificacaoField = (id, key, value) => {
+    setConfrontaCertificacoes((current) =>
+      current.map((item) => (item.id === id ? { ...item, [key]: value } : item)),
+    );
   };
 
   const updateTopographicFields = (field, value) => {
@@ -541,18 +739,13 @@ function Orcamento({ onBack }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1' }}>
                 <FieldLabel icon={FileText}>Numero do Orcamento</FieldLabel>
-                <input
+                <AnimatedDropdown
                   value={numero}
-                  list="orcamentos-salvos"
-                  onChange={(event) => handleOrcamentoChange(event.target.value)}
-                  onFocus={() => setCampoAtivo('numero')}
-                  onBlur={() => setCampoAtivo(null)}
-                  placeholder="Digite ou selecione"
-                  style={fieldStyle('numero')}
+                  onChange={handleOrcamentoChange}
+                  options={numerosOrcamento.map((item) => ({ value: item, label: item }))}
+                  searchable
+                  placeholder="Buscar orçamento..."
                 />
-                <datalist id="orcamentos-salvos">
-                  {numerosOrcamento.map((item) => <option key={item} value={item} />)}
-                </datalist>
               </label>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1' }}>
@@ -632,33 +825,63 @@ function Orcamento({ onBack }) {
                   </div>
                 </label>
 
-                {mostrarRespTecnico ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <span style={labelTextStyle}>Cod do Res Tecn</span>
-                      <input
-                        value={codRespTecn}
-                        onChange={(event) => setCodRespTecn(event.target.value)}
-                        onFocus={() => setCampoAtivo('codRespTecn')}
-                        onBlur={() => setCampoAtivo(null)}
-                        placeholder="Codigo"
-                        style={fieldStyle('codRespTecn')}
-                      />
-                    </label>
+                {possuiCertificacao === 'Sim' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <span style={labelTextStyle}>Cod Certificação</span>
+                    <input
+                      value={certificacaoCodigo}
+                      onChange={(event) => setCertificacaoCodigo(event.target.value)}
+                      onFocus={() => setCampoAtivo('certificacaoCodigo')}
+                      onBlur={() => setCampoAtivo(null)}
+                      placeholder="Digite Cod da Certificação"
+                      style={fieldStyle('certificacaoCodigo')}
+                    />
+                  </label>
 
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <span style={labelTextStyle}>Resp Tecn</span>
-                      <input
-                        value={respTecn}
-                        onChange={(event) => setRespTecn(event.target.value)}
-                        onFocus={() => setCampoAtivo('respTecn')}
-                        onBlur={() => setCampoAtivo(null)}
-                        placeholder="Nome do tecnico"
-                        style={fieldStyle('respTecn')}
-                      />
-                    </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <span style={labelTextStyle}>Nome Resp Tec</span>
+                    <input
+                      value={certificacaoNome}
+                      onChange={(event) => setCertificacaoNome(event.target.value)}
+                      onFocus={() => setCampoAtivo('certificacaoNome')}
+                      onBlur={() => setCampoAtivo(null)}
+                      placeholder="Digite nome do Resp Tec"
+                      style={fieldStyle('certificacaoNome')}
+                    />
+                  </label>
+                </div>
+              ) : null}
+
+              {confrontaCertificacao === 'Sim' ? (
+                <div style={{ display: 'grid', gap: '12px', marginTop: '14px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
+                    Confrontantes com certificação
                   </div>
-                ) : null}
+                  {confrontaCertificacoes.map((item) => (
+                    <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={labelTextStyle}>Cod Certificação</span>
+                        <input
+                          value={item.codigo}
+                          onChange={(event) => updateConfrontaCertificacaoField(item.id, 'codigo', event.target.value)}
+                          style={fieldStyle(`confronta-codigo-${item.id}`)}
+                          placeholder="Digite Cod da Certificação"
+                        />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={labelTextStyle}>Nome do Resp Tec</span>
+                        <input
+                          value={item.nome}
+                          onChange={(event) => updateConfrontaCertificacaoField(item.id, 'nome', event.target.value)}
+                          style={fieldStyle(`confronta-nome-${item.id}`)}
+                          placeholder="Digite nome do Resp Tec"
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               </div>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -673,18 +896,7 @@ function Orcamento({ onBack }) {
                   <option value="Campo Alegre">Campo Alegre</option>
                   <option value="Rio Negrinho">Rio Negrinho</option>
                   <option value="Corupa">Corupa</option>
-                  <option value="Outro">Outro</option>
                 </select>
-              </label>
-
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <FieldLabel icon={MapPin}>Perimetro L.Seca (km)</FieldLabel>
-                <input value={perimetroLSeca} onChange={(event) => setPerimetroLSeca(event.target.value)} onFocus={() => setCampoAtivo('perimetro-lseca')} onBlur={() => setCampoAtivo(null)} placeholder="Ex.: 1,25" style={fieldStyle('perimetro-lseca')} />
-              </label>
-
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <FieldLabel icon={MapPin}>Perimetro Rio (km)</FieldLabel>
-                <input value={perimetroRio} onChange={(event) => setPerimetroRio(event.target.value)} onFocus={() => setCampoAtivo('perimetro-rio')} onBlur={() => setCampoAtivo(null)} placeholder="Ex.: 0,80" style={fieldStyle('perimetro-rio')} />
               </label>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1' }}>
@@ -729,13 +941,45 @@ function Orcamento({ onBack }) {
                   </div>
                 </div>
               </div>
+
+              <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginTop: '14px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <FieldLabel icon={MapPin}>Perimetro L.Seca (km)</FieldLabel>
+                  <input value={perimetroLSeca} onChange={(event) => setPerimetroLSeca(event.target.value)} onFocus={() => setCampoAtivo('perimetro-lseca')} onBlur={() => setCampoAtivo(null)} placeholder="Ex.: 1,25" style={fieldStyle('perimetro-lseca')} />
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <FieldLabel icon={MapPin}>Perimetro Rio (km)</FieldLabel>
+                  <input value={perimetroRio} onChange={(event) => setPerimetroRio(event.target.value)} onFocus={() => setCampoAtivo('perimetro-rio')} onBlur={() => setCampoAtivo(null)} placeholder="Ex.: 0,80" style={fieldStyle('perimetro-rio')} />
+                </label>
+              </div>
+
+              <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginTop: '14px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={labelTextStyle}>Índice R</span>
+                  <input
+                    value={services.find((service) => service.id === 1)?.indice_r || ''}
+                    onChange={(event) => updateTopographicFields('indice_r', event.target.value)}
+                    style={fieldStyle('indice_r')}
+                    placeholder="Ex.: 1,0"
+                  />
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={labelTextStyle}>Índice S</span>
+                  <input
+                    value={services.find((service) => service.id === 1)?.indice_s || ''}
+                    onChange={(event) => updateTopographicFields('indice_s', event.target.value)}
+                    style={fieldStyle('indice_s')}
+                    placeholder="Ex.: 1,0"
+                  />
+                </label>
+              </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
               <div style={{ fontSize: '13px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>Servicos</div>
-              <div style={{ fontSize: '12px', color: '#8A94A6', fontWeight: 700 }}>Indice editavel</div>
             </div>
-
             <motion.div
               variants={serviceGridVariants}
               initial="hidden"
@@ -749,8 +993,7 @@ function Orcamento({ onBack }) {
                   selected={service.selecionado && service.ativo}
                   salarioMinimo={salarioMinimo}
                   onToggle={toggleService}
-                  onIndiceChange={updateServiceIndice}
-                  onTopographicChange={updateTopographicFields}
+                  onNameChange={updateServiceName}
                 />
               ))}
             </motion.div>

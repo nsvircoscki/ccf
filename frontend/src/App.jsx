@@ -6,6 +6,7 @@ import { KanbanView } from './components/KanbanView';
 import { LoginView } from './components/LoginView';
 import CadastroServicoView from './components/CadastroServicoView';
 import Orcamento from './page/Orcamento';
+import EmissaoDocumentos from './page/EmissaoDocumentos';
 
 import { NovoProjetoModal } from './modals/NovoProjetoModal';
 import { EditarProjetoModal } from './modals/EditarProjetoModal';
@@ -87,46 +88,52 @@ export default function App() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setTelaAtiva('cadastro')}
-                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                    telaAtiva === 'cadastro'
+                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${telaAtiva === 'cadastro'
                       ? 'bg-sky-600 text-white shadow'
                       : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
+                    }`}
                 >
                   1. Cadastro de Servico
                 </button>
 
                 <button
                   onClick={() => setTelaAtiva('dashboard')}
-                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                    telaAtiva === 'dashboard'
+                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${telaAtiva === 'dashboard'
                       ? 'bg-sky-600 text-white shadow'
                       : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
+                    }`}
                 >
                   2. Dashboard
                 </button>
 
                 <button
                   onClick={() => setTelaAtiva('kanban')}
-                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                    telaAtiva === 'kanban'
+                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${telaAtiva === 'kanban'
                       ? 'bg-sky-600 text-white shadow'
                       : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
+                    }`}
                 >
                   3. Fabrica (Kanban)
                 </button>
 
                 <button
                   onClick={() => setTelaAtiva('orcamento')}
-                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                    telaAtiva === 'orcamento'
+                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${telaAtiva === 'orcamento'
                       ? 'bg-sky-600 text-white shadow'
                       : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
+                    }`}
                 >
                   4. Orcamento
+                </button>
+
+                <button
+                  onClick={() => setTelaAtiva('emissao-documentos')}
+                  className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${telaAtiva === 'emissao-documentos'
+                      ? 'bg-sky-600 text-white shadow'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                >
+                  5. Emissao de Documentos
                 </button>
               </div>
             </div>
@@ -157,7 +164,15 @@ export default function App() {
                 />
               )}
 
-              {telaAtiva === 'orcamento' && <Orcamento onBack={() => setTelaAtiva('dashboard')} />}
+              {telaAtiva === 'orcamento' && (
+                <Orcamento
+                  onBack={() => setTelaAtiva('dashboard')}
+                  buscaTexto={buscaTexto}
+                  setBuscaTexto={setBuscaTexto}
+                />
+              )}
+
+              {telaAtiva === 'emissao-documentos' && <EmissaoDocumentos />}
             </div>
           </>
         ) : (
