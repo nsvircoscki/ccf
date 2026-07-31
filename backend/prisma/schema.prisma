@@ -31,13 +31,17 @@ model Workflow {
   id          String   @id @default(uuid())
   name        String
   description String?
-  created_at  DateTime @default(now())
-
-  steps       WorkflowStep[]
-  tickets     Ticket[]
-  details     String?
   matricula   String?
   endereco    String?
+  details     String?
+  terreno     String?  @default("Urbano")
+
+  servicoId   String?
+  servico     Servico? @relation(fields: [servicoId], references: [id])
+
+  created_at  DateTime @default(now())
+  steps       WorkflowStep[]
+  tickets     Ticket[]
 }
 
 model WorkflowStep {
@@ -59,6 +63,7 @@ model WorkflowStep {
 model Ticket {
   id            String   @id @default(uuid())
   title         String
+  description   String?
   created_at    DateTime @default(now())
 
   workflowId    String
@@ -99,4 +104,41 @@ model Comment {
   userId     String
   user       User     @relation(fields: [userId], references: [id])
 }
+
+model Servico {
+  id            String   @id @default(uuid())
+  numeroServico String   @unique
+  tipoCliente   String
+  nomeCliente   String
+  contato       String?
+
+  matricula             String?
+  terreno               String?  @default("Urbano")
+  possuiCar             String?
+  possuiCertificacao    String?
+  confrontaCertificacao String?
+  codRespTecn           String?
+  respTecn              String?
+  notas                 String?
+
+  area          Float?
+  municipio     String
+  linhaSecaKm   Float?
+  rioKm         Float?
+  caminhoPasta  String?
+  arquivoKml    String?
+
+  tiposSolicitados  String[]
+
+  statusOrcamento  String   @default("PENDENTE")
+  valorTotal       Float?
+  contratoGerado   Boolean  @default(false)
+
+  workflows        Workflow[]
+
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+}
+
+
 
