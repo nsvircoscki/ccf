@@ -61,6 +61,32 @@ export function useKanban() {
     carregarDados();
   };
 
+  const criarTicketLocal = async ({ title, description, workflowId, currentStepId }) => {
+    const ticketCriado = await api.createTicket({ title, description, workflowId, currentStepId });
+    setTickets(prev => [...prev, ticketCriado]);
+    return ticketCriado;
+  };
+
+  const atualizarDescricaoLocal = async (ticketId, description) => {
+    setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, description } : t));
+    try {
+      await api.updateTicket(ticketId, { description });
+    } catch (err) {
+      console.error("Erro ao salvar descrição, revertendo...", err);
+      carregarDados();
+    }
+  };
+
+  const atualizarDetalhesProjeto = async (workflowId, { matricula, endereco, details }) => {
+    setWorkflows(prev => prev.map(w => w.id === workflowId ? { ...w, matricula, endereco, details } : w));
+    try {
+      await api.updateWorkflowDetails(workflowId, { matricula, endereco, details });
+    } catch (err) {
+      console.error("Erro ao salvar informações do projeto, revertendo...", err);
+      carregarDados();
+    }
+  };
+
   return {
     tickets,
     workflows,
@@ -69,6 +95,9 @@ export function useKanban() {
     carregarDados,
     moverTicketOtimista,
     adicionarComentarioLocal,
-    excluirCartaoLocal
+    excluirCartaoLocal,
+    criarTicketLocal,
+    atualizarDescricaoLocal,
+    atualizarDetalhesProjeto
   };
 }

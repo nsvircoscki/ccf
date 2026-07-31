@@ -11,6 +11,24 @@ export const ticketController = {
     }
   },
 
+  async criar(req, res) {
+    try {
+      const ticket = await ticketService.criarTicket(req.body);
+      res.status(201).json(ticket);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+
+  async atualizar(req, res) {
+    try {
+      const ticket = await ticketService.atualizarTicket(req.params.id, req.body);
+      res.status(200).json(ticket);
+    } catch (error) {
+      res.status(500).json({ error: "Erro ao atualizar tarefa." });
+    }
+  },
+
   async comentar(req, res) {
     try {
       const comentario = await ticketService.adicionarComentario(req.params.id, req.body.userId, req.body.text);

@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import workflowRoutes from './routes/workflowRoutes.js';
 import ticketRoutes from './routes/ticketRoutes.js';
+import servicoRoutes from './routes/servicoRoutes.js';
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(express.json());
 // Montagem das rotas limpas
 app.use('/workflows', workflowRoutes);
 app.use('/tickets', ticketRoutes);
+app.use('/servicos', servicoRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

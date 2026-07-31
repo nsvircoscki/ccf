@@ -5,8 +5,10 @@ import { ticketController } from '../controllers/ticketController.js'; // <-- At
 const router = Router();
 
 router.get('/', ticketController.listar);
+router.post('/', ticketController.criar);
 router.post('/move', ticketController.mover);
 router.post('/:id/comments', ticketController.comentar);
+router.put('/:id', ticketController.atualizar);
 router.delete('/:id', ticketController.excluir);
 
 export default router;

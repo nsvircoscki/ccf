@@ -14,6 +14,28 @@ export const ticketService = {
     });
   },
 
+  async criarTicket({ title, description, workflowId, currentStepId }) {
+    if (!title || !title.trim()) throw new Error("Informe o título da tarefa.");
+    if (!workflowId || !currentStepId) throw new Error("Projeto e etapa são obrigatórios.");
+
+    return prisma.ticket.create({
+      data: { title: title.trim(), description: description || null, workflowId, currentStepId },
+      include: {
+        workflow: true,
+        currentStep: { include: { requiredRole: true } },
+        history: { include: { user: true, fromStep: true, toStep: true } },
+        comments: { include: { user: true } }
+      }
+    });
+  },
+
+  async atualizarTicket(ticketId, { description }) {
+    return prisma.ticket.update({
+      where: { id: ticketId },
+      data: { description }
+    });
+  },
+
   async adicionarComentario(ticketId, userId, text) {
     const role = await prisma.role.findUnique({ where: { name: userId } });
     const user = await prisma.user.findFirst({ where: { roleId: role.id } });

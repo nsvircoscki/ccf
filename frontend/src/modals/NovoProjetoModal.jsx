@@ -5,7 +5,8 @@ const TIPOS_PROCESSO = ["Retificação", "Desmembramento", "Unificação", "Usuc
 
 export function NovoProjetoModal({ kanban, onClose, setTelaAtiva }) {
   const [nomeNovoProjeto, setNomeNovoProjeto] = useState("");
-  const [tiposNovoProjeto, setTiposNovoProjeto] = useState([]); 
+  const [tiposNovoProjeto, setTiposNovoProjeto] = useState([]);
+  const [terrenoNovoProjeto, setTerrenoNovoProjeto] = useState('Urbano');
   const [carregandoCriacao, setCarregandoCriacao] = useState(false);
   const [erroCriacao, setErroCriacao] = useState("");
 
@@ -19,7 +20,7 @@ export function NovoProjetoModal({ kanban, onClose, setTelaAtiva }) {
     setCarregandoCriacao(true);
     setErroCriacao("");
     try {
-      const res = await api.createWorkflow(nomeNovoProjeto, tiposNovoProjeto);
+      const res = await api.createWorkflow(nomeNovoProjeto, tiposNovoProjeto, terrenoNovoProjeto);
       if (!res.ok) {
         setErroCriacao(res.data.error);
         setCarregandoCriacao(false);
@@ -54,6 +55,24 @@ export function NovoProjetoModal({ kanban, onClose, setTelaAtiva }) {
 
         <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#999' }}>NOME DO CLIENTE / PROJETO</label>
         <input autoFocus value={nomeNovoProjeto} onChange={e => setNomeNovoProjeto(e.target.value)} placeholder="Ex: Fazenda Sul..." style={{ width: '100%', padding: '15px', borderRadius: '10px', border: '2px solid #EEE', marginBottom: '20px', boxSizing: 'border-box', fontSize: '16px', outline: 'none' }} />
+
+        <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#999', display: 'block', marginBottom: '10px' }}>TIPO DE TERRENO</label>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+          <button
+            type="button"
+            onClick={() => setTerrenoNovoProjeto('Urbano')}
+            style={{ flex: 1, padding: '12px', borderRadius: '10px', border: terrenoNovoProjeto === 'Urbano' ? '2px solid #4A90E2' : '1px solid #DDD', background: terrenoNovoProjeto === 'Urbano' ? '#EFF6FF' : '#FFF', color: terrenoNovoProjeto === 'Urbano' ? '#4A90E2' : '#555', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            Urbano
+          </button>
+          <button
+            type="button"
+            onClick={() => setTerrenoNovoProjeto('Rural')}
+            style={{ flex: 1, padding: '12px', borderRadius: '10px', border: terrenoNovoProjeto === 'Rural' ? '2px solid #22C55E' : '1px solid #DDD', background: terrenoNovoProjeto === 'Rural' ? '#F0FDF4' : '#FFF', color: terrenoNovoProjeto === 'Rural' ? '#22C55E' : '#555', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            Rural
+          </button>
+        </div>
 
         <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#999', display: 'block', marginBottom: '10px' }}>TIPOS DE PROCESSO (Selecione 1 ou mais)</label>
         <div className="scroll" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '25px', maxHeight: '180px', overflowY: 'auto', background: '#F9F9F9', padding: '15px', borderRadius: '10px', border: '1px solid #EEE' }}>

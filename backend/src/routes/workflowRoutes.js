@@ -7,6 +7,7 @@ const router = Router();
 router.get('/', workflowController.listar);
 router.post('/', workflowController.criar);
 router.put('/:id', workflowController.editar);
+router.put('/:id/details', workflowController.detalhes);
 router.delete('/:id', workflowController.excluir);
 
 export default router;

@@ -16,7 +16,9 @@ const getCorStatus = (status) => {
 
 export function TicketDetailModal({ ticket, kanban, usuarioLogado, onClose }) {
   const [novoComentario, setNovoComentario] = useState("");
-  
+  const [editandoDescricao, setEditandoDescricao] = useState(false);
+  const [descricaoEditada, setDescricaoEditada] = useState("");
+
   // Mantém o ticket sempre sincronizado com o estado global do useKanban
   const ticketAtual = kanban.tickets.find(t => t.id === ticket.id) || ticket;
 
@@ -28,6 +30,11 @@ export function TicketDetailModal({ ticket, kanban, usuarioLogado, onClose }) {
     if (!novoComentario.trim()) return;
     await kanban.adicionarComentarioLocal(ticketAtual.id, usuarioLogado, novoComentario);
     setNovoComentario("");
+  };
+
+  const salvarDescricao = async () => {
+    await kanban.atualizarDescricaoLocal(ticketAtual.id, descricaoEditada);
+    setEditandoDescricao(false);
   };
 
   return (
@@ -49,6 +56,31 @@ export function TicketDetailModal({ ticket, kanban, usuarioLogado, onClose }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '15px' }}>
             <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: getCorStatus(ticketAtual.currentStep?.step_name || 'Iniciar'), display: 'inline-block' }}></span>
             <span style={{ fontWeight: 'bold', color: '#555' }}>Status: {ticketAtual.currentStep?.step_name || 'Iniciar'}</span>
+          </div>
+
+          <div style={{ marginTop: '20px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '900', color: 'rgba(0,0,0,0.4)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Detalhes (Matrícula, Endereço...)</label>
+            {editandoDescricao ? (
+              <div style={{ marginTop: '6px' }}>
+                <textarea
+                  autoFocus
+                  value={descricaoEditada}
+                  onChange={(e) => setDescricaoEditada(e.target.value)}
+                  style={{ width: '100%', minHeight: '80px', padding: '10px', borderRadius: '8px', border: '1px solid #4A90E2', outline: 'none', resize: 'vertical', fontSize: '13px', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                />
+                <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                  <button onClick={salvarDescricao} style={{ padding: '6px 12px', background: '#4A90E2', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>Salvar</button>
+                  <button onClick={() => setEditandoDescricao(false)} style={{ padding: '6px 12px', background: 'rgba(0,0,0,0.1)', color: '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>Cancelar</button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => { setDescricaoEditada(ticketAtual.description || ''); setEditandoDescricao(true); }}
+                style={{ marginTop: '6px', padding: '10px 12px', background: 'rgba(255,255,255,0.4)', borderRadius: '8px', border: '1px dashed rgba(0,0,0,0.2)', minHeight: '40px', cursor: 'pointer', fontSize: '13px', color: ticketAtual.description ? '#333' : 'rgba(0,0,0,0.4)', whiteSpace: 'pre-wrap', lineHeight: '1.5', transition: 'all 0.2s ease' }}
+              >
+                {ticketAtual.description || 'Clique aqui para adicionar a matrícula, endereço...'}
+              </div>
+            )}
           </div>
         </div>
         <div className="scroll" style={{ flex: 1, padding: '30px', overflowY: 'auto' }}>

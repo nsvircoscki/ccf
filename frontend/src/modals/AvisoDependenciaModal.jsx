@@ -1,9 +1,10 @@
 import React from 'react';
 
-export function AvisoDependenciaModal({ aviso, kanban, onClose }) {
+export function AvisoDependenciaModal({ aviso, kanban, usuarioLogado, onClose }) {
   const executingDropFromWarning = () => {
     if (!aviso) return;
-    kanban.moverTicketOtimista(aviso.ticketArrastado, aviso.proximaEtapa);
+    // usuarioLogado é obrigatório: sem ele a API devolve 500 e o movimento é revertido
+    kanban.moverTicketOtimista(aviso.ticketArrastado, aviso.proximaEtapa, usuarioLogado);
     onClose();
   };
 

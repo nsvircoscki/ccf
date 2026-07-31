@@ -66,7 +66,7 @@ export const workflowService = {
     });
   },
 
-  async fabricarProjeto(name, types, servicoId = null, tx = prisma) {
+  async fabricarProjeto(name, types, terreno = 'Urbano', servicoId = null, tx = prisma) {
     if (!types || types.length === 0) throw new Error("Selecione pelo menos um tipo de processo");
     const projetoExistente = await tx.workflow.findFirst({ where: { name } });
     if (projetoExistente) throw new Error("Já existe um projeto com este nome.");
@@ -79,8 +79,8 @@ export const workflowService = {
     const listaTarefasMesclada = Array.from(tarefasUnicas);
 
     const roles = await tx.role.findMany();
-    const workflow = await tx.workflow.create({ 
-      data: { name, description: types.join(', '), servicoId } 
+    const workflow = await tx.workflow.create({
+      data: { name, description: types.join(', '), terreno, servicoId }
     });
 
     const colunasVisuais = ['Iniciar', 'Em Andamento', 'Concluído'];
@@ -109,7 +109,7 @@ export const workflowService = {
     return workflow;
   },
 
-  async editarProjeto(id, types) {
+  async editarProjeto(id, types, terreno) {
     if (!types || types.length === 0) throw new Error("Selecione pelo menos um tipo.");
     const tarefasUnicas = new Set();
     types.forEach(type => {
@@ -143,9 +143,19 @@ export const workflowService = {
         await tx.ticket.createMany({ data: novosTicketsData });
       }
 
-      await tx.workflow.update({ where: { id }, data: { description: types.join(', ') } });
+      await tx.workflow.update({
+        where: { id },
+        data: { description: types.join(', '), ...(terreno ? { terreno } : {}) }
+      });
     });
     return { message: "Projeto atualizado!" };
+  },
+
+  async atualizarDetalhes(id, { matricula, endereco, details }) {
+    return prisma.workflow.update({
+      where: { id },
+      data: { matricula, endereco, details }
+    });
   },
 
   async excluirProjeto(workflowId) {

@@ -27,6 +27,11 @@ export const TicketCard = React.memo(({
             {estaBloqueado && <span title="Aguardando etapa anterior" style={{ color: '#F57F17', fontWeight: 'bold' }}>[Bloqueado] </span>}
             {t.title}
           </span>
+          {t.description && (
+            <div style={{ fontSize: '12px', color: '#555', background: 'rgba(0,0,0,0.03)', padding: '6px 8px', borderRadius: '6px', marginBottom: '8px', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
+              {t.description}
+            </div>
+          )}
           <span style={{ fontSize: '11px', fontWeight: 'bold', color: cor.borda, background: 'rgba(255,255,255,0.5)', padding: '4px 8px', borderRadius: '4px', width: 'fit-content' }}>{dono}</span>
         </div>
         {temPermissao && (
@@ -38,6 +43,7 @@ export const TicketCard = React.memo(({
 }, (prevProps, nextProps) => {
   return prevProps.t.id === nextProps.t.id &&
          prevProps.t.currentStepId === nextProps.t.currentStepId &&
+         prevProps.t.description === nextProps.t.description &&
          prevProps.temPermissao === nextProps.temPermissao &&
          prevProps.estaBloqueado === nextProps.estaBloqueado;
 });
