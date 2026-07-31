@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -14,6 +14,7 @@ import {
 
 import ModalPagamento from './ModalPagamento.jsx';
 import PainelMapa from './PainelMapa.jsx';
+import { servicoService } from '../services/servicoService.js';
 
 const initialServices = [
   { id: 1, nome: 'Lev Topo', indice_r: '1,0', indice_s: '1,0', indice: 0, ativo: true, selecionado: false },
@@ -30,11 +31,6 @@ const initialServices = [
   { id: 12, nome: 'Loc', indice: 1.0, ativo: true, selecionado: false },
   { id: 13, nome: 'At', indice: 1.0, ativo: true, selecionado: false },
   { id: 14, nome: 'Ext', indice: 1.0, ativo: true, selecionado: false },
-];
-
-const savedOrcamentos = [
-  { numero: '20250117-011-TOP', cliente: 'Hermes', contato: '', matricula: 'MT-1001' },
-  { numero: '20250118-012-RET', cliente: 'Lucia', contato: '', matricula: 'MT-1002' },
 ];
 
 const currency = (value) =>
@@ -348,10 +344,11 @@ function NotesModal({ notas, setNotas, onClose }) {
 function Orcamento({ onBack }) {
   const [services, setServices] = useState(initialServices);
   const [viewMode, setViewMode] = useState('Topografico');
-  const [numero, setNumero] = useState(savedOrcamentos[0].numero);
-  const [cliente, setCliente] = useState(savedOrcamentos[0].cliente);
-  const [contato, setContato] = useState(savedOrcamentos[0].contato);
-  const [matricula, setMatricula] = useState(savedOrcamentos[0].matricula);
+  const [orcamentos, setOrcamentos] = useState([]);
+  const [numero, setNumero] = useState('');
+  const [cliente, setCliente] = useState('');
+  const [contato, setContato] = useState('');
+  const [matricula, setMatricula] = useState('');
   const [area, setArea] = useState('0,00');
   const [salarioMinimo, setSalarioMinimo] = useState(1621.0);
   const [pagamentoAberto, setPagamentoAberto] = useState(false);
@@ -371,6 +368,35 @@ function Orcamento({ onBack }) {
   const [arquivosKml, setArquivosKml] = useState([]);
   const jpgInputRef = useRef(null);
   const kmlInputRef = useRef(null);
+
+  const applyBudget = (budget) => {
+    setNumero(budget.numero);
+    setCliente(budget.cliente);
+    setContato(budget.contato || '');
+    setMatricula(budget.matricula);
+    setTerreno(budget.terreno || '');
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const servicos = await servicoService.listarTodos();
+        const lista = Array.isArray(servicos) ? servicos.map((s) => ({
+          id: s.id,
+          numero: s.numeroServico,
+          cliente: s.nomeCliente,
+          contato: s.contato || '',
+          matricula: s.matricula || '',
+          terreno: s.terreno || ''
+        })) : [];
+
+        setOrcamentos(lista);
+        if (lista.length > 0) applyBudget(lista[0]);
+      } catch (erro) {
+        console.error('Erro ao carregar orçamentos:', erro);
+      }
+    })();
+  }, []);
 
   const servicesWithCalculatedTopo = useMemo(
     () =>
@@ -399,9 +425,9 @@ function Orcamento({ onBack }) {
   );
   const totalIndice = useMemo(() => selectedServices.reduce((acc, service) => acc + service.indice, 0), [selectedServices]);
 
-  const numerosOrcamento = useMemo(() => uniqueValues(savedOrcamentos, 'numero'), []);
-  const clientes = useMemo(() => uniqueValues(savedOrcamentos, 'cliente'), []);
-  const matriculas = useMemo(() => uniqueValues(savedOrcamentos, 'matricula'), []);
+  const numerosOrcamento = useMemo(() => uniqueValues(orcamentos, 'numero'), [orcamentos]);
+  const clientes = useMemo(() => uniqueValues(orcamentos, 'cliente'), [orcamentos]);
+  const matriculas = useMemo(() => uniqueValues(orcamentos, 'matricula'), [orcamentos]);
   const mostrarRespTecnico = possuiCertificacao === 'Sim' || confrontaCertificacao === 'Sim';
 
   const fieldStyle = (name) => ({
@@ -409,28 +435,21 @@ function Orcamento({ onBack }) {
     ...(campoAtivo === name ? activeFieldStyle : {}),
   });
 
-  const applyBudget = (budget) => {
-    setNumero(budget.numero);
-    setCliente(budget.cliente);
-    setContato(budget.contato || '');
-    setMatricula(budget.matricula);
-  };
-
   const handleOrcamentoChange = (value) => {
     setNumero(value);
-    const budget = savedOrcamentos.find((item) => item.numero === value);
+    const budget = orcamentos.find((item) => item.numero === value);
     if (budget) applyBudget(budget);
   };
 
   const handleClienteChange = (value) => {
     setCliente(value);
-    const budget = savedOrcamentos.find((item) => item.cliente === value);
+    const budget = orcamentos.find((item) => item.cliente === value);
     if (budget) applyBudget(budget);
   };
 
   const handleMatriculaChange = (value) => {
     setMatricula(value);
-    const budget = savedOrcamentos.find((item) => item.matricula === value);
+    const budget = orcamentos.find((item) => item.matricula === value);
     if (budget) applyBudget(budget);
   };
 

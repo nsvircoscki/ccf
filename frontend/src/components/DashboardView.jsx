@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { FiPrinter, FiList, FiTrello } from 'react-icons/fi';
 import { AnimatedDropdown } from './AnimatedDropdown';
 
-const TIPOS_PROCESSO = ["Retificação", "Desmembramento", "Unificação", "Usucapião", "Alteração de Divisas", "CAR", "Certificação INCRA", "Escritura", "Conferência", "Cadastral", "Locação", "Movimentação de Terra"];
+const TIPOS_PROCESSO = ["Retificação", "Desmembramento", "Unificação", "Usucapião", "Alteração de Divisas", "CAR", "Certificação INCRA", "Escritura", "Conferência", "Cadastral", "Locação", "Movimentação de Terra", "Danc"];
 
 const getCorStatus = (status) => {
   if (status === 'Iniciar') return '#FBC02D';

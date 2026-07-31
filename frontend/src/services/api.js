@@ -101,7 +101,7 @@ export const api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dadosServico)
         });
-        return res.json();
+        return { data: await res.json(), ok: res.ok };
     },
 
     aprovarOrcamento: async (servicoId) => {

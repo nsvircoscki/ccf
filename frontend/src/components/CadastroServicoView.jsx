@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Building2, Check, FolderPlus, MessageSquare, Save, MapPin } from 'lucide-react';
 import PainelMapa from '../page/PainelMapa.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
+import { servicoService } from '../services/servicoService';
 
 const initialServices = [
   { id: 1, nome: 'Lev Topo', indice: 4.0, ativo: true, selecionado: false },
@@ -163,8 +164,9 @@ export default function CadastroServicoView({ onBack }) {
   const [codRespTecn, setCodRespTecn] = useState('');
   const [respTecn, setRespTecn] = useState('');
   const [matricula, setMatricula] = useState('');
+  const [salvando, setSalvando] = useState(false);
 
-  
+
 
   const baseFieldStyle = {
     height: '44px',
@@ -233,9 +235,50 @@ export default function CadastroServicoView({ onBack }) {
     );
   };
 
-  const handleSalvar = () => {
-    setMensagem({ tipo: 'sucesso', texto: 'Cadastro preparado no layout do Figma.' });
-    window.setTimeout(() => setMensagem(null), 2200);
+  const handleSalvar = async () => {
+    if (!cliente.trim()) {
+      setMensagem({ tipo: 'erro', texto: 'Informe o nome do cliente antes de salvar.' });
+      return;
+    }
+
+    setSalvando(true);
+    try {
+      const servicosSelecionados = services
+        .filter((service) => service.selecionado && service.ativo)
+        .map((service) => service.nome);
+
+      const res = await servicoService.cadastrar({
+        numeroServico: codigoServico,
+        nomeCliente: cliente,
+        contato,
+        matricula,
+        terreno,
+        possuiCar,
+        possuiCertificacao,
+        confrontaCertificacao,
+        codRespTecn,
+        respTecn,
+        notas,
+        area,
+        municipio,
+        linhaSecaKm: perimetroLSeca,
+        rioKm: perimetroRio,
+        servicosSelecionados
+      });
+
+      if (!res.ok) {
+        setMensagem({ tipo: 'erro', texto: res.data?.error || 'Erro ao salvar cadastro.' });
+        return;
+      }
+
+      setMensagem({ tipo: 'sucesso', texto: `Serviço ${res.data.numeroServico} cadastrado com sucesso!` });
+    } catch (erro) {
+      console.error(erro);
+      setMensagem({ tipo: 'erro', texto: 'Erro ao conectar com o servidor.' });
+    } finally {
+      setSalvando(false);
+      window.setTimeout(() => setMensagem(null), 2200);
+    }
   };
 
   const handleJpgUpload = (event) => {
@@ -755,12 +798,14 @@ export default function CadastroServicoView({ onBack }) {
                 whileHover={{ scale: 1.03, y: -1 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={handleSalvar}
+                disabled={salvando}
                 style={{
                   height: '46px',
                   borderRadius: '12px',
                   border: 'none',
                   background: 'linear-gradient(135deg, #14B38B 0%, #0F9E7A 100%)',
-                  cursor: 'pointer',
+                  cursor: salvando ? 'not-allowed' : 'pointer',
+                  opacity: salvando ? 0.7 : 1,
                   fontSize: '13px',
                   fontWeight: 800,
                   color: '#FFFFFF',
@@ -771,7 +816,7 @@ export default function CadastroServicoView({ onBack }) {
                   boxShadow: '0 10px 20px rgba(15, 163, 127, 0.22)',
                 }}
               >
-                <Save size={16} /> Salvar Cadastro
+                <Save size={16} /> {salvando ? 'Salvando...' : 'Salvar Cadastro'}
               </motion.button>
             </div>
           </div>
