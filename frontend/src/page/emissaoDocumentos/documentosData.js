@@ -28,6 +28,8 @@ export const clientesDocumentos = [
   },
 ];
 
+export const municipiosSugeridos = ['Sao Bento do Sul - SC', 'Campo Alegre - SC', 'Rio Negrinho - SC', 'Corupa - SC'];
+
 export const catalogoServicos = [
   { id: 1, nome: 'Levantamento Topografico', detalhe: 'L.Seca + Rio', indice: 4.0, ativo: true },
   { id: 2, nome: 'Retificacao', detalhe: 'x1.5', indice: 1.5, ativo: true },

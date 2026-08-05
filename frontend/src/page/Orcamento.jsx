@@ -21,7 +21,7 @@ import {
   ServiceCard,
   serviceGridVariants,
 } from './orcamento/OrcamentoComponents.jsx';
-import { initialServices, savedOrcamentos } from './orcamento/orcamentoData.js';
+import { initialServices, municipiosSugeridos, savedOrcamentos } from './orcamento/orcamentoData.js';
 import {
   activeFieldStyle,
   baseFieldStyle,
@@ -259,7 +259,11 @@ function Orcamento({ onBack, buscaTexto = '', setBuscaTexto = () => {} }) {
               </div>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}><FieldLabel icon={MapPin}>Area (m2)</FieldLabel><input value={area} onChange={(event) => setArea(event.target.value)} onFocus={() => setCampoAtivo('area')} onBlur={() => setCampoAtivo(null)} style={fieldStyle('area')} /></label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}><FieldLabel icon={Building2}>Municipio</FieldLabel><select value={municipio} onChange={(event) => setMunicipio(event.target.value)} onFocus={() => setCampoAtivo('municipio')} onBlur={() => setCampoAtivo(null)} style={{ ...fieldStyle('municipio'), cursor: 'pointer' }}><option>Sao Bento do Sul</option><option>Campo Alegre</option><option>Rio Negrinho</option><option>Corupa</option></select></label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <FieldLabel icon={Building2}>Municipio</FieldLabel>
+                <input value={municipio} list="municipios-sugeridos" onChange={(event) => setMunicipio(event.target.value)} onFocus={() => setCampoAtivo('municipio')} onBlur={() => setCampoAtivo(null)} placeholder="Municipio" style={fieldStyle('municipio')} />
+                <datalist id="municipios-sugeridos">{municipiosSugeridos.map((item) => <option key={item} value={item} />)}</datalist>
+              </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1' }}><span style={labelTextStyle}>Valor Referencia</span><input value={salarioMinimo.toFixed(2).replace('.', ',')} onChange={(event) => setSalarioMinimo(parseNumberInput(event.target.value) || 0)} style={fieldStyle('salarioMinimo')} /></label>
 
               <div style={{ gridColumn: '1 / -1', border: '1px solid rgba(15, 23, 42, 0.08)', borderRadius: '14px', padding: '14px', background: '#FAFBFE' }}>

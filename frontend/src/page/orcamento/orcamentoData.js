@@ -16,6 +16,8 @@ export const initialServices = [
   { id: 15, nome: 'Outros', indice: 0, ativo: true, selecionado: false, editavel: true },
 ];
 
+export const municipiosSugeridos = ['Sao Bento do Sul', 'Campo Alegre', 'Rio Negrinho', 'Corupa'];
+
 export const savedOrcamentos = [
   { numero: '20250117-011-TOP', cliente: 'Hermes', contato: '', matricula: 'MT-1001' },
   { numero: '20250118-012-RET', cliente: 'Lucia', contato: '', matricula: 'MT-1002' },

@@ -17,10 +17,11 @@ import {
   ContractModal,
   FieldIcon,
   OrcamentoDocumentoModal,
-  ReadOnlyField,
 } from './emissaoDocumentos/DocumentosComponents.jsx';
-import { clientesDocumentos } from './emissaoDocumentos/documentosData.js';
+import { clientesDocumentos, municipiosSugeridos } from './emissaoDocumentos/documentosData.js';
 import { cardStyle, escapeHtml, fieldBase, labelStyle } from './emissaoDocumentos/documentosUtils.js';
+import logoCcf from './emissaoDocumentos/assets/logo-ccf.jpg';
+import marcaDagua from './emissaoDocumentos/assets/marca-dagua.jpg';
 
 function EmissaoDocumentos() {
   const [modalContratoAberto, setModalContratoAberto] = useState(false);
@@ -52,7 +53,18 @@ function EmissaoDocumentos() {
   };
 
   const gerarPdf = () => {
-    const linhasServicos = servicosSelecionados.map((servico) => `<li>${escapeHtml(servico)}</li>`).join('');
+    const numeroOrcamento = `OS-${String(clienteSelecionado.matricula || '').replace(/\D/g, '') || Date.now().toString().slice(-6)}`;
+    const linhasServicos = servicosSelecionados
+      .map(
+        (servico, index) => `
+                    <tr>
+                      <td class="col-item item-number">${index + 1}</td>
+                      <td class="col-desc">${escapeHtml(servico)}</td>
+                      <td class="col-unid item-number">1</td>
+                      <td></td>
+                    </tr>`,
+      )
+      .join('');
     const printWindow = window.open('', '_blank', 'width=900,height=700');
 
     if (!printWindow) {
@@ -62,48 +74,84 @@ function EmissaoDocumentos() {
 
     printWindow.document.write(`
       <!doctype html>
-      <html>
+      <html lang="pt-BR">
         <head>
+          <meta charset="UTF-8" />
           <title>Ordem de Servico - ${escapeHtml(clienteSelecionado.nome)}</title>
           <style>
-            @page { size: A4; margin: 18mm; }
-            * { box-sizing: border-box; }
-            body { margin: 0; font-family: Arial, sans-serif; color: #0f172a; }
-            header { border-bottom: 3px solid #0f172a; padding-bottom: 16px; margin-bottom: 24px; }
-            h1 { margin: 0; font-size: 24px; text-transform: uppercase; }
-            h2 { margin: 24px 0 10px; font-size: 14px; text-transform: uppercase; }
-            p { margin: 5px 0; font-size: 13px; line-height: 1.5; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-            .box { border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; }
-            .label { color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-            .value { margin-top: 4px; font-size: 14px; font-weight: 700; }
-            ul { margin: 8px 0 0 18px; padding: 0; }
-            li { margin-bottom: 5px; font-size: 13px; }
-            footer { margin-top: 42px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-            .assinatura { border-top: 1px solid #0f172a; text-align: center; padding-top: 8px; font-size: 12px; }
+            @page { size: A4; margin: 0; }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            html, body { height: 297mm; }
+            body { background: #525659; display: flex; justify-content: center; padding: 40px 20px; font-family: Arial, sans-serif; color: #000; }
+            .page-a4 { width: 210mm; height: 297mm; background: #fff url('${marcaDagua}') no-repeat center / 100% 100%; position: relative; box-shadow: 0 4px 12px rgba(0,0,0,0.4); padding: 12mm 18mm; overflow: hidden; }
+            .content-wrapper { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; }
+            .doc-header { display: flex; justify-content: space-between; margin-bottom: 6mm; }
+            .doc-header img { max-width: 150px; }
+            .doc-header strong { font-size: 10pt; margin-top: 6mm; }
+            .doc-info, .greeting { font-size: 11pt; margin-bottom: 5mm; line-height: 1.3; }
+            .budget-table { width: 100%; border-collapse: collapse; margin-bottom: 1mm; font-size: 11pt; }
+            .budget-table th { border: solid #000; border-width: 2px 0; padding: 4px 0; }
+            .budget-table td { padding: 10px 0; text-align: center; }
+            .col-item { width: 15%; text-align: left; padding-left: 5px; }
+            .col-desc { width: 50%; text-align: left; }
+            .col-unid { width: 15%; }
+            .item-number { color: #b05030; font-weight: bold; }
+            .total-row td { border-top: 2px solid #000; border-bottom: 3px solid #000; padding: 2px 0; font-weight: bold; }
+            .observations, .closing { font-size: 10.5pt; line-height: 1.2; margin-bottom: 8mm; }
+            .doc-footer { margin-top: auto; }
+            .signatures { display: flex; justify-content: space-between; margin-bottom: 10mm; }
+            .sig-box { width: 45%; font-size: 10pt; line-height: 1.15; border-top: 2px solid #000; padding-top: 3px; }
+            .contact-info { text-align: center; font-size: 9.5pt; border-top: 1px solid #000; padding-top: 10px; }
+            @media print {
+              body { background: transparent; padding: 0; }
+              .page-a4 { box-shadow: none; width: 100%; height: 297mm; padding: 12mm 18mm; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            }
           </style>
         </head>
         <body>
-          <header>
-            <h1>Ordem de Servico Tecnica</h1>
-            <p>Documento gerado pela tela de Emissao de Documentos.</p>
-          </header>
-          <section class="grid">
-            <div class="box"><div class="label">Cliente</div><div class="value">${escapeHtml(clienteSelecionado.nome)}</div></div>
-            <div class="box"><div class="label">Matricula</div><div class="value">${escapeHtml(clienteSelecionado.matricula)}</div></div>
-            <div class="box"><div class="label">Area Informada</div><div class="value">${escapeHtml(clienteSelecionado.area)}</div></div>
-            <div class="box"><div class="label">Municipio/UF</div><div class="value">${escapeHtml(clienteSelecionado.municipio)}</div></div>
-            <div class="box"><div class="label">Responsavel Tecnico</div><div class="value">${escapeHtml(responsavel || 'Nao informado')}</div></div>
-            <div class="box"><div class="label">Valor Global</div><div class="value">R$ ${escapeHtml(valorGlobal)}</div></div>
-          </section>
-          <h2>Servicos Selecionados</h2>
-          <div class="box"><ul>${linhasServicos}</ul></div>
-          <h2>Observacoes</h2>
-          <div class="box"><p>${escapeHtml(observacoes || 'Sem observacoes adicionais.')}</p></div>
-          <footer>
-            <div class="assinatura">Responsavel Tecnico</div>
-            <div class="assinatura">Cliente</div>
-          </footer>
+          <div class="page-a4">
+            <div class="content-wrapper">
+              <header class="doc-header">
+                <img src="${logoCcf}" alt="Logotipo CCF" />
+                <strong>${escapeHtml(numeroOrcamento)}</strong>
+              </header>
+
+              <div class="doc-info"><strong>Para: &nbsp;&nbsp;&nbsp;${escapeHtml(clienteSelecionado.nome)}</strong></div>
+              <div class="greeting">Prezado,<br>Conforme solicitado, segue abaixo proposta de valores de Prestacao de Servicos:</div>
+
+              <table class="budget-table">
+                <thead>
+                  <tr><th class="col-item">ITEM</th><th class="col-desc">DESCRICAO</th><th class="col-unid">UNIDADE</th><th>VALOR<br>(R$)</th></tr>
+                </thead>
+                <tbody>${linhasServicos}
+                  <tr class="total-row"><td colspan="3">TOTAL</td><td>R$ ${escapeHtml(valorGlobal)}</td></tr>
+                </tbody>
+              </table>
+
+              <section class="observations">
+                <strong>Obs. (Especificacoes):</strong><br>
+                Matricula: ${escapeHtml(clienteSelecionado.matricula)} &nbsp;|&nbsp; Area Informada: ${escapeHtml(clienteSelecionado.area)} &nbsp;|&nbsp; Municipio/UF: ${escapeHtml(clienteSelecionado.municipio)}<br>
+                Responsavel Tecnico: ${escapeHtml(responsavel || 'Nao informado')}<br>
+                ${escapeHtml(observacoes || 'Sem observacoes adicionais.')}
+                <div style="margin-top: 15mm;">Pagamento: A combinar.<br>Validade da proposta: 10 dias.</div>
+              </section>
+
+              <div class="closing">Coloco-me a disposicao para maiores esclarecimentos que se fizerem necessarios.<br>Atenciosamente,</div>
+
+              <footer class="doc-footer">
+                <div class="signatures">
+                  <div class="sig-box">
+                    <strong>Eng. CHARLES COSTI</strong><br>CCF Consultores Ltda.<br>Eng. Florestal<br>Eng. de Seguranca do Trabalho<br>Esp. em Gestao Ambiental<br>Esp. em Licenciamento Ambiental<br>Esp. em Georreferenciamento de Imoveis RL
+                  </div>
+                  <div class="sig-box" style="text-align: right;">Aprovacao</div>
+                </div>
+                <address class="contact-info">
+                  Rua Carlos Bayerl, 214 - Progresso - CEP: 89.281-066 _ Sao Bento do Sul/SC<br>
+                  Fone: (47) 3633-3711 - <a href="mailto:ccfconsultores@hotmail.com" style="color: #00f;">ccfconsultores@hotmail.com</a>
+                </address>
+              </footer>
+            </div>
+          </div>
           <script>window.onload = () => { window.focus(); window.print(); };</script>
         </body>
       </html>
@@ -135,7 +183,14 @@ function EmissaoDocumentos() {
               <label style={labelStyle}>Nome do Cliente<AnimatedDropdown value={clienteSelecionado.nome} onChange={handleClienteChange} options={clientes.map((cliente) => ({ value: cliente, label: cliente }))} searchable /></label>
               <label style={labelStyle}>Matricula<input value={clienteSelecionado.matricula} onChange={(event) => handleClienteFieldChange('matricula', event.target.value)} style={fieldBase} /></label>
               <label style={labelStyle}>Area Informada<input value={clienteSelecionado.area} onChange={(event) => handleClienteFieldChange('area', event.target.value)} style={fieldBase} /></label>
-              <ReadOnlyField label="Municipio/UF" value={clienteSelecionado.municipio} icon={MapPin} />
+              <label style={labelStyle}>
+                Municipio/UF
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* <FieldIcon icon={MapPin} /> */}
+                  <input value={clienteSelecionado.municipio} list="municipios-documentos" onChange={(event) => handleClienteFieldChange('municipio', event.target.value)} style={fieldBase} />
+                  <datalist id="municipios-documentos">{municipiosSugeridos.map((item) => <option key={item} value={item} />)}</datalist>
+                </div>
+              </label>
             </div>
 
             <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid #E5EBF5' }}>
