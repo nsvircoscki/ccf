@@ -192,6 +192,14 @@ export default function CadastroClienteView({ onBack }) {
       avisar('erro', form.tipo === 'Física' ? 'Informe o CPF.' : 'Informe o CNPJ.');
       return;
     }
+    if (form.tipo === 'Jurídica' && !form.representanteLegalNome.trim()) {
+      avisar('erro', 'Informe o nome do representante legal.');
+      return;
+    }
+    if (form.tipo === 'Jurídica' && !form.representanteLegalCpf.trim()) {
+      avisar('erro', 'Informe o CPF do representante legal.');
+      return;
+    }
 
     setSalvando(true);
     try {

@@ -41,6 +41,12 @@ function montarDados(dados) {
   }
   if (!nome?.trim()) throw new Error('Informe o nome do cliente.');
   if (!documento?.trim()) throw new Error(tipo === 'Física' ? 'Informe o CPF.' : 'Informe o CNPJ.');
+  if (tipo === 'Jurídica' && !representanteLegalNome?.trim()) {
+    throw new Error('Informe o nome do representante legal.');
+  }
+  if (tipo === 'Jurídica' && !representanteLegalCpf?.trim()) {
+    throw new Error('Informe o CPF do representante legal.');
+  }
 
   return {
     tipo,
