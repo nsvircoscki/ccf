@@ -31,7 +31,7 @@ export default function App() {
   // "concluída" ela não volta a aparecer mesmo se o usuário sair e entrar de
   // novo (senão o "Sair" no Navbar viraria um replay da splash toda vez).
   const [introConcluida, setIntroConcluida] = useState(false);
-  const [telaAtiva, setTelaAtiva] = useState('cadastro');
+  const [telaAtiva, setTelaAtiva] = useState('dashboard');
   const [buscaTexto, setBuscaTexto] = useState('');
   const [workflowParaImpressao, setWorkflowParaImpressao] = useState(null);
 

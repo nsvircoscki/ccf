@@ -3,3 +3,7 @@ backup_fabrica.dump
 
 # Arquivo compactado redundante — a versão extraída já está em backend/Modelos/
 backend/Modelos.rar
+
+# Dump real do banco de produção e listagem de pastas do servidor — dados
+# reais de clientes, usado só localmente para planejar a migração.
+backend/backup_antigo/

@@ -12,9 +12,10 @@ import { docxTemplateEngine } from './docxTemplateEngine.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PASTA_MODELOS = path.join(__dirname, '../../Modelos');
-// src/services -> backend/servicos — mesma pasta onde a ficha em PDF e a
-// imagem do mapa do serviço já são salvas (ver servicoService.js).
-const PASTA_BASE_SERVICOS = path.join(__dirname, '../../servicos');
+// Mesma pasta onde a ficha em PDF e a imagem do mapa do serviço já são
+// salvas (ver PASTA_SERVICOS em servicoService.js) — precisa ser a mesma
+// variável de ambiente, senão os dois serviços gravam em lugares diferentes.
+const PASTA_BASE_SERVICOS = process.env.PASTA_SERVICOS || path.join(__dirname, '../../servicos');
 
 // autorizacao_realizacao_car.doc fica de fora: é .doc binário (Word 97-2003),
 // não um .docx (zip) — o motor de substituição não consegue abrir esse

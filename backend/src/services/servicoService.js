@@ -8,8 +8,9 @@ import { workflowService, CATALOGO_PROCESSOS } from './workflowService.js';
 import { gerarPdfServico, gerarPdfServicoBuffer } from './pdfServico.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// backend/src/services -> backend/servicos
-const PASTA_BASE_SERVICOS = path.join(__dirname, '../../servicos');
+// Em produção, aponta pra pasta de rede do servidor (ver PASTA_SERVICOS no
+// .env). Sem essa variável, cai no padrão local de desenvolvimento.
+const PASTA_BASE_SERVICOS = process.env.PASTA_SERVICOS || path.join(__dirname, '../../servicos');
 
 // Nomes abreviados usados no Cadastro de Serviço -> nomes completos do
 // catálogo de processos (workflowService.js / CATALOGO_PROCESSOS). Sem essa
