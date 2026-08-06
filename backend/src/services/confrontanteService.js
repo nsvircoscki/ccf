@@ -31,7 +31,7 @@ export const confrontanteService = {
 
 function montarDados(dados) {
   const {
-    tipo, nome, documento, rg, telefone, email, logradouro, municipio, cep,
+    tipo, nome, documento, rg, telefone, email, logradouro, bairro, cidade, estado, cep,
     nacionalidade, estadoCivil, profissao,
   } = dados;
 
@@ -50,7 +50,9 @@ function montarDados(dados) {
     telefone: telefone || null,
     email: email || null,
     logradouro: logradouro || null,
-    municipio: municipio || null,
+    bairro: bairro || null,
+    cidade: cidade || null,
+    estado: estado || null,
     cep: cep || null,
     nacionalidade: tipo === 'Física' ? (nacionalidade || null) : null,
     estadoCivil: tipo === 'Física' ? (estadoCivil || null) : null,

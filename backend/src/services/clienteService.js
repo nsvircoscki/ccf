@@ -31,7 +31,7 @@ export const clienteService = {
 
 function montarDados(dados) {
   const {
-    tipo, nome, documento, rg, orgaoEmissor, situacao, telefone, email, logradouro, municipio, cep, pastaLink,
+    tipo, nome, documento, rg, orgaoEmissor, situacao, telefone, email, logradouro, bairro, cidade, estado, cep, pastaLink,
     representanteLegalNome, representanteLegalCpf, representanteLegalCargo,
     nacionalidade, estadoCivil, profissao,
   } = dados;
@@ -61,7 +61,9 @@ function montarDados(dados) {
     telefone: telefone || null,
     email: email || null,
     logradouro: logradouro || null,
-    municipio: municipio || null,
+    bairro: bairro || null,
+    cidade: cidade || null,
+    estado: estado || null,
     cep: cep || null,
     pastaLink: pastaLink || null,
     // Só fazem sentido para PF — usados na "qualificação completa" dos

@@ -519,6 +519,7 @@ export default function CadastroConfrontanteView({ onBack }) {
               />
 
               <Campo
+                id = "cep-confrontante"
                 label="CEP"
                 icon={<IdCard size={14} />}
                 value={form.cep}

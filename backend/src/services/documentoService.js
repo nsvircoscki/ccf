@@ -106,7 +106,11 @@ const TEMPLATES = {
 const UF_PADRAO = 'SC';
 
 function enderecoCompleto(pessoa) {
-  return [pessoa.logradouro, pessoa.municipio, pessoa.cep ? `CEP ${pessoa.cep}` : null]
+  const cidadeUf = pessoa.cidade && pessoa.estado
+    ? `${pessoa.cidade} - ${pessoa.estado}`
+    : (pessoa.cidade || pessoa.estado || null);
+
+  return [pessoa.logradouro, pessoa.bairro, cidadeUf, pessoa.cep ? `CEP ${pessoa.cep}` : null]
     .filter(Boolean)
     .join(', ');
 }

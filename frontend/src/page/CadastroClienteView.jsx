@@ -31,13 +31,14 @@ const labelStyle = {
   textTransform: 'uppercase',
 };
 
-function Campo({ label, icon, value, onChange, onFocusName, campoAtivo, setCampoAtivo, placeholder, list }) {
+function Campo({ label, icon, value, onChange, onFocusName, campoAtivo, setCampoAtivo, placeholder, list, id }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <span style={labelStyle}>
         {icon} {label}
       </span>
       <input
+        id = {id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onFocus={() => setCampoAtivo(onFocusName)}
@@ -134,6 +135,31 @@ export default function CadastroClienteView({ onBack }) {
   }, []);
 
   const set = (campo) => (valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
+
+  const buscarEnderecoPorCep = async (cepFormatado) => {
+    const digitos = cepFormatado.replace(/\D/g, '');
+    if(digitos.length !==8) return;
+
+    try {
+      const resposta = await fetch(`https://viacep.com.br/ws/${digitos}/json`);
+      const dados = await resposta.json();
+
+      if (dados.erro) {
+        avisar('erro', 'CEP não encontrado');
+        return;
+      }
+
+      setForm((atual) => ({
+        ...atual,
+        logradouro: dados.logradouro
+          ?`${dados.logradouro}${dados.bairro ? `, ${dados.bairro}` : ""} `
+          : atual.logradouro,
+      municipio: dados.localidade ? `${dados.localidade} - ${dados.uf}` : atual.municipio,
+      })); 
+    } catch (erro) {
+      console.error('Erro ao buscar CEP:', erro);
+    }
+  };
 
   const limparFormulario = () => {
     setClienteId(null);
@@ -627,10 +653,15 @@ export default function CadastroClienteView({ onBack }) {
               />
 
               <Campo
+                id="cep-cliente"
                 label="CEP"
                 icon={<IdCard size={14} />}
                 value={form.cep}
-                onChange={(valor) => set('cep')(formatarCEP(valor))}
+                onChange={(valor) => {
+                  const formatado = formatarCEP(valor);
+                  set('cep')(formatarCEP(valor));
+                  buscarEnderecoPorCep(formatado);
+                }}
                 onFocusName="cep"
                 campoAtivo={campoAtivo}
                 setCampoAtivo={setCampoAtivo}

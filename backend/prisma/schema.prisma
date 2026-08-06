@@ -30,7 +30,9 @@ model Cliente {
   telefone    String?
   email       String?
   logradouro  String?
-  municipio   String?
+  bairro      String?
+  cidade      String?
+  estado      String?
   cep         String?
   pastaLink   String?
   situacao    String?
@@ -61,7 +63,9 @@ model Confrontante {
   telefone    String?
   email       String?
   logradouro  String?
-  municipio   String?
+  bairro      String?
+  cidade      String?
+  estado      String?
   cep         String?
 
   nacionalidade String?
