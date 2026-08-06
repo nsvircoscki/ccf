@@ -6,6 +6,105 @@ datasource db {
   provider = "postgresql"
 }
 
+// Contador próprio por tipo de processo (Unificação, Retificação...), usado no
+// nome do projeto do Kanban quando um orçamento é aprovado. Nunca reseta por
+// ano, igual ao sequencial global do Servico.
+model SequencialTipoServico {
+  tipo  String @id
+  valor Int    @default(0)
+}
+
+// Cadastro de clientes, feito após a aprovação do orçamento (o Servico guarda
+// só o nome do cliente até então). Ainda não há vínculo com Servico — isso
+// fica para a tela de vinculação, que virá depois.
+model Cliente {
+  id          String   @id @default(uuid())
+  tipo        String   // "Física" | "Jurídica"
+  nome        String   // Nome completo (PF) ou Razão Social (PJ)
+  documento   String   @unique // CPF (PF) ou CNPJ (PJ)
+  rg          String?  // Só PF
+  orgaoEmissor String? // Órgão emissor do RG (ex.: SSP/SC) — só PF
+  representanteLegalNome  String?
+  representanteLegalCpf   String?
+  representanteLegalCargo String?
+  telefone    String?
+  email       String?
+  logradouro  String?
+  municipio   String?
+  cep         String?
+  pastaLink   String?
+  situacao    String?
+
+  // Usados para montar a "qualificação completa" nos documentos gerados
+  // (ex.: "João da Silva, brasileiro, casado, engenheiro, portador do CPF...").
+  nacionalidade String?
+  estadoCivil   String?
+  profissao     String?
+
+  imoveis      Imovel[]
+  servicos     Servico[]
+
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
+// Confrontante: dono de um imóvel vizinho que assina/aparece nos documentos de
+// retificação, unificação etc. junto com o proprietário. Cadastro próprio (não
+// é um Cliente) porque raramente vira cliente da empresa, mas precisa da mesma
+// qualificação completa (nome, documento, endereço) para os documentos.
+model Confrontante {
+  id          String   @id @default(uuid())
+  tipo        String   // "Física" | "Jurídica"
+  nome        String
+  documento   String?  // CPF ou CNPJ — opcional pois nem sempre é levantado
+  rg          String?
+  telefone    String?
+  email       String?
+  logradouro  String?
+  municipio   String?
+  cep         String?
+
+  nacionalidade String?
+  estadoCivil   String?
+  profissao     String?
+
+  imoveis     Imovel[]
+
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
+// Cadastro de imóvel, sempre vinculado a um Cliente já cadastrado (o
+// proprietário). Separado do Servico: o Servico guarda seus próprios dados de
+// terreno/matrícula/área hoje, e a ligação Imovel<->Servico fica para a mesma
+// tela de vinculação futura mencionada acima.
+model Imovel {
+  id             String   @id @default(uuid())
+  cartorio       String?
+  matricula      String?
+  cns            String?
+  incra          String?
+  cib            String?
+  logradouro     String?
+  municipio      String?
+  area           Float?
+  descricao      String?
+  // "Matrícula" ou "Transcrição" — entra em minúsculo no meio da frase dos
+  // documentos ("constante na matrícula 12.345").
+  tipoTitulo     String?  @default("matrícula")
+  comarca        String?
+  zoneamento     String?
+
+  proprietarioId String
+  proprietario   Cliente  @relation(fields: [proprietarioId], references: [id])
+
+  confrontantes  Confrontante[]
+  servicos       Servico[]
+
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+}
+
 model Role {
   id    String @id @default(uuid())
   name  String @unique 
@@ -107,6 +206,7 @@ model Comment {
 
 model Servico {
   id            String   @id @default(uuid())
+  sequencial    Int      @default(autoincrement())
   numeroServico String   @unique
   tipoCliente   String
   nomeCliente   String
@@ -117,6 +217,8 @@ model Servico {
   possuiCar             String?
   possuiCertificacao    String?
   confrontaCertificacao String?
+  codRespTecnPossui     String?
+  respTecnPossui        String?
   codRespTecn           String?
   respTecn              String?
   notas                 String?
@@ -131,13 +233,74 @@ model Servico {
   tiposSolicitados  String[]
 
   statusOrcamento  String   @default("PENDENTE")
-  valorTotal       Float?
   contratoGerado   Boolean  @default(false)
 
+  // --- Vinculação (proprietário/imóvel/confrontantes) e dados específicos
+  // deste serviço para a geração de documentos (retificação, por ex.) ---
+  proprietarioId              String?
+  proprietario                Cliente? @relation(fields: [proprietarioId], references: [id])
+  imovelId                    String?
+  imovel                      Imovel?  @relation(fields: [imovelId], references: [id])
+  descricaoAtualImovel        String?
+  memorialDescritivoRetificacao String?
+  superiorOuInferior          String?  // "superior" | "inferior"
+  totalLotes                  Int?
+  averbacoes                  String?
+  areasDesmembramento         String?  // Req_PMSBS_DESM_Áreas
+  listaProtocoloEntrega       String?
+
+  // --- Orçamento ---
+  valorReferencia    Float?
+  valorTotal         Float?
+  descontoValor      Float?
+  descontoPercentual Float?
+  valorFinal         Float?
+
+  // --- Condições de pagamento ---
+  entradaValor     Float?
+  entradaData      DateTime?
+  numeroParcelas   Int?
+  jurosAtivo       Boolean  @default(false)
+  taxaJuros        Float?
+  tipoJuros        String?
+  baseJuros        String?
+
+  itensOrcamento   OrcamentoItem[]
+  parcelas         ParcelaOrcamento[]
   workflows        Workflow[]
 
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
+}
+
+// Uma linha por serviço da tela de Orçamento, com o índice que o usuário
+// editou. Guardar o índice junto do valor preserva como o preço foi formado,
+// mesmo que o valor de referência mude depois.
+model OrcamentoItem {
+  id          String  @id @default(uuid())
+  nome        String
+  indice      Float    @default(0)
+  valor       Float    @default(0)
+  selecionado Boolean  @default(false)
+
+  servicoId   String
+  servico     Servico  @relation(fields: [servicoId], references: [id], onDelete: Cascade)
+
+  @@unique([servicoId, nome])
+}
+
+model ParcelaOrcamento {
+  id         String    @id @default(uuid())
+  numero     Int
+  valorBase  Float     @default(0)
+  juros      Float     @default(0)
+  valorFinal Float     @default(0)
+  vencimento DateTime?
+
+  servicoId  String
+  servico    Servico   @relation(fields: [servicoId], references: [id], onDelete: Cascade)
+
+  @@unique([servicoId, numero])
 }
 
 

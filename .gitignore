@@ -1,0 +1,5 @@
+# Backup do banco de dados — não deve ir para o GitHub
+backup_fabrica.dump
+
+# Arquivo compactado redundante — a versão extraída já está em backend/Modelos/
+backend/Modelos.rar

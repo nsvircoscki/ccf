@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const currency = (value) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 });
@@ -61,18 +61,24 @@ const sectionStyle = {
   gap: '14px',
 };
 
-function ModalPagamento({ totalValor, onClose }) {
-  const [descontoAtivo, setDescontoAtivo] = useState(false);
-  const [desconto, setDesconto] = useState({ valor: '', percentual: '', totalFinal: formatInput(totalValor) });
-  const [entradaAtiva, setEntradaAtiva] = useState(false);
-  const [entradaValor, setEntradaValor] = useState('');
-  const [entradaData, setEntradaData] = useState(todayInput());
-  const [parcelamentoAtivo, setParcelamentoAtivo] = useState(false);
-  const [quantidadeParcelas, setQuantidadeParcelas] = useState('3');
-  const [jurosAtivo, setJurosAtivo] = useState(false);
-  const [taxaJuros, setTaxaJuros] = useState('');
-  const [tipoJuros, setTipoJuros] = useState('simples');
-  const [baseJuros, setBaseJuros] = useState('parcelas');
+function ModalPagamento({ totalValor, onClose, valoresIniciais, onChange }) {
+  const inicial = valoresIniciais || {};
+
+  const [descontoAtivo, setDescontoAtivo] = useState(Boolean(inicial.descontoValor));
+  const [desconto, setDesconto] = useState({
+    valor: inicial.descontoValor ? formatInput(inicial.descontoValor) : '',
+    percentual: inicial.descontoPercentual ? formatInput(inicial.descontoPercentual) : '',
+    totalFinal: formatInput(inicial.valorFinal ?? totalValor),
+  });
+  const [entradaAtiva, setEntradaAtiva] = useState(Boolean(inicial.entradaValor));
+  const [entradaValor, setEntradaValor] = useState(inicial.entradaValor ? formatInput(inicial.entradaValor) : '');
+  const [entradaData, setEntradaData] = useState(inicial.entradaData || todayInput());
+  const [parcelamentoAtivo, setParcelamentoAtivo] = useState(Boolean(inicial.numeroParcelas));
+  const [quantidadeParcelas, setQuantidadeParcelas] = useState(String(inicial.numeroParcelas || 3));
+  const [jurosAtivo, setJurosAtivo] = useState(Boolean(inicial.jurosAtivo));
+  const [taxaJuros, setTaxaJuros] = useState(inicial.taxaJuros ? formatInput(inicial.taxaJuros) : '');
+  const [tipoJuros, setTipoJuros] = useState(inicial.tipoJuros || 'simples');
+  const [baseJuros, setBaseJuros] = useState(inicial.baseJuros || 'parcelas');
   const [parcelaSelecionada, setParcelaSelecionada] = useState('');
   const [edicoesParcelas, setEdicoesParcelas] = useState({});
 
@@ -187,6 +193,38 @@ function ModalPagamento({ totalValor, onClose }) {
       setDesconto({ valor: '', percentual: '', totalFinal: formatInput(totalTrabalho) });
     }
   };
+
+  // O modal não tem botão de salvar (só o ×), então informa o pai a cada
+  // mudança — assim o Orçamento sempre tem as condições atuais para gravar.
+  // O callback fica num ref para não entrar nas dependências do efeito e
+  // disparar um laço a cada render do pai.
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onChangeRef.current = onChange; });
+
+  useEffect(() => {
+    onChangeRef.current?.({
+      descontoValor: descontoAtivo ? parseDecimal(desconto.valor) : null,
+      descontoPercentual: descontoAtivo ? parseDecimal(desconto.percentual) : null,
+      valorFinal: totalPago,
+      entradaValor: entradaAtiva ? valorEntrada : null,
+      entradaData: entradaAtiva ? entradaData : null,
+      numeroParcelas: parcelamentoAtivo ? numeroParcelas : null,
+      jurosAtivo,
+      taxaJuros: jurosAtivo ? parseDecimal(taxaJuros) : null,
+      tipoJuros: jurosAtivo ? tipoJuros : null,
+      baseJuros: jurosAtivo ? baseJuros : null,
+      parcelas: parcelas.map((parcela) => ({
+        numero: parcela.numero,
+        valorBase: parcela.base,
+        juros: parcela.juros,
+        valorFinal: parcela.final,
+        vencimento: parcela.vencimento || null,
+      })),
+    });
+  }, [
+    descontoAtivo, desconto, totalPago, entradaAtiva, valorEntrada, entradaData,
+    parcelamentoAtivo, numeroParcelas, jurosAtivo, taxaJuros, tipoJuros, baseJuros, parcelas,
+  ]);
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(20, 24, 36, 0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>

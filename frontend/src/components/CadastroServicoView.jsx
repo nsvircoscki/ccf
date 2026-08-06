@@ -1,8 +1,31 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Building2, Check, FolderPlus, MessageSquare, Save, MapPin } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Building2, Check, FileText, MessageSquare, Save, MapPin } from 'lucide-react';
 import PainelMapa from '../page/PainelMapa.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { servicoService } from '../services/servicoService';
+import { formatarTelefone, formatarMatricula } from '../utils/mascaras';
+import VisualizadorImagem from '../page/VisualizadorImagem.jsx';
+import { AnimatedDropdown } from './AnimatedDropdown';
+
+// O banco guarda os tipos com o nome completo do catálogo; a tela usa as siglas.
+const SIGLA_POR_TIPO = {
+  'Retificação': 'Ret',
+  'Desmembramento': 'Desm',
+  'Unificação': 'Uni',
+  'Usucapião': 'Usu',
+  'Alteração de Divisas': 'At',
+  'CAR': 'CAR',
+  'Certificação INCRA': 'Cert',
+  'Escritura': 'Escritura',
+  'Conferência': 'Conf',
+  'Cadastral': 'Cad',
+  'Locação': 'Loc',
+  'Movimentação de Terra': 'Mov de Terra',
+  'Outros': 'Outros',
+  'Extremação': 'Ext',
+};
+
+
 
 const initialServices = [
   { id: 1, nome: 'Lev Topo', indice: 4.0, ativo: true, selecionado: false },
@@ -18,7 +41,8 @@ const initialServices = [
   { id: 11, nome: 'Mov de Terra', indice: 1.0, ativo: true, selecionado: false },
   { id: 12, nome: 'Loc', indice: 1.0, ativo: true, selecionado: false },
   { id: 13, nome: 'At', indice: 1.0, ativo: true, selecionado: false },
-  { id: 14, nome: 'Ext', indice: 1.0, ativo: true, selecionado: false}
+  { id: 14, nome: 'Ext', indice: 1.0, ativo: true, selecionado: false },
+  { id: 15, nome: 'Outros', indice: 1.0, ativo: true, selecionado: false }
 ];
 const formatIndex = (value) => value.toFixed(1).replace('.', ',');
 
@@ -139,7 +163,7 @@ function OptionButton ({ ativo, onClick, children }) {
   );
 }
 
-export default function CadastroServicoView({ onBack }) {
+export default function CadastroServicoView({ onBack, onServicoCriado }) {
   const [viewMode, setViewMode] = useState('Topografico');
   const [services, setServices] = useState(initialServices);
   const [contato, setContato] = useState('');
@@ -147,7 +171,8 @@ export default function CadastroServicoView({ onBack }) {
   const [perimetroLSeca, setPerimetroLSeca] = useState('');
   const [perimetroRio, setPerimetroRio] = useState('');
   const [municipio, setMunicipio] = useState('Sao Bento do Sul');
-  const [codigoServico] = useState(() => `20260714-${Math.floor(100 + Math.random() * 900)}-TOP`);
+  const [numeroServico, setNumeroServico] = useState(null);
+  const [servicoId, setServicoId] = useState(null);
   const [mensagem, setMensagem] = useState(null);
   const [cliente, setCliente] = useState('');
   const [notasAberta, setNotasAberta] = useState(false);
@@ -161,10 +186,86 @@ export default function CadastroServicoView({ onBack }) {
   const [possuiCar, setPossuiCar] = useState('');
   const [possuiCertificacao, setPossuiCertificacao] = useState('');
   const [confrontaCertificacao, setConfrontaCertificacao] = useState('');
+  const [codRespTecnPossui, setCodRespTecnPossui] = useState('');
+  const [respTecnPossui, setRespTecnPossui] = useState('');
   const [codRespTecn, setCodRespTecn] = useState('');
   const [respTecn, setRespTecn] = useState('');
   const [matricula, setMatricula] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [servicosSalvos, setServicosSalvos] = useState([]);
+  const [imagemSalvaUrl, setImagemSalvaUrl] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const lista = await servicoService.listarTodos();
+        if (Array.isArray(lista)) setServicosSalvos(lista);
+      } catch (erro) {
+        console.error('Erro ao carregar os serviços cadastrados:', erro);
+      }
+    })();
+  }, []);
+
+  const limparFormulario = () => {
+    setServicoId(null);
+    setNumeroServico(null);
+    setCliente('');
+    setContato('');
+    setMatricula('');
+    setTerreno('');
+    setPossuiCar('');
+    setPossuiCertificacao('');
+    setConfrontaCertificacao('');
+    setCodRespTecnPossui('');
+    setRespTecnPossui('');
+    setCodRespTecn('');
+    setRespTecn('');
+    setNotas('');
+    setArea('0,00');
+    setMunicipio('Sao Bento do Sul');
+    setPerimetroLSeca('');
+    setPerimetroRio('');
+    setImagensJpg([]);
+    setImagemSalvaUrl(null);
+    setServices(initialServices);
+  };
+
+  const carregarServico = (id) => {
+    if (!id) {
+      limparFormulario();
+      return;
+    }
+
+    const servico = servicosSalvos.find((item) => item.id === id);
+    if (!servico) return;
+
+    setServicoId(servico.id);
+    setNumeroServico(servico.numeroServico);
+    setCliente(servico.nomeCliente || '');
+    setContato(formatarTelefone(servico.contato || ''));
+    setMatricula(formatarMatricula(servico.matricula || ''));
+    setTerreno(servico.terreno || '');
+    setPossuiCar(servico.possuiCar || '');
+    setPossuiCertificacao(servico.possuiCertificacao || '');
+    setConfrontaCertificacao(servico.confrontaCertificacao || '');
+    setCodRespTecnPossui(servico.codRespTecnPossui || '');
+    setRespTecnPossui(servico.respTecnPossui || '');
+    setCodRespTecn(servico.codRespTecn || '');
+    setRespTecn(servico.respTecn || '');
+    setNotas(servico.notas || '');
+    setArea(servico.area != null ? String(servico.area).replace('.', ',') : '0,00');
+    setMunicipio(servico.municipio || 'Sao Bento do Sul');
+    setPerimetroLSeca(servico.linhaSecaKm != null ? String(servico.linhaSecaKm).replace('.', ',') : '');
+    setPerimetroRio(servico.rioKm != null ? String(servico.rioKm).replace('.', ',') : '');
+
+    // O input local é zerado para não reenviar um arquivo antigo por engano, e
+    // a imagem já salva é exibida a partir do servidor.
+    setImagensJpg([]);
+    setImagemSalvaUrl(servico.temImagem ? servicoService.urlImagem(servico.id, servico.updated_at) : null);
+
+    const siglas = (servico.tiposSolicitados || []).map((tipo) => SIGLA_POR_TIPO[tipo] || tipo);
+    setServices(initialServices.map((service) => ({ ...service, selecionado: siglas.includes(service.nome) })));
+  };
 
 
 
@@ -227,6 +328,20 @@ export default function CadastroServicoView({ onBack }) {
     [selectedServices],
   );
 
+  useEffect(() => {
+    if (possuiCertificacao === 'Sim') return;
+
+    setCodRespTecnPossui('');
+    setRespTecnPossui('');
+  }, [possuiCertificacao]);
+
+  useEffect(() => {
+    if (confrontaCertificacao === 'Sim') return;
+
+    setCodRespTecn('');
+    setRespTecn('');
+  }, [confrontaCertificacao]);
+
   const toggleService = (id) => {
     setServices((current) =>
       current.map((service) =>
@@ -234,6 +349,17 @@ export default function CadastroServicoView({ onBack }) {
       ),
     );
   };
+
+  // A imagem do mapa vai embutida no cadastro para o backend salvá-la na pasta
+  // do serviço e estampá-la na ficha em PDF.
+  const lerImagemComoBase64 = (arquivo) =>
+    new Promise((resolve) => {
+      if (!arquivo) return resolve(null);
+      const leitor = new FileReader();
+      leitor.onload = () => resolve(leitor.result);
+      leitor.onerror = () => resolve(null);
+      leitor.readAsDataURL(arquivo);
+    });
 
   const handleSalvar = async () => {
     if (!cliente.trim()) {
@@ -247,8 +373,10 @@ export default function CadastroServicoView({ onBack }) {
         .filter((service) => service.selecionado && service.ativo)
         .map((service) => service.nome);
 
-      const res = await servicoService.cadastrar({
-        numeroServico: codigoServico,
+      const imagemBase64 = await lerImagemComoBase64(imagensJpg[0]);
+
+      const payload = {
+        imagemBase64,
         nomeCliente: cliente,
         contato,
         matricula,
@@ -256,6 +384,8 @@ export default function CadastroServicoView({ onBack }) {
         possuiCar,
         possuiCertificacao,
         confrontaCertificacao,
+        codRespTecnPossui,
+        respTecnPossui,
         codRespTecn,
         respTecn,
         notas,
@@ -264,14 +394,40 @@ export default function CadastroServicoView({ onBack }) {
         linhaSecaKm: perimetroLSeca,
         rioKm: perimetroRio,
         servicosSelecionados
-      });
+      };
+
+      const editando = Boolean(servicoId);
+      const res = editando
+        ? await servicoService.atualizar(servicoId, payload)
+        : await servicoService.cadastrar(payload);
 
       if (!res.ok) {
         setMensagem({ tipo: 'erro', texto: res.data?.error || 'Erro ao salvar cadastro.' });
         return;
       }
 
-      setMensagem({ tipo: 'sucesso', texto: `Serviço ${res.data.numeroServico} cadastrado com sucesso!` });
+      setNumeroServico(res.data.numeroServico);
+      setServicoId(res.data.id);
+      // Aponta para a imagem recém-gravada no servidor, para ela continuar
+      // aparecendo depois que o arquivo local sair do estado.
+      if (imagemBase64) {
+        setImagemSalvaUrl(servicoService.urlImagem(res.data.id, res.data.updated_at));
+      }
+      setServicosSalvos((atuais) => {
+        const outros = atuais.filter((item) => item.id !== res.data.id);
+        return [res.data, ...outros];
+      });
+      setMensagem({
+        tipo: 'sucesso',
+        texto: editando
+          ? `Serviço ${res.data.numeroServico} atualizado com sucesso!`
+          : `Serviço ${res.data.numeroServico} cadastrado com sucesso!`,
+      });
+
+      // O cadastro fabrica os projetos no Kanban, mas o useKanban só carrega os
+      // workflows na montagem — sem este aviso eles só apareceriam ao recarregar
+      // a página, dando a impressão de que as etapas não foram criadas.
+      await onServicoCriado?.();
     } catch (erro) {
       console.error(erro);
       setMensagem({ tipo: 'erro', texto: 'Erro ao conectar com o servidor.' });
@@ -281,11 +437,29 @@ export default function CadastroServicoView({ onBack }) {
     }
   };
 
+  // A ficha é servida pelo backend a partir da pasta do serviço; abrir numa aba
+  // evita ter que procurar o arquivo em disco.
+  const abrirFicha = () => {
+    if (!servicoId) return;
+    window.open(servicoService.urlPdf(servicoId), '_blank', 'noopener');
+  };
+
+  // Valida pelo tipo real do arquivo, não pela extensão do nome: prints de tela
+  // saem como PNG mesmo quando são chamados de "JPG", e o filtro por nome os
+  // descartava em silêncio. JPEG e PNG são os dois formatos que o gerador da
+  // ficha consegue embutir — qualquer outro avisa em vez de sumir.
   const handleJpgUpload = (event) => {
-    const files = Array.from(event.target.files || []);
-    const validFiles = files.filter((file) => /\.(jpe?g)$/i.test(file.name));
-    setImagensJpg(validFiles);
+    const arquivo = (event.target.files || [])[0];
     event.target.value = '';
+    if (!arquivo) return;
+
+    if (!['image/jpeg', 'image/png'].includes(arquivo.type)) {
+      setMensagem({ tipo: 'erro', texto: 'A imagem precisa ser JPG ou PNG.' });
+      window.setTimeout(() => setMensagem(null), 2600);
+      return;
+    }
+
+    setImagensJpg([arquivo]);
   };
 
   const handleKmlUpload = (event) => {
@@ -296,7 +470,7 @@ export default function CadastroServicoView({ onBack }) {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F4F6FA', color: '#2D2A35', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'relative', flex: 1, minHeight: 0, background: '#F4F6FA', color: '#2D2A35', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <header
         style={{
           height: '64px',
@@ -339,7 +513,7 @@ export default function CadastroServicoView({ onBack }) {
             <div style={{ fontSize: '17px', fontWeight: 800, color: '#1F2937', lineHeight: 1.1 }}>
               Cadastro de Serviço
             </div>
-            <div style={{ fontSize: '12px', color: '#95A0B5', marginTop: '2px' }}>{codigoServico}</div>
+            <div style={{ fontSize: '12px', color: '#95A0B5', marginTop: '2px' }}>{numeroServico || 'Gerando número...'}</div>
           </div>
         </div>
 
@@ -360,7 +534,9 @@ export default function CadastroServicoView({ onBack }) {
       {mensagem ? (
         <div
           style={{
-            position: 'fixed',
+            // Absoluto na própria tela (não na viewport), senão o toast
+            // subiria por cima da navbar do App.
+            position: 'absolute',
             top: '76px',
             right: '24px',
             background: mensagem.tipo === 'sucesso' ? '#EAF8F3' : '#FEECEC',
@@ -378,14 +554,23 @@ export default function CadastroServicoView({ onBack }) {
         </div>
       ) : null}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 470px', flex: 1, minHeight: 'calc(100vh - 64px)' }}>
-        <PainelMapa viewMode={viewMode} setViewMode={setViewMode} />
+      {/* gridTemplateRows definido: sem ele a linha é dimensionada pelo conteúdo
+          e uma imagem alta estica o painel inteiro, empurrando os botões para
+          fora da tela. Com a linha definida, o maxHeight:100% da imagem passa a
+          valer e o painel respeita a altura disponível. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 470px', gridTemplateRows: 'minmax(0, 1fr)', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        {imagensJpg.length > 0 || imagemSalvaUrl ? (
+          <VisualizadorImagem arquivo={imagensJpg[0]} url={imagemSalvaUrl} />
+        ) : (
+          <PainelMapa viewMode={viewMode} setViewMode={setViewMode} />
+        )}
 
         <aside
           style={{
             background: '#FFFFFF',
             borderLeft: '1px solid rgba(15, 23, 42, 0.08)',
-            height: 'calc(100vh - 64px)',
+            height: '100%',
+            minHeight: 0,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -393,6 +578,24 @@ export default function CadastroServicoView({ onBack }) {
         >
           <div style={{ flex: 1, overflowY: 'auto', padding: '22px 20px 16px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '26px' }}>
+
+              <div style={{ gridColumn: '1 / -1' }}>
+                <AnimatedDropdown
+                  label="Serviço"
+                  value={servicoId || ''}
+                  onChange={carregarServico}
+                  options={[
+                    { value: '', label: '+ Novo serviço' },
+                    ...servicosSalvos.map((servico) => ({
+                      value: servico.id,
+                      label: `${servico.numeroServico} — ${servico.nomeCliente}`,
+                    })),
+                  ]}
+                  width="100%"
+                  searchable
+                  searchPlaceholder="Pesquisar serviço cadastrado"
+                />
+              </div>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1'}}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
@@ -418,7 +621,7 @@ export default function CadastroServicoView({ onBack }) {
                 </span>
                 <input
                   value={contato}
-                  onChange={(event) => setContato(event.target.value)}
+                  onChange={(event) => setContato(formatarTelefone(event.target.value))}
                   onFocus={() => setCampoAtivo('contato')}
                   onBlur={() => setCampoAtivo(null)}
                   placeholder="Contato do Cliente"
@@ -435,7 +638,7 @@ export default function CadastroServicoView({ onBack }) {
                 </span>
                 <input
                   value={matricula}
-                  onChange={(event) => setMatricula(event.target.value)}
+                  onChange={(event) => setMatricula(formatarMatricula(event.target.value))}
                   onFocus={() => setCampoAtivo('matricula')}
                   onBlur={() => setCampoAtivo(null)}
                   placeholder="Matrícula do Imóvel"
@@ -483,6 +686,40 @@ export default function CadastroServicoView({ onBack }) {
                   </div>
                 </label>
 
+                {possuiCertificacao === 'Sim' ? (
+                  <>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={labelStyle}>Cód do Res Técn (Certificação)</span>
+                      <input
+                        value={codRespTecnPossui}
+                        onChange={(e) => setCodRespTecnPossui(e.target.value)}
+                        onFocus={() => setCampoAtivo('codRespTecnPossui')}
+                        onBlur={() => setCampoAtivo(null)}
+                        placeholder="Código do Técnico"
+                        style={{
+                          ...baseFieldStyle,
+                          ...(campoAtivo === 'codRespTecnPossui' ? activeFieldStyle : {}),
+                        }}
+                      />
+                    </label>
+
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={labelStyle}>Resp Técn (Certificação)</span>
+                      <input
+                        value={respTecnPossui}
+                        onChange={(e) => setRespTecnPossui(e.target.value)}
+                        onFocus={() => setCampoAtivo('respTecnPossui')}
+                        onBlur={() => setCampoAtivo(null)}
+                        placeholder="Nome do Técnico"
+                        style={{
+                          ...baseFieldStyle,
+                          ...(campoAtivo === 'respTecnPossui' ? activeFieldStyle : {}),
+                        }}
+                      />
+                    </label>
+                  </>
+                ) : null}
+
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <span style={labelStyle}>Confronta com Certificação</span>
                   <div style={optionRowStyle}>
@@ -498,7 +735,7 @@ export default function CadastroServicoView({ onBack }) {
                 {confrontaCertificacao === 'Sim' ? (
                   <>
                     <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <span style={labelStyle}>Cód do Res Técn</span>
+                      <span style={labelStyle}>Cód do Res Técn (Confronto)</span>
                       <input
                         value={codRespTecn}
                         onChange={(e) => setCodRespTecn(e.target.value)}
@@ -513,7 +750,7 @@ export default function CadastroServicoView({ onBack }) {
                     </label>
 
                     <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <span style={labelStyle}>Resp Técn</span>
+                      <span style={labelStyle}>Resp Técn (Confronto)</span>
                       <input
                         value={respTecn}
                         onChange={(e) => setRespTecn(e.target.value)}
@@ -532,7 +769,8 @@ export default function CadastroServicoView({ onBack }) {
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
-                  <MapPin size={14} /> Área (m²)
+                  {/* A unidade sai do uppercase do rótulo, senão vira "M²". */}
+                  <MapPin size={14} /> Área <span style={{ textTransform: 'none' }}>(m²)</span>
                 </span>
                 <input
                   value={area}
@@ -550,28 +788,31 @@ export default function CadastroServicoView({ onBack }) {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
                   <Building2 size={14} /> Município
                 </span>
-                <select
+                <input
                   value={municipio}
+                  list="municipios-sugeridos"
                   onChange={(event) => setMunicipio(event.target.value)}
                   onFocus={() => setCampoAtivo('municipio')}
                   onBlur={() => setCampoAtivo(null)}
+                  placeholder="Digite ou selecione a cidade"
                   style={{
                     ...baseFieldStyle,
                     ...(campoAtivo === 'municipio' ? activeFieldStyle : {}),
-                    cursor: 'pointer',
                   }}
-                >
-                  <option value="Sao Bento do Sul" style={{ background: '#FFFFFF', color: '#1F2937', padding: '8px' }}>São Bento do Sul</option>
-                  <option value="Campo Alegre" style={{ background: '#FFFFFF', color: '#1F2937', padding: '8px' }}>Campo Alegre</option>
-                  <option value="Rio Negrinho" style={{ background: '#FFFFFF', color: '#1F2937', padding: '8px' }}>Rio Negrinho</option>
-                  <option value="Corupa" style={{ background: '#FFFFFF', color: '#1F2937', padding: '8px' }}>Corupá</option>
-                  <option value="Outro" style={{ background: '#FFFFFF', color: '#1F2937', padding: '8px' }}>Outro</option>
-                </select>
+                />
+                {/* datalist só sugere; o valor digitado pode ser qualquer texto,
+                    então cidades fora das quatro mais comuns também funcionam. */}
+                <datalist id="municipios-sugeridos">
+                  <option value="Sao Bento do Sul" />
+                  <option value="Campo Alegre" />
+                  <option value="Rio Negrinho" />
+                  <option value="Corupa" />
+                </datalist>
               </label>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
-                  <MapPin size={14} /> Perímetro L.Seca (km)
+                  <MapPin size={14} /> Perímetro L.Seca <span style={{ textTransform: 'none' }}>(Km)</span>
                 </span>
                 <input
                   value={perimetroLSeca}
@@ -588,7 +829,7 @@ export default function CadastroServicoView({ onBack }) {
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
-                  <MapPin size={14} /> Perímetro Rio (km) 
+                  <MapPin size={14} /> Perímetro Rio <span style={{ textTransform: 'none' }}>(Km)</span> 
                 </span>
                 <input
                   value={perimetroRio}
@@ -609,11 +850,11 @@ export default function CadastroServicoView({ onBack }) {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#5F6B83' }}>Imagem JPG</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#5F6B83' }}>Imagem do mapa</span>
                     <input
                       ref={jpgInputRef}
                       type="file"
-                      accept=".jpg,.jpeg,image/jpeg"
+                      accept="image/jpeg,image/png"
                       onChange={handleJpgUpload}
                       style={{ display: 'none' }}
                     />
@@ -627,7 +868,7 @@ export default function CadastroServicoView({ onBack }) {
                         fontWeight: 600,
                       }}
                     >
-                      Selecionar imagem JPG
+                      Selecionar imagem (JPG ou PNG)
                     </button>
                   </label>
 
@@ -658,7 +899,7 @@ export default function CadastroServicoView({ onBack }) {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
                   <div style={{ fontSize: '12px', color: '#5F6B83' }}>
-                    {imagensJpg.length ? `JPG anexado: ${imagensJpg[0].name}` : 'Nenhuma imagem JPG anexada.'}
+                    {imagensJpg.length ? `Imagem anexada: ${imagensJpg[0].name}` : 'Nenhuma imagem anexada.'}
                   </div>
                   <div style={{ fontSize: '12px', color: '#5F6B83' }}>
                     {arquivosKml.length ? `${arquivosKml.length} KML(s) anexado(s)` : 'Nenhum KML anexado.'}
@@ -733,7 +974,7 @@ export default function CadastroServicoView({ onBack }) {
                 </AnimatePresence>
               </div>
               <div style={{ fontSize: '13px', color: '#7B879B', fontWeight: 700, textAlign: 'right' }}>
-                Índice total
+                Índice total: 
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.span
                     key={totalIndice.toFixed(1)}
@@ -752,14 +993,18 @@ export default function CadastroServicoView({ onBack }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.25fr', gap: '12px' }}>
               <motion.button
                 type="button"
-                whileHover={{ scale: 1.03, y: -1 }}
-                whileTap={{ scale: 0.98 }}
+                onClick={abrirFicha}
+                disabled={!servicoId}
+                title={servicoId ? 'Abrir a ficha em PDF' : 'Salve o cadastro para gerar a ficha'}
+                whileHover={servicoId ? { scale: 1.03, y: -1 } : undefined}
+                whileTap={servicoId ? { scale: 0.98 } : undefined}
                 style={{
                   height: '46px',
                   borderRadius: '12px',
                   border: '1px solid rgba(15, 23, 42, 0.10)',
                   background: '#FFFFFF',
-                  cursor: 'pointer',
+                  cursor: servicoId ? 'pointer' : 'not-allowed',
+                  opacity: servicoId ? 1 : 0.5,
                   fontSize: '13px',
                   fontWeight: 800,
                   color: '#4E5970',
@@ -769,7 +1014,7 @@ export default function CadastroServicoView({ onBack }) {
                   gap: '8px',
                 }}
               >
-                <FolderPlus size={16} /> Pasta
+                <FileText size={16} /> Ver Ficha
               </motion.button>
               <motion.button
                 type="button"
@@ -816,7 +1061,7 @@ export default function CadastroServicoView({ onBack }) {
                   boxShadow: '0 10px 20px rgba(15, 163, 127, 0.22)',
                 }}
               >
-                <Save size={16} /> {salvando ? 'Salvando...' : 'Salvar Cadastro'}
+                <Save size={16} /> {salvando ? 'Salvando...' : servicoId ? 'Salvar Alterações' : 'Salvar Cadastro'}
               </motion.button>
             </div>
           </div>

@@ -10,3 +10,6 @@ node_modules/
 npm-debug.log*
 dist/
 build/
+
+# Pastas de serviços geradas automaticamente ao cadastrar um serviço
+servicos/

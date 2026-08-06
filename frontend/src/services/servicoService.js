@@ -10,11 +10,43 @@ export const servicoService = {
     return api.createServico(dadosServico);
   },
 
-  async aprovarOrcamento(servicoId) {
-    return api.aprovarOrcamento(servicoId);
+  async atualizar(servicoId, dadosServico) {
+    return api.updateServico(servicoId, dadosServico);
+  },
+
+  urlPdf(servicoId) {
+    return api.urlPdfServico(servicoId);
+  },
+
+  urlImagem(servicoId, versao) {
+    return api.urlImagemServico(servicoId, versao);
+  },
+
+  async gerarPreviaPdf(servicoId, dados, signal) {
+    return api.gerarPreviaPdf(servicoId, dados, signal);
+  },
+
+  async salvarOrcamento(servicoId, dadosOrcamento) {
+    return api.salvarOrcamento(servicoId, dadosOrcamento);
+  },
+
+  async aprovarOrcamento(servicoId, decisao) {
+    return api.aprovarOrcamento(servicoId, decisao);
   },
 
   async buscarPorId(servicoId) {
     return api.getServicoById(servicoId);
+  },
+
+  async salvarVinculacao(servicoId, dadosVinculacao) {
+    return api.salvarVinculacao(servicoId, dadosVinculacao);
+  },
+
+  async listarTemplatesDocumento() {
+    return api.getTemplatesDocumento();
+  },
+
+  urlGerarDocumento(servicoId, templateKey) {
+    return api.urlGerarDocumento(servicoId, templateKey);
   }
 };

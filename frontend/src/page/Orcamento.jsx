@@ -14,7 +14,12 @@ import {
 
 import ModalPagamento from './ModalPagamento.jsx';
 import PainelMapa from './PainelMapa.jsx';
+import { AnimatedDropdown } from '../components/AnimatedDropdown';
 import { servicoService } from '../services/servicoService.js';
+import { formatarTelefone, formatarMatricula } from '../utils/mascaras.js';
+import VisualizadorImagem from './VisualizadorImagem.jsx';
+import VisualizadorFicha from './VisualizadorFicha.jsx';
+
 
 const initialServices = [
   { id: 1, nome: 'Lev Topo', indice_r: '1,0', indice_s: '1,0', indice: 0, ativo: true, selecionado: false },
@@ -31,14 +36,33 @@ const initialServices = [
   { id: 12, nome: 'Loc', indice: 1.0, ativo: true, selecionado: false },
   { id: 13, nome: 'At', indice: 1.0, ativo: true, selecionado: false },
   { id: 14, nome: 'Ext', indice: 1.0, ativo: true, selecionado: false },
+  { id: 15, nome: 'Outros', indice: 1.0, ativo: true, selecionado: false },
 ];
+
+// O banco guarda os tipos com o nome completo do catálogo de processos; a tela
+// trabalha com as siglas. Sem essa tradução, abrir um orçamento não recupera os
+// serviços que foram pedidos no cadastro.
+const SIGLA_POR_TIPO = {
+  'Retificação': 'Ret',
+  'Desmembramento': 'Desm',
+  'Unificação': 'Uni',
+  'Usucapião': 'Usu',
+  'Alteração de Divisas': 'At',
+  'CAR': 'CAR',
+  'Certificação INCRA': 'Cert',
+  'Escritura': 'Escritura',
+  'Conferência': 'Conf',
+  'Cadastral': 'Cad',
+  'Locação': 'Loc',
+  'Movimentação de Terra': 'Mov de Terra',
+  'Outros': 'Outros',
+  'Extremação': 'Ext',
+};
 
 const currency = (value) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 });
 
 const formatIndex = (value) => value.toFixed(1).replace('.', ',');
-
-const uniqueValues = (items, key) => [...new Set(items.map((item) => item[key]).filter(Boolean))];
 
 const parseNumberInput = (value) => {
   const normalized = String(value ?? '').replace(',', '.').replace(/[^0-9.]/g, '');
@@ -61,6 +85,15 @@ const baseFieldStyle = {
 const activeFieldStyle = {
   border: '1px solid #2D7AFD',
   boxShadow: '0 0 0 3px rgba(45, 122, 253, 0.12)',
+};
+
+// Cliente e matrícula vêm do orçamento escolhido no dropdown — são dados
+// derivados, não campos de entrada. O visual apagado sinaliza isso.
+const readOnlyFieldStyle = {
+  ...baseFieldStyle,
+  background: '#ECEEF4',
+  color: '#5F6B83',
+  cursor: 'default',
 };
 
 const labelTextStyle = {
@@ -95,11 +128,14 @@ const serviceCardVariants = {
   },
 };
 
-function FieldLabel({ icon: Icon, children }) {
+function FieldLabel({ icon: Icon, unidade, children }) {
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: '6px', ...labelTextStyle }}>
       {Icon ? <Icon size={14} /> : null}
       {children}
+      {/* A unidade fica fora do uppercase do rótulo, senão "m²" e "Km" saem
+          como "M²" e "KM". */}
+      {unidade ? <span style={{ textTransform: 'none' }}>({unidade})</span> : null}
     </span>
   );
 }
@@ -341,11 +377,21 @@ function NotesModal({ notas, setNotas, onClose }) {
   );
 }
 
-function Orcamento({ onBack }) {
+function Orcamento({ onBack, onOrcamentoDecidido }) {
   const [services, setServices] = useState(initialServices);
   const [viewMode, setViewMode] = useState('Topografico');
   const [orcamentos, setOrcamentos] = useState([]);
   const [numero, setNumero] = useState('');
+  const [orcamentoId, setOrcamentoId] = useState(null);
+  const [confirmando, setConfirmando] = useState(false);
+  const [mensagem, setMensagem] = useState(null);
+  const [pagamento, setPagamento] = useState(null);
+  // null enquanto ninguém decidiu ainda (statusOrcamento = PENDENTE).
+  const [decisaoOrcamento, setDecisaoOrcamento] = useState(null);
+  const [imagemSalvaUrl, setImagemSalvaUrl] = useState(null);
+  const [fichaAberta, setFichaAberta] = useState(false);
+  const [fichaUrl, setFichaUrl] = useState(null);
+  const [gerandoFicha, setGerandoFicha] = useState(false);
   const [cliente, setCliente] = useState('');
   const [contato, setContato] = useState('');
   const [matricula, setMatricula] = useState('');
@@ -359,6 +405,8 @@ function Orcamento({ onBack }) {
   const [possuiCar, setPossuiCar] = useState('');
   const [possuiCertificacao, setPossuiCertificacao] = useState('');
   const [confrontaCertificacao, setConfrontaCertificacao] = useState('');
+  const [codRespTecnPossui, setCodRespTecnPossui] = useState('');
+  const [respTecnPossui, setRespTecnPossui] = useState('');
   const [codRespTecn, setCodRespTecn] = useState('');
   const [respTecn, setRespTecn] = useState('');
   const [municipio, setMunicipio] = useState('Sao Bento do Sul');
@@ -369,12 +417,84 @@ function Orcamento({ onBack }) {
   const jpgInputRef = useRef(null);
   const kmlInputRef = useRef(null);
 
+  // Declarado antes do useEffect que o chama: o react-hooks acusa acesso a
+  // const antes da declaração, mesmo sendo seguro em tempo de execução.
   const applyBudget = (budget) => {
+    setOrcamentoId(budget.id);
     setNumero(budget.numero);
     setCliente(budget.cliente);
-    setContato(budget.contato || '');
-    setMatricula(budget.matricula);
+    // Passa pelos formatadores para que dado vindo do banco apareça igual ao
+    // que o usuário digitaria — cadastros antigos foram salvos sem máscara.
+    setContato(formatarTelefone(budget.contato || ''));
+    setMatricula(formatarMatricula(budget.matricula || ''));
     setTerreno(budget.terreno || '');
+  };
+
+  // Busca o serviço completo para repor o orçamento já gravado: índices
+  // editados, valor de referência e condições de pagamento.
+  const carregarOrcamentoSalvo = async (id) => {
+    try {
+      const servico = await servicoService.buscarPorId(id);
+      if (!servico || servico.error) return;
+
+      // A imagem anexada no cadastro fica no servidor: exibe ela no painel da
+      // esquerda em vez do mapa, igual acontece logo após o upload.
+      setImagemSalvaUrl(servico.temImagem ? servicoService.urlImagem(id, servico.updated_at) : null);
+
+      setArea(servico.area != null ? String(servico.area).replace('.', ',') : '0,00');
+      setMunicipio(servico.municipio || 'Sao Bento do Sul');
+      setPerimetroLSeca(servico.linhaSecaKm != null ? String(servico.linhaSecaKm).replace('.', ',') : '');
+      setPerimetroRio(servico.rioKm != null ? String(servico.rioKm).replace('.', ',') : '');
+      setPossuiCar(servico.possuiCar || '');
+      setPossuiCertificacao(servico.possuiCertificacao || '');
+      setConfrontaCertificacao(servico.confrontaCertificacao || '');
+      setCodRespTecnPossui(servico.codRespTecnPossui || '');
+      setRespTecnPossui(servico.respTecnPossui || '');
+      setCodRespTecn(servico.codRespTecn || '');
+      setRespTecn(servico.respTecn || '');
+      setNotas(servico.notas || '');
+      if (servico.valorReferencia) setSalarioMinimo(servico.valorReferencia);
+      setDecisaoOrcamento(
+        servico.statusOrcamento === 'APROVADO' || servico.statusOrcamento === 'REPROVADO'
+          ? servico.statusOrcamento
+          : null,
+      );
+
+      const itens = servico.itensOrcamento || [];
+      if (itens.length > 0) {
+        // Orçamento já trabalhado: repõe índices e marcações salvos.
+        setServices((atuais) =>
+          atuais.map((service) => {
+            const salvo = itens.find((item) => item.nome === service.nome);
+            return salvo
+              ? { ...service, indice: salvo.indice, selecionado: salvo.selecionado }
+              : { ...service, selecionado: false };
+          }),
+        );
+      } else {
+        // Primeira abertura: parte dos serviços pedidos no cadastro.
+        const siglasPedidas = (servico.tiposSolicitados || []).map((tipo) => SIGLA_POR_TIPO[tipo] || tipo);
+        setServices((atuais) =>
+          atuais.map((service) => ({ ...service, selecionado: siglasPedidas.includes(service.nome) })),
+        );
+      }
+
+      setPagamento({
+        descontoValor: servico.descontoValor,
+        descontoPercentual: servico.descontoPercentual,
+        valorFinal: servico.valorFinal,
+        entradaValor: servico.entradaValor,
+        entradaData: servico.entradaData ? servico.entradaData.slice(0, 10) : null,
+        numeroParcelas: servico.numeroParcelas,
+        jurosAtivo: servico.jurosAtivo,
+        taxaJuros: servico.taxaJuros,
+        tipoJuros: servico.tipoJuros,
+        baseJuros: servico.baseJuros,
+        parcelas: servico.parcelas || [],
+      });
+    } catch (erro) {
+      console.error('Erro ao carregar o orçamento salvo:', erro);
+    }
   };
 
   useEffect(() => {
@@ -425,9 +545,20 @@ function Orcamento({ onBack }) {
   );
   const totalIndice = useMemo(() => selectedServices.reduce((acc, service) => acc + service.indice, 0), [selectedServices]);
 
-  const numerosOrcamento = useMemo(() => uniqueValues(orcamentos, 'numero'), [orcamentos]);
-  const clientes = useMemo(() => uniqueValues(orcamentos, 'cliente'), [orcamentos]);
-  const matriculas = useMemo(() => uniqueValues(orcamentos, 'matricula'), [orcamentos]);
+  useEffect(() => {
+    if (possuiCertificacao === 'Sim') return;
+
+    setCodRespTecnPossui('');
+    setRespTecnPossui('');
+  }, [possuiCertificacao]);
+
+  useEffect(() => {
+    if (confrontaCertificacao === 'Sim') return;
+
+    setCodRespTecn('');
+    setRespTecn('');
+  }, [confrontaCertificacao]);
+
   const mostrarRespTecnico = possuiCertificacao === 'Sim' || confrontaCertificacao === 'Sim';
 
   const fieldStyle = (name) => ({
@@ -435,23 +566,86 @@ function Orcamento({ onBack }) {
     ...(campoAtivo === name ? activeFieldStyle : {}),
   });
 
-  const handleOrcamentoChange = (value) => {
-    setNumero(value);
-    const budget = orcamentos.find((item) => item.numero === value);
-    if (budget) applyBudget(budget);
+  const handleOrcamentoChange = (id) => {
+    const budget = orcamentos.find((item) => item.id === id);
+    if (budget) {
+      applyBudget(budget);
+      carregarOrcamentoSalvo(id);
+    } else {
+      setOrcamentoId(null);
+      setNumero('');
+      setPagamento(null);
+      setImagemSalvaUrl(null);
+      setDecisaoOrcamento(null);
+    }
   };
 
-  const handleClienteChange = (value) => {
-    setCliente(value);
-    const budget = orcamentos.find((item) => item.cliente === value);
-    if (budget) applyBudget(budget);
+  const abrirFicha = () => {
+    if (!orcamentoId) return;
+    window.open(servicoService.urlPdf(orcamentoId), '_blank', 'noopener');
   };
 
-  const handleMatriculaChange = (value) => {
-    setMatricula(value);
-    const budget = orcamentos.find((item) => item.matricula === value);
-    if (budget) applyBudget(budget);
-  };
+  // Tudo que o Orçamento pode mudar e que aparece na ficha. É useMemo para a
+  // identidade só mudar quando um valor muda de fato — é isso que impede o
+  // efeito da prévia de disparar a cada render.
+  const dadosFicha = useMemo(() => ({
+    nomeCliente: cliente,
+    contato,
+    matricula,
+    terreno,
+    municipio,
+    area,
+    linhaSecaKm: perimetroLSeca,
+    rioKm: perimetroRio,
+    possuiCar,
+    possuiCertificacao,
+    confrontaCertificacao,
+    codRespTecnPossui,
+    respTecnPossui,
+    codRespTecn,
+    respTecn,
+    notas,
+    valorTotal: totalValor,
+    servicosSelecionados: selectedServices.map((service) => service.nome),
+    ...(pagamento || {}),
+  }), [
+    cliente, contato, matricula, terreno, municipio, area, perimetroLSeca, perimetroRio,
+    possuiCar, possuiCertificacao, confrontaCertificacao, codRespTecnPossui, respTecnPossui, codRespTecn, respTecn, notas,
+    totalValor, selectedServices, pagamento,
+  ]);
+
+  // Regera a prévia ao parar de digitar. O abort cancela a requisição anterior
+  // para uma resposta atrasada não sobrescrever uma prévia mais nova.
+  useEffect(() => {
+    if (!fichaAberta || !orcamentoId) return undefined;
+
+    const controlador = new AbortController();
+
+    const temporizador = window.setTimeout(async () => {
+      // Só sinaliza quando a requisição realmente começa — durante a espera do
+      // debounce não há nada acontecendo para mostrar.
+      setGerandoFicha(true);
+      try {
+        const blob = await servicoService.gerarPreviaPdf(orcamentoId, dadosFicha, controlador.signal);
+        if (blob) setFichaUrl((anterior) => {
+          if (anterior) URL.revokeObjectURL(anterior);
+          return URL.createObjectURL(blob);
+        });
+      } catch (erro) {
+        if (erro.name !== 'AbortError') console.error('Erro ao gerar a prévia da ficha:', erro);
+      } finally {
+        setGerandoFicha(false);
+      }
+    }, 600);
+
+    return () => {
+      window.clearTimeout(temporizador);
+      controlador.abort();
+    };
+  }, [fichaAberta, orcamentoId, dadosFicha]);
+
+  // Libera o último object URL ao desmontar, senão o blob fica na memória.
+  useEffect(() => () => { if (fichaUrl) URL.revokeObjectURL(fichaUrl); }, [fichaUrl]);
 
   const toggleService = (id) => {
     setServices((current) =>
@@ -472,10 +666,22 @@ function Orcamento({ onBack }) {
     );
   };
 
+  // Valida pelo tipo real do arquivo, não pela extensão do nome: prints de tela
+  // saem como PNG mesmo quando são chamados de "JPG", e o filtro por nome os
+  // descartava em silêncio. JPEG e PNG são os dois formatos que o gerador da
+  // ficha consegue embutir — qualquer outro avisa em vez de sumir.
   const handleJpgUpload = (event) => {
-    const files = Array.from(event.target.files || []);
-    setImagensJpg(files.filter((file) => /\.(jpe?g)$/i.test(file.name)));
+    const arquivo = (event.target.files || [])[0];
     event.target.value = '';
+    if (!arquivo) return;
+
+    if (!['image/jpeg', 'image/png'].includes(arquivo.type)) {
+      setMensagem({ tipo: 'erro', texto: 'A imagem precisa ser JPG ou PNG.' });
+      window.setTimeout(() => setMensagem(null), 2600);
+      return;
+    }
+
+    setImagensJpg([arquivo]);
   };
 
   const handleKmlUpload = (event) => {
@@ -484,8 +690,71 @@ function Orcamento({ onBack }) {
     event.target.value = '';
   };
 
+  const handleConfirmar = async () => {
+    if (!orcamentoId) {
+      setMensagem({ tipo: 'erro', texto: 'Selecione um orçamento antes de confirmar.' });
+      window.setTimeout(() => setMensagem(null), 2200);
+      return;
+    }
+
+    setConfirmando(true);
+    try {
+      // 1) Grava o orçamento (valores, índices e condições de pagamento).
+      const salvo = await servicoService.salvarOrcamento(orcamentoId, {
+        valorReferencia: salarioMinimo,
+        valorTotal: totalValor,
+        ...(pagamento || {}),
+        itens: servicesWithCalculatedTopo.map((service) => ({
+          nome: service.nome,
+          indice: service.indice,
+          valor: service.indice * salarioMinimo,
+          selecionado: service.selecionado && service.ativo,
+        })),
+      });
+
+      if (!salvo.ok) {
+        setMensagem({ tipo: 'erro', texto: salvo.data?.error || 'Erro ao gravar o orçamento.' });
+        return;
+      }
+
+      // 2) Sem decisão marcada (Aprovado/Não aprovado), só grava os valores e
+      // deixa o status como está — não faz sentido chamar a aprovação sem
+      // uma escolha explícita do usuário.
+      if (!decisaoOrcamento) {
+        setMensagem({ tipo: 'sucesso', texto: 'Orçamento salvo.' });
+        return;
+      }
+
+      // Aprovado fabrica um projeto por tipo no Kanban; se já estava aprovado,
+      // o orçamento continua gravado — por isso isso é reportado como
+      // atualização, não erro.
+      const resultado = await servicoService.aprovarOrcamento(orcamentoId, decisaoOrcamento);
+
+      if (resultado.error) {
+        const jaAprovado = /já foi aprovado/i.test(resultado.error);
+        setMensagem({
+          tipo: jaAprovado ? 'sucesso' : 'erro',
+          texto: jaAprovado ? 'Orçamento atualizado.' : resultado.error,
+        });
+        return;
+      }
+
+      setMensagem({ tipo: 'sucesso', texto: resultado.message || 'Orçamento atualizado com sucesso!' });
+
+      // Quando aprovado, projetos novos nascem no Kanban — sem este aviso eles
+      // só apareceriam ao recarregar a página (mesmo caso do Cadastro).
+      if (decisaoOrcamento === 'APROVADO') await onOrcamentoDecidido?.();
+    } catch (erro) {
+      console.error(erro);
+      setMensagem({ tipo: 'erro', texto: 'Erro ao conectar com o servidor.' });
+    } finally {
+      setConfirmando(false);
+      window.setTimeout(() => setMensagem(null), 2200);
+    }
+  };
+
   return (
-    <div style={{ height: '100%', minHeight: 0, background: '#F4F6FA', color: '#2D2A35', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', height: '100%', minHeight: 0, background: '#F4F6FA', color: '#2D2A35', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <header
         style={{
           height: '64px',
@@ -543,8 +812,45 @@ function Orcamento({ onBack }) {
         </div>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 470px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <PainelMapa viewMode={viewMode} setViewMode={setViewMode} />
+      {mensagem ? (
+        <div
+          style={{
+            // Absoluto em relação à própria tela de Orçamento (e não à
+            // viewport), senão o toast cobre a barra de navegação do App.
+            position: 'absolute',
+            top: '76px',
+            right: '24px',
+            background: mensagem.tipo === 'sucesso' ? '#EAF8F3' : '#FEECEC',
+            color: mensagem.tipo === 'sucesso' ? '#0F8B6B' : '#C24141',
+            border: `1px solid ${mensagem.tipo === 'sucesso' ? 'rgba(16, 163, 127, 0.18)' : 'rgba(248, 113, 113, 0.18)'}`,
+            borderRadius: '14px',
+            padding: '10px 14px',
+            boxShadow: '0 12px 30px rgba(15, 23, 42, 0.10)',
+            zIndex: 40,
+            fontSize: '12px',
+            fontWeight: 700,
+          }}
+        >
+          {mensagem.texto}
+        </div>
+      ) : null}
+
+      {/* gridTemplateRows definido: sem ele a linha é dimensionada pelo conteúdo
+          e uma imagem alta estica o painel inteiro, empurrando os botões para
+          fora da tela. Com a linha definida, o maxHeight:100% da imagem passa a
+          valer e o painel respeita a altura disponível. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 470px', gridTemplateRows: 'minmax(0, 1fr)', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        {fichaAberta ? (
+          <VisualizadorFicha
+            url={fichaUrl}
+            carregando={gerandoFicha}
+            onAbrirNovaAba={abrirFicha}
+          />
+        ) : imagensJpg.length > 0 || imagemSalvaUrl ? (
+          <VisualizadorImagem arquivo={imagensJpg[0]} url={imagemSalvaUrl} />
+        ) : (
+          <PainelMapa viewMode={viewMode} setViewMode={setViewMode} />
+        )}
 
         <aside
           style={{
@@ -558,43 +864,63 @@ function Orcamento({ onBack }) {
         >
           <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '18px 20px 14px', minHeight: 0 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1' }}>
-                <FieldLabel icon={FileText}>Numero do Orcamento</FieldLabel>
-                <input
-                  value={numero}
-                  list="orcamentos-salvos"
-                  onChange={(event) => handleOrcamentoChange(event.target.value)}
-                  onFocus={() => setCampoAtivo('numero')}
-                  onBlur={() => setCampoAtivo(null)}
-                  placeholder="Digite ou selecione"
-                  style={fieldStyle('numero')}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <AnimatedDropdown
+                  label="Orçamento"
+                  value={orcamentoId || ''}
+                  onChange={handleOrcamentoChange}
+                  options={[
+                    { value: '', label: orcamentos.length ? 'Selecione um orçamento' : 'Nenhum orçamento cadastrado' },
+                    ...orcamentos.map((orc) => ({ value: orc.id, label: orc.numero })),
+                  ]}
+                  width="100%"
+                  searchable
+                  searchPlaceholder="Pesquisar orçamento"
                 />
-                <datalist id="orcamentos-salvos">
-                  {numerosOrcamento.map((item) => <option key={item} value={item} />)}
-                </datalist>
-              </label>
+              </div>
+
+              <div style={{ gridColumn: '1 / -1' }}>
+                <span style={labelTextStyle}>Aprovação do Orçamento</span>
+                <div style={{ ...optionRowStyle, marginTop: '8px' }}>
+                  <OptionButton
+                    ativo={decisaoOrcamento === 'APROVADO'}
+                    onClick={() => setDecisaoOrcamento('APROVADO')}
+                  >
+                    Aprovado
+                  </OptionButton>
+                  <OptionButton
+                    ativo={decisaoOrcamento === 'REPROVADO'}
+                    onClick={() => setDecisaoOrcamento('REPROVADO')}
+                  >
+                    Não aprovado
+                  </OptionButton>
+                </div>
+                {/* Aprovar já fabrica o projeto no Kanban — sem volta fácil,
+                    então avisa antes de o usuário clicar em Confirmar. */}
+                {decisaoOrcamento === 'APROVADO' ? (
+                  <p style={{ margin: '8px 0 0', fontSize: '11px', color: '#8A94A6' }}>
+                    Ao confirmar, um projeto é criado no Kanban para cada serviço selecionado.
+                  </p>
+                ) : null}
+              </div>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1' }}>
                 <FieldLabel icon={Building2}>Cliente</FieldLabel>
                 <input
                   value={cliente}
-                  list="clientes-salvos"
-                  onChange={(event) => handleClienteChange(event.target.value)}
+                  onChange={(event) => setCliente(event.target.value)}
                   onFocus={() => setCampoAtivo('cliente')}
                   onBlur={() => setCampoAtivo(null)}
                   placeholder="Nome do Cliente"
                   style={fieldStyle('cliente')}
                 />
-                <datalist id="clientes-salvos">
-                  {clientes.map((item) => <option key={item} value={item} />)}
-                </datalist>
               </label>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1' }}>
                 <FieldLabel icon={MessageSquare}>Contato</FieldLabel>
                 <input
                   value={contato}
-                  onChange={(event) => setContato(event.target.value)}
+                  onChange={(event) => setContato(formatarTelefone(event.target.value))}
                   onFocus={() => setCampoAtivo('contato')}
                   onBlur={() => setCampoAtivo(null)}
                   placeholder="Contato do Cliente"
@@ -606,16 +932,10 @@ function Orcamento({ onBack }) {
                 <FieldLabel icon={UserRound}>Matricula</FieldLabel>
                 <input
                   value={matricula}
-                  list="matriculas-salvas"
-                  onChange={(event) => handleMatriculaChange(event.target.value)}
-                  onFocus={() => setCampoAtivo('matricula')}
-                  onBlur={() => setCampoAtivo(null)}
-                  placeholder="Matricula do Imovel"
-                  style={fieldStyle('matricula')}
+                  readOnly
+                  placeholder="Selecione um orçamento"
+                  style={readOnlyFieldStyle}
                 />
-                <datalist id="matriculas-salvas">
-                  {matriculas.map((item) => <option key={item} value={item} />)}
-                </datalist>
               </label>
 
               <div style={{ gridColumn: '1 / -1', display: 'grid', gap: '14px' }}>
@@ -651,10 +971,38 @@ function Orcamento({ onBack }) {
                   </div>
                 </label>
 
-                {mostrarRespTecnico ? (
+                {possuiCertificacao === 'Sim' ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                     <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <span style={labelTextStyle}>Cod do Res Tecn</span>
+                      <span style={labelTextStyle}>Cod do Res Tecn Certificacao</span>
+                      <input
+                        value={codRespTecnPossui}
+                        onChange={(event) => setCodRespTecnPossui(event.target.value)}
+                        onFocus={() => setCampoAtivo('codRespTecnPossui')}
+                        onBlur={() => setCampoAtivo(null)}
+                        placeholder="Codigo"
+                        style={fieldStyle('codRespTecnPossui')}
+                      />
+                    </label>
+
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={labelTextStyle}>Resp Tecn Certificacao</span>
+                      <input
+                        value={respTecnPossui}
+                        onChange={(event) => setRespTecnPossui(event.target.value)}
+                        onFocus={() => setCampoAtivo('respTecnPossui')}
+                        onBlur={() => setCampoAtivo(null)}
+                        placeholder="Nome do tecnico"
+                        style={fieldStyle('respTecnPossui')}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+
+                {confrontaCertificacao === 'Sim' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={labelTextStyle}>Cod do Res Tecn Confronto</span>
                       <input
                         value={codRespTecn}
                         onChange={(event) => setCodRespTecn(event.target.value)}
@@ -666,7 +1014,7 @@ function Orcamento({ onBack }) {
                     </label>
 
                     <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <span style={labelTextStyle}>Resp Tecn</span>
+                      <span style={labelTextStyle}>Resp Tecn Confronto</span>
                       <input
                         value={respTecn}
                         onChange={(event) => setRespTecn(event.target.value)}
@@ -681,28 +1029,38 @@ function Orcamento({ onBack }) {
               </div>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <FieldLabel icon={MapPin}>Area (m2)</FieldLabel>
+                <FieldLabel icon={MapPin} unidade="m²">Área</FieldLabel>
                 <input value={area} onChange={(event) => setArea(event.target.value)} onFocus={() => setCampoAtivo('area')} onBlur={() => setCampoAtivo(null)} style={fieldStyle('area')} />
               </label>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <FieldLabel icon={Building2}>Municipio</FieldLabel>
-                <select value={municipio} onChange={(event) => setMunicipio(event.target.value)} onFocus={() => setCampoAtivo('municipio')} onBlur={() => setCampoAtivo(null)} style={{ ...fieldStyle('municipio'), cursor: 'pointer' }}>
-                  <option value="Sao Bento do Sul">Sao Bento do Sul</option>
-                  <option value="Campo Alegre">Campo Alegre</option>
-                  <option value="Rio Negrinho">Rio Negrinho</option>
-                  <option value="Corupa">Corupa</option>
-                  <option value="Outro">Outro</option>
-                </select>
+                <FieldLabel icon={Building2}>Município</FieldLabel>
+                <input
+                  value={municipio}
+                  list="municipios-sugeridos"
+                  onChange={(event) => setMunicipio(event.target.value)}
+                  onFocus={() => setCampoAtivo('municipio')}
+                  onBlur={() => setCampoAtivo(null)}
+                  placeholder="Digite ou selecione a cidade"
+                  style={fieldStyle('municipio')}
+                />
+                {/* datalist só sugere; o valor digitado pode ser qualquer texto,
+                    então cidades fora das quatro mais comuns também funcionam. */}
+                <datalist id="municipios-sugeridos">
+                  <option value="Sao Bento do Sul" />
+                  <option value="Campo Alegre" />
+                  <option value="Rio Negrinho" />
+                  <option value="Corupa" />
+                </datalist>
               </label>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <FieldLabel icon={MapPin}>Perimetro L.Seca (km)</FieldLabel>
+                <FieldLabel icon={MapPin} unidade="Km">Perímetro L.Seca</FieldLabel>
                 <input value={perimetroLSeca} onChange={(event) => setPerimetroLSeca(event.target.value)} onFocus={() => setCampoAtivo('perimetro-lseca')} onBlur={() => setCampoAtivo(null)} placeholder="Ex.: 1,25" style={fieldStyle('perimetro-lseca')} />
               </label>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <FieldLabel icon={MapPin}>Perimetro Rio (km)</FieldLabel>
+                <FieldLabel icon={MapPin} unidade="Km">Perímetro Rio</FieldLabel>
                 <input value={perimetroRio} onChange={(event) => setPerimetroRio(event.target.value)} onFocus={() => setCampoAtivo('perimetro-rio')} onBlur={() => setCampoAtivo(null)} placeholder="Ex.: 0,80" style={fieldStyle('perimetro-rio')} />
               </label>
 
@@ -723,10 +1081,10 @@ function Orcamento({ onBack }) {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#5F6B83' }}>Imagem JPG</span>
-                    <input ref={jpgInputRef} type="file" accept=".jpg,.jpeg,image/jpeg" onChange={handleJpgUpload} style={{ display: 'none' }} />
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#5F6B83' }}>Imagem do mapa</span>
+                    <input ref={jpgInputRef} type="file" accept="image/jpeg,image/png" onChange={handleJpgUpload} style={{ display: 'none' }} />
                     <button type="button" onClick={() => jpgInputRef.current?.click()} style={{ ...baseFieldStyle, cursor: 'pointer', textAlign: 'left', fontWeight: 600 }}>
-                      Selecionar imagem JPG
+                      Selecionar imagem (JPG ou PNG)
                     </button>
                   </label>
 
@@ -741,7 +1099,7 @@ function Orcamento({ onBack }) {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
                   <div style={{ fontSize: '12px', color: '#5F6B83' }}>
-                    {imagensJpg.length ? `JPG anexado: ${imagensJpg[0].name}` : 'Nenhuma imagem JPG anexada.'}
+                    {imagensJpg.length ? `Imagem anexada: ${imagensJpg[0].name}` : 'Nenhuma imagem anexada.'}
                   </div>
                   <div style={{ fontSize: '12px', color: '#5F6B83' }}>
                     {arquivosKml.length ? `${arquivosKml.length} KML(s) anexado(s)` : 'Nenhum KML anexado.'}
@@ -800,7 +1158,32 @@ function Orcamento({ onBack }) {
               <div style={{ fontSize: '14px', color: '#1F2937', fontWeight: 900, textAlign: 'right' }}>{currency(totalValor)}</div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.25fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '0.85fr 1fr 0.85fr 1.2fr', gap: '10px' }}>
+              <motion.button
+                type="button"
+                onClick={() => setFichaAberta((aberta) => !aberta)}
+                disabled={!orcamentoId}
+                title={orcamentoId ? 'Ver a ficha atualizando em tempo real' : 'Selecione um orçamento'}
+                whileHover={orcamentoId ? { scale: 1.03, y: -1 } : undefined}
+                whileTap={orcamentoId ? { scale: 0.98 } : undefined}
+                style={{
+                  height: '46px',
+                  borderRadius: '12px',
+                  border: fichaAberta ? '1px solid #2D7AFD' : '1px solid rgba(15, 23, 42, 0.10)',
+                  background: fichaAberta ? '#E8F0FF' : '#FFFFFF',
+                  cursor: orcamentoId ? 'pointer' : 'not-allowed',
+                  opacity: orcamentoId ? 1 : 0.5,
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  color: fichaAberta ? '#2D7AFD' : '#4E5970',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}
+              >
+                <FileText size={16} /> Ficha
+              </motion.button>
               <motion.button
                 type="button"
                 onClick={() => setPagamentoAberto(true)}
@@ -847,6 +1230,8 @@ function Orcamento({ onBack }) {
               </motion.button>
               <motion.button
                 type="button"
+                onClick={handleConfirmar}
+                disabled={confirmando}
                 whileHover={{ scale: 1.03, y: -1 }}
                 whileTap={{ scale: 0.98 }}
                 style={{
@@ -854,7 +1239,8 @@ function Orcamento({ onBack }) {
                   borderRadius: '12px',
                   border: 'none',
                   background: 'linear-gradient(135deg, #14B38B 0%, #0F9E7A 100%)',
-                  cursor: 'pointer',
+                  cursor: confirmando ? 'not-allowed' : 'pointer',
+                  opacity: confirmando ? 0.7 : 1,
                   fontSize: '13px',
                   fontWeight: 800,
                   color: '#FFFFFF',
@@ -865,7 +1251,7 @@ function Orcamento({ onBack }) {
                   boxShadow: '0 10px 20px rgba(15, 163, 127, 0.22)',
                 }}
               >
-                <Save size={16} /> Confirmar
+                <Save size={16} /> {confirmando ? 'Confirmando...' : 'Confirmar'}
               </motion.button>
             </div>
           </div>
@@ -876,7 +1262,14 @@ function Orcamento({ onBack }) {
         {notasAberta ? <NotesModal notas={notas} setNotas={setNotas} onClose={() => setNotasAberta(false)} /> : null}
       </AnimatePresence>
 
-      {pagamentoAberto ? <ModalPagamento totalValor={totalValor} onClose={() => setPagamentoAberto(false)} /> : null}
+      {pagamentoAberto ? (
+        <ModalPagamento
+          totalValor={totalValor}
+          valoresIniciais={pagamento}
+          onChange={setPagamento}
+          onClose={() => setPagamentoAberto(false)}
+        />
+      ) : null}
     </div>
   );
 }
