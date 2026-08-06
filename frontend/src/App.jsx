@@ -7,6 +7,7 @@ import { LoginView } from './components/LoginView';
 import IntroScreen from './components/IntroScreen';
 import CadastroServicoView from './components/CadastroServicoView';
 import Orcamento from './page/Orcamento';
+import EmissaoDocumentos from './page/EmissaoDocumentos';
 import CadastroClienteView from './page/CadastroClienteView';
 import CadastroImovelView from './page/CadastroImovelView';
 import CadastroConfrontanteView from './page/CadastroConfrontanteView';
@@ -172,6 +173,8 @@ export default function App() {
             />
           )}
 
+          {telaAtiva === 'emissao-documentos' && <EmissaoDocumentos />}
+
           {telaAtiva === 'clientes' && (
             <CadastroClienteView onBack={() => setTelaAtiva('dashboard')} />
           )}
@@ -188,6 +191,7 @@ export default function App() {
             <VinculacaoView onBack={() => setTelaAtiva('dashboard')} />
           )}
         </div>
+
 
         {modais.novoProjeto && (
           <NovoProjetoModal

@@ -13,6 +13,7 @@ const ITENS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'kanban', label: 'Kanban' },
   { id: 'orcamento', label: 'Orçamento' },
+  { id: 'emissao-documentos', label: 'Emissão de Documentos'},
   { id: 'clientes', label: 'Clientes' },
   { id: 'imoveis', label: 'Imóveis' },
   { id: 'confrontantes', label: 'Confrontantes' },
