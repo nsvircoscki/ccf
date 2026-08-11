@@ -12,6 +12,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // .env). Sem essa variável, cai no padrão local de desenvolvimento.
 const PASTA_BASE_SERVICOS = process.env.PASTA_SERVICOS || path.join(__dirname, '../../servicos');
 
+// Cônjuge pode estar gravado em qualquer um dos dois lados da relação — ver
+// resolverConjuge em clienteService.js.
+const INCLUDE_CONJUGE = { conjuge: true, conjugeDe: true };
+
 // Nomes abreviados usados no Cadastro de Serviço -> nomes completos do
 // catálogo de processos (workflowService.js / CATALOGO_PROCESSOS). Sem essa
 // tradução, aprovar um orçamento cria o projeto mas sem nenhuma tarefa.
@@ -38,12 +42,6 @@ const MAPA_TIPOS_ABREVIADOS = {
   // cálculo próprio de índice), não um tipo de projeto do Kanban.
 };
 
-// Inverso de MAPA_TIPOS_ABREVIADOS (nome completo -> sigla), usado para montar
-// o nome do projeto do Kanban na aprovação do orçamento.
-const SIGLA_DO_TIPO = Object.fromEntries(
-  Object.entries(MAPA_TIPOS_ABREVIADOS).map(([sigla, nomeCompleto]) => [nomeCompleto, sigla]),
-);
-
 function mapearTiposSolicitados(nomesAbreviados) {
   return (nomesAbreviados || [])
     .map((nome) => MAPA_TIPOS_ABREVIADOS[nome])
@@ -61,14 +59,6 @@ function paraNumero(valor) {
 
   const numero = parseFloat(texto);
   return Number.isFinite(numero) ? numero : null;
-}
-
-// Remove acentos e qualquer caractere que não seja letra/número, para usar
-// o nome do cliente dentro do numeroServico e do nome da pasta com segurança.
-function sanitizarNomeCliente(nome) {
-  return String(nome || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9]/g, '');
 }
 
 function criarPastaServico(numeroServico) {
@@ -118,6 +108,26 @@ function salvarImagemServico(imagemBase64, caminhoPasta, numeroServico) {
   }
 }
 
+// KML chega como texto puro (nome + conteúdo XML), diferente da imagem que
+// vem em base64 — salva cada um do jeito que veio, sem transformação, e
+// devolve os nomes salvos (juntos numa string) pra registrar em arquivoKml.
+function salvarKmlServico(arquivosKml, caminhoPasta) {
+  if (!Array.isArray(arquivosKml) || arquivosKml.length === 0) return null;
+
+  const nomesSalvos = [];
+  for (const arquivo of arquivosKml) {
+    if (!arquivo?.nome || !arquivo?.conteudo) continue;
+    const nomeSeguro = path.basename(arquivo.nome);
+    try {
+      fs.writeFileSync(path.join(caminhoPasta, nomeSeguro), arquivo.conteudo, 'utf8');
+      nomesSalvos.push(nomeSeguro);
+    } catch (erro) {
+      console.error(`Falha ao salvar o KML "${nomeSeguro}":`, erro.message);
+    }
+  }
+  return nomesSalvos.length > 0 ? nomesSalvos.join(', ') : null;
+}
+
 export const servicoService = {
   // temImagem sai calculado do disco: a imagem é localizada por convenção de
   // nome dentro da pasta do serviço, não há coluna para ela no banco.
@@ -146,8 +156,10 @@ export const servicoService = {
         workflows: true,
         itensOrcamento: true,
         parcelas: { orderBy: { numero: 'asc' } },
-        proprietario: true,
-        imovel: { include: { proprietario: true, confrontantes: true } },
+        proprietarios: { include: INCLUDE_CONJUGE },
+        imovel: { include: { proprietarios: true, usufrutuarios: true } },
+        confrontantes: { include: { proprietarios: { include: INCLUDE_CONJUGE } } },
+        procurador: true,
       },
     });
     if (!servico) return null;
@@ -155,7 +167,7 @@ export const servicoService = {
     return { ...servico, temImagem: Boolean(caminhoImagemDoServico(servico)) };
   },
 
-  // Vinculação: liga o serviço já cadastrado a um Cliente (proprietário) e um
+  // Vinculação: liga o serviço já cadastrado a Clientes (proprietários) e um
   // Imovel já cadastrados, e grava os dados específicos deste serviço usados
   // na geração de documentos (retificação por ex.). Separado de atualizar()
   // de propósito — não mexe em nada do cadastro original.
@@ -164,24 +176,30 @@ export const servicoService = {
     if (!servico) throw new Error('Serviço não encontrado.');
 
     const {
-      proprietarioId, imovelId, descricaoAtualImovel, memorialDescritivoRetificacao, superiorOuInferior,
-      totalLotes, averbacoes, areasDesmembramento, listaProtocoloEntrega,
+      proprietarioIds, situacaoProprietario, imovelId, procuradorId, descricaoAtualImovel, memorialDescritivoRetificacao,
+      superiorOuInferior, totalLotes, averbacoes, areasDesmembramento, listaProtocoloEntrega, confrontanteIds,
     } = dados;
 
-    if (proprietarioId) {
-      const proprietario = await prisma.cliente.findUnique({ where: { id: proprietarioId } });
-      if (!proprietario) throw new Error('Cliente proprietário não encontrado.');
+    const idsProprietarios = Array.isArray(proprietarioIds) ? [...new Set(proprietarioIds.filter(Boolean))] : [];
+    if (idsProprietarios.length > 0) {
+      const encontrados = await prisma.cliente.findMany({ where: { id: { in: idsProprietarios } } });
+      if (encontrados.length !== idsProprietarios.length) throw new Error('Um ou mais clientes proprietários não foram encontrados.');
     }
     if (imovelId) {
       const imovel = await prisma.imovel.findUnique({ where: { id: imovelId } });
       if (!imovel) throw new Error('Imóvel não encontrado.');
     }
+    if (procuradorId) {
+      const procurador = await prisma.cliente.findUnique({ where: { id: procuradorId } });
+      if (!procurador) throw new Error('Procurador não encontrado.');
+    }
 
     return prisma.servico.update({
       where: { id },
       data: {
-        proprietarioId: proprietarioId || null,
+        situacaoProprietario: situacaoProprietario || null,
         imovelId: imovelId || null,
+        procuradorId: procuradorId || null,
         descricaoAtualImovel: descricaoAtualImovel || null,
         memorialDescritivoRetificacao: memorialDescritivoRetificacao || null,
         superiorOuInferior: superiorOuInferior || null,
@@ -189,8 +207,19 @@ export const servicoService = {
         averbacoes: averbacoes || null,
         areasDesmembramento: areasDesmembramento || null,
         listaProtocoloEntrega: listaProtocoloEntrega || null,
+        // "set" troca a lista inteira pela enviada — mais simples que
+        // calcular o diff de connect/disconnect a cada vinculação salva.
+        proprietarios: { set: idsProprietarios.map((clienteId) => ({ id: clienteId })) },
+        ...(Array.isArray(confrontanteIds)
+          ? { confrontantes: { set: confrontanteIds.map((idImovel) => ({ id: idImovel })) } }
+          : {}),
       },
-      include: { proprietario: true, imovel: { include: { proprietario: true, confrontantes: true } } },
+      include: {
+        proprietarios: { include: INCLUDE_CONJUGE },
+        imovel: { include: { proprietarios: true, usufrutuarios: true } },
+        confrontantes: { include: { proprietarios: { include: INCLUDE_CONJUGE } } },
+        procurador: true,
+      },
     });
   },
 
@@ -206,7 +235,7 @@ export const servicoService = {
       matricula, terreno, possuiCar, possuiCertificacao, confrontaCertificacao,
       codRespTecnPossui, respTecnPossui, codRespTecn, respTecn, notas,
       area, municipio, linhaSecaKm, rioKm,
-      servicosSelecionados, imagemBase64,
+      servicosSelecionados, imagemBase64, arquivosKml,
     } = dados;
 
     const tiposSolicitados = Array.isArray(servicosSelecionados)
@@ -248,6 +277,11 @@ export const servicoService = {
       const caminhoImagem = imagemBase64
         ? salvarImagemServico(imagemBase64, atualizado.caminhoPasta, atualizado.numeroServico)
         : caminhoImagemDoServico(atualizado);
+      const arquivoKml = salvarKmlServico(arquivosKml, atualizado.caminhoPasta);
+      if (arquivoKml) {
+        await prisma.servico.update({ where: { id: atualizado.id }, data: { arquivoKml } });
+        atualizado.arquivoKml = arquivoKml;
+      }
       await gerarPdfServico(atualizado, caminhoImagem);
     } catch (erro) {
       console.error(`Falha ao regerar o PDF do serviço ${atualizado.numeroServico}:`, erro);
@@ -408,7 +442,7 @@ export const servicoService = {
       matricula, terreno, possuiCar, possuiCertificacao, confrontaCertificacao,
       codRespTecnPossui, respTecnPossui, codRespTecn, respTecn, notas,
       area, municipio, linhaSecaKm, rioKm,
-      servicosSelecionados, valorTotal, imagemBase64
+      servicosSelecionados, valorTotal, imagemBase64, arquivosKml
     } = dados;
 
     if (!nomeCliente || !municipio) {
@@ -449,8 +483,11 @@ export const servicoService = {
       });
 
       // 2) Com o sequencial real em mãos, monta o número definitivo e
-      // cria a pasta do serviço com esse nome.
-      const numeroServico = `${ano}-${String(criado.sequencial).padStart(3, '0')}-${sanitizarNomeCliente(nomeCliente)}`;
+      // cria a pasta do serviço com esse nome. Só ano-sequencial: o nome do
+      // cliente não entra aqui, fica só como dado de busca (nomeCliente no
+      // próprio Servico) — ver decidirOrcamento para a mesma regra no nome
+      // do projeto do Kanban.
+      const numeroServico = `${ano}-${String(criado.sequencial).padStart(3, '0')}`;
       const caminhoPasta = criarPastaServico(numeroServico);
 
       // O projeto no Kanban só nasce quando o orçamento é aprovado (ver
@@ -467,6 +504,11 @@ export const servicoService = {
     // é registrado em vez de derrubar a requisição.
     try {
       const caminhoImagem = salvarImagemServico(imagemBase64, servico.caminhoPasta, servico.numeroServico);
+      const arquivoKml = salvarKmlServico(arquivosKml, servico.caminhoPasta);
+      if (arquivoKml) {
+        await prisma.servico.update({ where: { id: servico.id }, data: { arquivoKml } });
+        servico.arquivoKml = arquivoKml;
+      }
       await gerarPdfServico(servico, caminhoImagem);
     } catch (erro) {
       console.error(`Falha ao gerar o PDF do serviço ${servico.numeroServico}:`, erro);
@@ -476,14 +518,16 @@ export const servicoService = {
   },
 
   // Decide o orçamento: reprova só muda o status; aprova fabrica um projeto no
-  // Kanban por tipo solicitado. O nome do projeto reaproveita ano+sequencial+
-  // cliente do próprio numeroServico e insere no meio um sequencial PRÓPRIO do
-  // tipo (Uni, Ret, Cad...) — ex.: "2026-052-3-OsmaelRaimundoGhisi" é a 3ª
-  // Unificação fabricada no sistema inteiro, do serviço 2026-052.
+  // Kanban por tipo solicitado. O nome do projeto reaproveita ano+sequencial do
+  // próprio numeroServico e insere no fim um número local a ESTE serviço (1, 2,
+  // 3...), na ordem dos tipos aprovados — ex.: "2026-052-2" é o 2º processo
+  // aprovado do serviço 2026-052 (não um contador global do tipo). Como o
+  // sequencial do serviço já é único, isso já garante nomes sem colisão, sem
+  // precisar de sigla nem de um contador global por tipo.
   async decidirOrcamento(servicoId, decisao) {
     const servico = await prisma.servico.findUnique({
       where: { id: servicoId },
-      include: { workflows: true }
+      include: { workflows: true, itensOrcamento: true }
     });
 
     if (!servico) throw new Error("Serviço não encontrado.");
@@ -502,36 +546,27 @@ export const servicoService = {
 
     if (servico.statusOrcamento === "APROVADO") throw new Error("Este orçamento já foi aprovado.");
 
-    // Ordem alfabética: com vários tipos no mesmo orçamento, os projetos são
-    // fabricados numa ordem previsível e não na ordem em que foram marcados.
-    const tiposParaFabricar = [...servico.tiposSolicitados]
-      .filter((tipo) => CATALOGO_PROCESSOS[tipo])
-      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    // Os tipos que viram projeto vêm do orçamento (itensOrcamento.selecionado),
+    // não de tiposSolicitados — esse último fica travado no que foi marcado no
+    // cadastro e não acompanha o que o usuário de fato selecionou/ajustou na
+    // tela de Orçamento. Mantém a ordem em que os itens foram registrados
+    // (não reordena por ordem alfabética).
+    const tiposParaFabricar = servico.itensOrcamento
+      .filter((item) => item.selecionado)
+      .map((item) => MAPA_TIPOS_ABREVIADOS[item.nome])
+      .filter((tipo) => tipo && CATALOGO_PROCESSOS[tipo]);
 
-    const [ano, sequencialGlobal, ...resto] = servico.numeroServico.split('-');
-    const nomeClienteParte = resto.join('-');
+    const [ano, sequencialGlobal] = servico.numeroServico.split('-');
 
     const { servicoAprovado, projetosGerados } = await prisma.$transaction(async (tx) => {
       const gerados = [];
 
-      for (const tipoProcesso of tiposParaFabricar) {
-        // upsert com increment: o UPDATE de uma linha já existente é atômico no
-        // Postgres, então dois cadastros do mesmo tipo em paralelo nunca saem
-        // com o mesmo sequencial.
-        const contador = await tx.sequencialTipoServico.upsert({
-          where: { tipo: tipoProcesso },
-          create: { tipo: tipoProcesso, valor: 1 },
-          update: { valor: { increment: 1 } },
-        });
-
-        // A sigla entra no nome por necessidade, não só estética: sem ela, dois
-        // tipos diferentes do mesmo serviço (ex.: Cadastral e Unificação, cada
-        // um na sua 1ª vez) gerariam o nome idêntico "ano-seqGlobal-1-cliente",
-        // e o segundo esbarraria na trava de nome duplicado do Kanban.
-        const sigla = SIGLA_DO_TIPO[tipoProcesso] || tipoProcesso;
-        const nomeProjeto = `${ano}-${sequencialGlobal}-${contador.valor}-${sigla}-${nomeClienteParte}`;
+      for (let i = 0; i < tiposParaFabricar.length; i++) {
+        const tipoProcesso = tiposParaFabricar[i];
+        const numeroDoProcesso = i + 1;
+        const nomeProjeto = `${ano}-${sequencialGlobal}-${numeroDoProcesso}`;
         const projeto = await workflowService.fabricarProjeto(
-          nomeProjeto, [tipoProcesso], servico.terreno || 'Urbano', servico.id, tx,
+          nomeProjeto, [tipoProcesso], servico.terreno || 'Urbano', servico.id, servico.matricula, tx,
         );
         gerados.push(projeto);
       }

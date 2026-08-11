@@ -49,9 +49,14 @@ export const clienteController = {
   },
 };
 
-// A constraint @unique de documento vira P2002 do Prisma, não uma mensagem
-// legível — sem isso o usuário veria um erro genérico de banco de dados.
+// As constraints @unique (documento, conjugeId) viram P2002 do Prisma, não
+// uma mensagem legível — sem isso o usuário veria um erro genérico de banco.
 function mensagemDeErro(error) {
-  if (error.code === 'P2002') return 'Já existe um cliente cadastrado com este CPF/CNPJ.';
+  if (error.code === 'P2002') {
+    if (error.meta?.target?.includes('conjugeId')) {
+      return 'Essa pessoa já está vinculada como cônjuge de outro cliente.';
+    }
+    return 'Já existe um cliente cadastrado com este CPF/CNPJ.';
+  }
   return error.message;
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   BadgeCheck,
@@ -18,28 +18,68 @@ import {
   FieldIcon,
   OrcamentoDocumentoModal,
 } from './emissaoDocumentos/DocumentosComponents.jsx';
-import { clientesDocumentos, municipiosSugeridos } from './emissaoDocumentos/documentosData.js';
+import { municipiosSugeridos } from './emissaoDocumentos/documentosData.js';
+import { servicoService } from '../services/servicoService';
 import { cardStyle, escapeHtml, fieldBase, labelStyle } from './emissaoDocumentos/documentosUtils.js';
 import logoCcf from './emissaoDocumentos/assets/logo-ccf.jpg';
 import marcaDagua from './emissaoDocumentos/assets/marca-dagua.jpg';
 
+function servicoParaFormulario(servico) {
+  const itensOrcamento = servico.itensOrcamento || [];
+  const itensSelecionados = itensOrcamento.filter((item) => item.selecionado);
+  // Só usamos o valor se o orçamento já foi aprovado. valorFinal só existe se
+  // o usuário passou pela etapa de Condições de Pagamento no Orçamento; nem
+  // todo orçamento aprovado passa por ela, então caímos para valorTotal (soma
+  // bruta dos itens selecionados), que é sempre gravado ao salvar o orçamento.
+  const orcamentoAprovado = servico.statusOrcamento === 'APROVADO';
+  const valor = orcamentoAprovado ? servico.valorFinal ?? servico.valorTotal ?? 0 : null;
+  return {
+    id: servico.id,
+    numeroServico: servico.numeroServico,
+    nome: servico.nomeCliente,
+    matricula: servico.matricula || '',
+    area: servico.area != null ? String(servico.area) : '',
+    municipio: servico.municipio || '',
+    servicos: itensSelecionados.map((item) => item.nome),
+    valorGlobal: valor != null ? valor.toFixed(2).replace('.', ',') : '',
+    itensOrcamento,
+    valorReferencia: servico.valorReferencia || 0,
+  };
+}
+
 function EmissaoDocumentos() {
   const [modalContratoAberto, setModalContratoAberto] = useState(false);
   const [modalOrcamentoAberto, setModalOrcamentoAberto] = useState(false);
-  const [clienteSelecionado, setClienteSelecionado] = useState(clientesDocumentos[0]);
-  const [servicosSelecionados, setServicosSelecionados] = useState(clientesDocumentos[0].servicos);
-  const [valorGlobal, setValorGlobal] = useState(clientesDocumentos[0].valorGlobal);
-  const [responsavel, setResponsavel] = useState('');
+  const [servicosDisponiveis, setServicosDisponiveis] = useState([]);
+  const [clienteSelecionado, setClienteSelecionado] = useState(null);
+  const [servicosSelecionados, setServicosSelecionados] = useState([]);
+  const [valorGlobal, setValorGlobal] = useState('');
+  const [responsavel, setResponsavel] = useState('Eng. Charles Costi');
   const [observacoes, setObservacoes] = useState('');
 
-  const clientes = useMemo(() => clientesDocumentos.map((cliente) => cliente.nome), []);
+  useEffect(() => {
+    servicoService.listarTodos().then((lista) => {
+      setServicosDisponiveis(lista);
+      if (lista.length > 0) handleServicoChange(lista[0].id);
+    });
+  }, []);
 
-  const handleClienteChange = (value) => {
-    const clienteEncontrado = clientesDocumentos.find((cliente) => cliente.nome === value);
-    if (!clienteEncontrado) return;
-    setClienteSelecionado(clienteEncontrado);
-    setServicosSelecionados(clienteEncontrado.servicos);
-    setValorGlobal(clienteEncontrado.valorGlobal);
+  const opcoesServico = useMemo(
+  () => servicosDisponiveis.map((s) => ({ value: s.id, label: `${s.numeroServico} — ${s.nomeCliente}` })),
+  [servicosDisponiveis],
+  );
+
+  // A lista (listarTodos) não traz itensOrcamento/proprietário/etc — só campos
+  // simples, pra ficar leve. Por isso, ao selecionar um serviço, buscamos os
+  // dados completos dele (mesmo padrão que a tela de Orçamento já usa).
+  const handleServicoChange = (id) => {
+    servicoService.buscarPorId(id).then((servico) => {
+      if (!servico) return;
+      const dados = servicoParaFormulario(servico);
+      setClienteSelecionado(dados);
+      setServicosSelecionados(dados.servicos);
+      setValorGlobal(dados.valorGlobal);
+    });
   };
 
   const handleClienteFieldChange = (field, value) => {
@@ -53,7 +93,7 @@ function EmissaoDocumentos() {
   };
 
   const gerarPdf = () => {
-    const numeroOrcamento = `OS-${String(clienteSelecionado.matricula || '').replace(/\D/g, '') || Date.now().toString().slice(-6)}`;
+    const numeroOrcamento = clienteSelecionado.numeroServico;
     const linhasServicos = servicosSelecionados
       .map(
         (servico, index) => `
@@ -159,6 +199,10 @@ function EmissaoDocumentos() {
     printWindow.document.close();
   };
 
+  if (!clienteSelecionado) {
+    return <div style={{ padding: '28px' }}>Carregando servicos...</div>;
+  }
+
   return (
     <div style={{ height: '100%', minHeight: 0, background: '#F4F6FA', padding: '28px', color: '#061733', overflowY: 'auto' }}>
       <div style={{ maxWidth: '1180px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -168,7 +212,6 @@ function EmissaoDocumentos() {
             <div><h1 style={{ margin: 0, fontSize: '22px', fontWeight: 900 }}>Emissao de Documentos</h1><p style={{ margin: '3px 0 0', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>Geracao visual de OS tecnica e contrato formal</p></div>
           </div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', borderRadius: '999px', background: '#ECFDF5', border: '1px solid #A7F3D0', color: '#047857', padding: '10px 16px', fontSize: '12px', fontWeight: 900 }}>
-            <CheckCircle2 size={16} fill="#10B981" color="#10B981" /> PRONTO PARA EMISSAO DE OS
           </div>
         </div>
 
@@ -180,7 +223,7 @@ function EmissaoDocumentos() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 0.75fr', gap: '14px' }}>
-              <label style={labelStyle}>Nome do Cliente<AnimatedDropdown value={clienteSelecionado.nome} onChange={handleClienteChange} options={clientes.map((cliente) => ({ value: cliente, label: cliente }))} searchable /></label>
+              <label style={labelStyle}>Nome do Cliente<AnimatedDropdown value={clienteSelecionado.id} onChange={handleServicoChange} options={opcoesServico} searchable /></label>
               <label style={labelStyle}>Matricula<input value={clienteSelecionado.matricula} onChange={(event) => handleClienteFieldChange('matricula', event.target.value)} style={fieldBase} /></label>
               <label style={labelStyle}>Area Informada<input value={clienteSelecionado.area} onChange={(event) => handleClienteFieldChange('area', event.target.value)} style={fieldBase} /></label>
               <label style={labelStyle}>
@@ -209,7 +252,7 @@ function EmissaoDocumentos() {
           <section style={{ ...cardStyle, padding: '22px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '20px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#061733', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>2</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Configuracoes Tecnicas da OS</h2></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <label style={labelStyle}>Colaborador Tecnico Responsavel<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><FieldIcon icon={UserRound} /><select value={responsavel} onChange={(event) => setResponsavel(event.target.value)} style={fieldBase}><option value="" disabled>Selecione o colaborador...</option><option>Eng. Carlos Henrique</option><option>Tec. Mariana Souza</option><option>Topografo Rafael Lima</option></select></div></label>
+              <label style={labelStyle}>Colaborador Tecnico Responsavel<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><FieldIcon icon={UserRound} /><select value={responsavel} onChange={(event) => setResponsavel(event.target.value)} style={fieldBase}><option>Eng. Charles Costi</option></select></div></label>
               <label style={labelStyle}>Valor Global da Obra (R$)<input value={valorGlobal} onChange={(event) => setValorGlobal(event.target.value)} inputMode="decimal" style={fieldBase} /></label>
               <label style={labelStyle}>Observacoes Adicionais do Rodape<textarea value={observacoes} onChange={(event) => setObservacoes(event.target.value)} placeholder="Digite observacoes internas ou restricoes de campo..." style={{ ...fieldBase, minHeight: '104px', resize: 'vertical', padding: '13px', lineHeight: 1.45, fontWeight: 600 }} /></label>
             </div>
@@ -219,7 +262,7 @@ function EmissaoDocumentos() {
         <section style={{ ...cardStyle, padding: '22px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '18px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#061733', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>3</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Acoes de Documentos</h2></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <button type="button" onClick={gerarPdf} style={{ minHeight: '88px', borderRadius: '16px', border: 'none', background: '#0F172A', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '18px 20px', boxShadow: '0 14px 28px rgba(15, 23, 42, 0.18)' }}><span style={{ display: 'flex', alignItems: 'center', gap: '13px', textAlign: 'left' }}><span style={{ width: '42px', height: '42px', borderRadius: '13px', background: 'rgba(255,255,255,0.12)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Download size={21} /></span><span><strong style={{ display: 'block', fontSize: '15px' }}>Gerar Ordem de Servico (PDF)</strong><small style={{ display: 'block', marginTop: '4px', color: '#CBD5E1', fontWeight: 700 }}>Abre a impressao para salvar em PDF</small></span></span><BadgeCheck size={24} color="#34D399" /></button>
+            <button type="button" onClick={gerarPdf} style={{ minHeight: '88px', borderRadius: '16px', border: 'none', background: '#2D7AFD', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '18px 20px', boxShadow: '0 14px 28px rgba(45, 122, 253, 0.28)' }}><span style={{ display: 'flex', alignItems: 'center', gap: '13px', textAlign: 'left' }}><span style={{ width: '42px', height: '42px', borderRadius: '13px', background: 'rgba(255,255,255,0.12)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Download size={21} /></span><span><strong style={{ display: 'block', fontSize: '15px' }}>Gerar Ordem de Servico (PDF)</strong><small style={{ display: 'block', marginTop: '4px', color: '#CBD5E1', fontWeight: 700 }}>Abre a impressao para salvar em PDF</small></span></span><BadgeCheck size={24} color="#34D399" /></button>
             <button type="button" onClick={() => setModalContratoAberto(true)} style={{ minHeight: '88px', borderRadius: '16px', border: '1px solid #FDBA74', background: '#FFF7ED', color: '#9A3412', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '18px 20px' }}><span style={{ display: 'flex', alignItems: 'center', gap: '13px', textAlign: 'left' }}><span style={{ width: '42px', height: '42px', borderRadius: '13px', background: '#FFEDD5', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Building2 size={21} /></span><span><strong style={{ display: 'block', fontSize: '15px' }}>Gerar Contrato Padrao (DOCX)</strong><small style={{ display: 'block', marginTop: '4px', color: '#C2410C', fontWeight: 800 }}>Requer validacao juridica complementar</small></span></span><AlertTriangle size={23} /></button>
           </div>
         </section>

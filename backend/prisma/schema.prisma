@@ -14,6 +14,18 @@ model SequencialTipoServico {
   valor Int    @default(0)
 }
 
+// Associação editável entre templates de documento (chave de TEMPLATES em
+// documentoService.js) e os tipos de serviço aos quais eles se aplicam. Um
+// template sem nenhuma linha aqui é considerado "geral" e aparece para
+// qualquer tipo de serviço (ex.: Protocolo de Entrega, Dossiê).
+model TemplateTipoServico {
+  id            String @id @default(uuid())
+  templateChave String
+  tipoServico   String
+
+  @@unique([templateChave, tipoServico])
+}
+
 // Cadastro de clientes, feito após a aprovação do orçamento (o Servico guarda
 // só o nome do cliente até então). Ainda não há vínculo com Servico — isso
 // fica para a tela de vinculação, que virá depois.
@@ -24,9 +36,12 @@ model Cliente {
   documento   String   @unique // CPF (PF) ou CNPJ (PJ)
   rg          String?  // Só PF
   orgaoEmissor String? // Órgão emissor do RG (ex.: SSP/SC) — só PF
+  rgDataExpedicao DateTime?
+  dataNascimento  DateTime?
   representanteLegalNome  String?
   representanteLegalCpf   String?
   representanteLegalCargo String?
+  representanteLegalDataNascimento DateTime?
   telefone    String?
   email       String?
   logradouro  String?
@@ -43,36 +58,23 @@ model Cliente {
   estadoCivil   String?
   profissao     String?
 
-  imoveis      Imovel[]
-  servicos     Servico[]
+  // Cônjuge: outra Pessoa já cadastrada (só faz sentido se estadoCivil for
+  // casado(a) ou em união estável). @unique em conjugeId garante que ninguém
+  // seja cônjuge de duas pessoas ao mesmo tempo. O vínculo é gravado só do
+  // lado editado (A aponta pra B); quem lê precisa checar os dois campos
+  // (cliente.conjuge ?? cliente.conjugeDe) para achar o cônjuge de qualquer
+  // um dos dois lados — ver resolverConjuge em clienteService.js.
+  conjugeId   String?  @unique
+  conjuge     Cliente? @relation("ConjugeCliente", fields: [conjugeId], references: [id])
+  conjugeDe   Cliente? @relation("ConjugeCliente")
 
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
-}
-
-// Confrontante: dono de um imóvel vizinho que assina/aparece nos documentos de
-// retificação, unificação etc. junto com o proprietário. Cadastro próprio (não
-// é um Cliente) porque raramente vira cliente da empresa, mas precisa da mesma
-// qualificação completa (nome, documento, endereço) para os documentos.
-model Confrontante {
-  id          String   @id @default(uuid())
-  tipo        String   // "Física" | "Jurídica"
-  nome        String
-  documento   String?  // CPF ou CNPJ — opcional pois nem sempre é levantado
-  rg          String?
-  telefone    String?
-  email       String?
-  logradouro  String?
-  bairro      String?
-  cidade      String?
-  estado      String?
-  cep         String?
-
-  nacionalidade String?
-  estadoCivil   String?
-  profissao     String?
-
-  imoveis     Imovel[]
+  // Um Imóvel pode ter mais de um proprietário (ex.: casal, herdeiros em
+  // condomínio) e um Serviço pode ter mais de um cliente na ponta do
+  // proprietário — por isso os dois viram N:M em vez de uma FK única.
+  imoveis           Imovel[] @relation("ProprietarioImovel")
+  imoveisUsufruto   Imovel[] @relation("UsufrutuarioImovel")
+  servicos          Servico[] @relation("ProprietarioServico")
+  servicosProcurador Servico[] @relation("ProcuradorServico")
 
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
@@ -99,14 +101,29 @@ model Imovel {
   comarca        String?
   zoneamento     String?
 
-  proprietarioId String
-  proprietario   Cliente  @relation(fields: [proprietarioId], references: [id])
+  // N:M: um imóvel pode ter mais de um proprietário (ver comentário em
+  // Cliente.imoveis).
+  proprietarios  Cliente[] @relation("ProprietarioImovel")
 
-  confrontantes  Confrontante[]
+  // Usufruto: quando alguém tem direito de uso/gozo do imóvel sem ser o
+  // proprietário (comum em heranças, e pode ser mais de uma pessoa — ex.:
+  // ambos os cônjuges). O(s) usufrutuário(s) também precisam aparecer
+  // qualificados nos documentos, por isso são Pessoas, não texto livre.
+  usufruto        Boolean   @default(false)
+  usufrutuarios   Cliente[] @relation("UsufrutuarioImovel")
+
   servicos       Servico[]
+  confrontanteDeServicos Servico[] @relation("ConfrontantesServico")
 
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
+}
+
+model CartorioCns {
+  cns         String  @id
+  cartorio    String?
+  comarca     String?
+  updated_at  DateTime @updatedAt
 }
 
 model Role {
@@ -241,10 +258,25 @@ model Servico {
 
   // --- Vinculação (proprietário/imóvel/confrontantes) e dados específicos
   // deste serviço para a geração de documentos (retificação, por ex.) ---
-  proprietarioId              String?
-  proprietario                Cliente? @relation(fields: [proprietarioId], references: [id])
+  // N:M: o mesmo serviço pode ter mais de um proprietário (ver comentário em
+  // Cliente.imoveis) — todos entram na qualificação dos documentos gerados.
+  proprietarios                Cliente[] @relation("ProprietarioServico")
+  // Papel do(s) cliente(s) NESTE serviço (herdeiro, inventariante, representante,
+  // proprietário) — contextual: a mesma pessoa pode ser "proprietário" num
+  // serviço e "herdeiro" em outro, por isso não fica salvo no Cliente.
+  situacaoProprietario         String?
+  // Confrontantes deste serviço: outros Imóveis já cadastrados, escolhidos na
+  // vinculação — o dono de cada um (imovel.proprietario) é quem entra na
+  // qualificação dos documentos. Evita ter que recadastrar a pessoa; o mesmo
+  // imóvel pode ser confrontante de vários serviços diferentes.
+  confrontantes                Imovel[] @relation("ConfrontantesServico")
   imovelId                    String?
   imovel                      Imovel?  @relation(fields: [imovelId], references: [id])
+  // Procurador: pessoa já cadastrada com procuração para representar o(s)
+  // proprietário(s) neste serviço específico — opcional, e um só por serviço
+  // (diferente de proprietarios/confrontantes, que são N:M).
+  procuradorId                 String?
+  procurador                   Cliente? @relation("ProcuradorServico", fields: [procuradorId], references: [id])
   descricaoAtualImovel        String?
   memorialDescritivoRetificacao String?
   superiorOuInferior          String?  // "superior" | "inferior"

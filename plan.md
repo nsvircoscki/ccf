@@ -113,3 +113,4 @@ Aqui achei um bug extra: no App.jsx atual, tudo fica dentro de <div className="n
 5. Abrir "+ Informações" no header do Kanban, preencher matrícula/endereço/notas, salvar, conferir os chips aparecendo.
 6. Testar a busca por etapa filtrando os cartões do board.
 7. Clicar em "Imprimir Etapas" no Kanban, escolher um projeto, confirmar que o window.print() mostra a tabela por etapas (e não uma página em branco).
+

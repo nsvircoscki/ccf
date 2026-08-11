@@ -20,5 +20,9 @@ export const imovelService = {
 
   async remover(id) {
     return api.deleteImovel(id);
-  }
+  },
+
+  async buscarCartorioPorCns(cns) {
+    return api.buscarCartorioPorCns(cns);
+  },
 };

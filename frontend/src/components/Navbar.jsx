@@ -9,20 +9,19 @@ const CORES = {
 };
 
 const ITENS = [
-  { id: 'cadastro', label: 'Cadastro de Serviço' },
-  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'dashboard', label: 'Pesquisa' },
   { id: 'kanban', label: 'Kanban' },
   { id: 'orcamento', label: 'Orçamento' },
-  { id: 'emissao-documentos', label: 'Emissão de Documentos'},
-  { id: 'clientes', label: 'Clientes' },
+  { id: 'emissao-documentos', label: 'OS/Contrato' },
+  { id: 'clientes', label: 'Pessoas' },
   { id: 'imoveis', label: 'Imóveis' },
-  { id: 'confrontantes', label: 'Confrontantes' },
-  { id: 'vinculacao', label: 'Vinculação' },
+  { id: 'vinculacao', label: 'SIS DOC' },
+  { id: 'config-documentos', label: 'Documentos × Tipos' },
 ];
 
-// A busca só é consumida pelo Dashboard e pelo Kanban — mostrá-la nas outras
-// telas seria um campo que não faz nada.
-const TELAS_COM_BUSCA = ['dashboard', 'kanban'];
+// A busca só é consumida pelo Kanban — a tela de Pesquisa tem sua própria
+// busca embutida, e mostrar esse campo nas outras telas não faria nada.
+const TELAS_COM_BUSCA = ['kanban'];
 
 function NavItem({ ativo, onClick, children }) {
   return (
@@ -71,7 +70,6 @@ export function Navbar({
   setBuscaTexto,
   usuarioLogado,
   setUsuarioLogado,
-  onAbrirNovoProjeto,
 }) {
   const mostrarBusca = TELAS_COM_BUSCA.includes(telaAtiva);
 
@@ -83,7 +81,12 @@ export function Navbar({
         background: '#FFFFFF',
         borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
         display: 'grid',
-        gridTemplateColumns: '1fr auto 1fr',
+        // minmax(0, 1fr), não só "1fr": um track "1fr" puro tem mínimo
+        // implícito "auto" (do tamanho do conteúdo) — com muitos itens de
+        // menu, isso empurrava a coluna da direita (nome do usuário) pra
+        // fora da tela em vez de encolher. minmax(0, 1fr) permite encolher
+        // até 0 de verdade, deixando o ellipsis do nome fazer o trabalho.
+        gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
         alignItems: 'center',
         gap: '24px',
         padding: '0 28px',
@@ -148,7 +151,7 @@ export function Navbar({
 
         <motion.button
           type="button"
-          onClick={onAbrirNovoProjeto}
+          onClick={() => setTelaAtiva('cadastro')}
           whileHover={{ y: -1 }}
           whileTap={{ scale: 0.98 }}
           style={{
@@ -159,20 +162,21 @@ export function Navbar({
             padding: '0 16px',
             borderRadius: '999px',
             border: 'none',
-            background: '#0F172A',
+            background: '#2D7AFD',
             color: '#FFFFFF',
             fontSize: '13px',
             fontWeight: 700,
             cursor: 'pointer',
             whiteSpace: 'nowrap',
+            flexShrink: 0,
           }}
         >
-          <Plus size={15} strokeWidth={2.5} /> Novo Projeto
+          <Plus size={15} strokeWidth={2.5} /> Cadastrar Serviço
         </motion.button>
 
-        <div style={{ width: '1px', height: '24px', background: 'rgba(15, 23, 42, 0.10)' }} />
+        <div style={{ width: '1px', height: '24px', background: 'rgba(15, 23, 42, 0.10)', flexShrink: 0 }} />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '28px', flexShrink: 1, overflow: 'hidden' }}>
           <span
             style={{
               width: '8px',
@@ -183,6 +187,7 @@ export function Navbar({
             }}
           />
           <span
+            title={usuarioLogado}
             style={{
               fontSize: '13px',
               fontWeight: 700,
@@ -190,6 +195,7 @@ export function Navbar({
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              minWidth: 0,
             }}
           >
             {usuarioLogado}
@@ -210,6 +216,7 @@ export function Navbar({
             fontWeight: 600,
             cursor: 'pointer',
             transition: 'all 0.18s ease',
+            flexShrink: 0,
           }}
           onMouseEnter={(event) => {
             event.currentTarget.style.color = '#DC2626';

@@ -29,7 +29,7 @@ const SIGLA_POR_TIPO = {
 
 const initialServices = [
   { id: 1, nome: 'Lev Topo', indice: 4.0, ativo: true, selecionado: false },
-  { id: 2, nome: 'Ret', indice: 1.5, ativo: true, selecionado: true },
+  { id: 2, nome: 'Ret', indice: 1.5, ativo: true, selecionado: false },
   { id: 3, nome: 'Desm', indice: 1.0, ativo: true, selecionado: false },
   { id: 4, nome: 'Uni', indice: 1.0, ativo: true, selecionado: false },
   { id: 5, nome: 'Usu', indice: 1.0, ativo: true, selecionado: false },
@@ -361,6 +361,16 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
       leitor.readAsDataURL(arquivo);
     });
 
+  // KML é texto (XML), então vai como texto puro no cadastro — o backend salva
+  // cada um na pasta do serviço, igual já faz com a imagem do mapa.
+  const lerArquivoComoTexto = (arquivo) =>
+    new Promise((resolve) => {
+      const leitor = new FileReader();
+      leitor.onload = () => resolve(leitor.result);
+      leitor.onerror = () => resolve(null);
+      leitor.readAsText(arquivo);
+    });
+
   const handleSalvar = async () => {
     if (!cliente.trim()) {
       setMensagem({ tipo: 'erro', texto: 'Informe o nome do cliente antes de salvar.' });
@@ -374,9 +384,15 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
         .map((service) => service.nome);
 
       const imagemBase64 = await lerImagemComoBase64(imagensJpg[0]);
+      const arquivosKmlPayload = (
+        await Promise.all(
+          arquivosKml.map(async (arquivo) => ({ nome: arquivo.name, conteudo: await lerArquivoComoTexto(arquivo) })),
+        )
+      ).filter((arquivo) => arquivo.conteudo);
 
       const payload = {
         imagemBase64,
+        arquivosKml: arquivosKmlPayload,
         nomeCliente: cliente,
         contato,
         matricula,
@@ -518,16 +534,6 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#54607A', fontWeight: 700 }}>
-          <span
-            style={{
-              width: '10px',
-              height: '10px',
-              borderRadius: '999px',
-              background: '#10B981',
-              boxShadow: '0 0 0 4px rgba(16, 185, 129, 0.16)',
-            }}
-          />
-          Fase 1 - Captacao & Geoprocessamento
         </div>
       </header>
 

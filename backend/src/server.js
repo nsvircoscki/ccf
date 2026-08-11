@@ -7,8 +7,8 @@ import ticketRoutes from './routes/ticketRoutes.js';
 import servicoRoutes from './routes/servicoRoutes.js';
 import clienteRoutes from './routes/clienteRoutes.js';
 import imovelRoutes from './routes/imovelRoutes.js';
-import confrontanteRoutes from './routes/confrontanteRoutes.js';
 import documentoRoutes from './routes/documentoRoutes.js';
+import cartorioRoutes from './routes/cartorioRoutes.js';
 
 const app = express();
 
@@ -23,8 +23,8 @@ app.use('/tickets', ticketRoutes);
 app.use('/servicos', servicoRoutes);
 app.use('/clientes', clienteRoutes);
 app.use('/imoveis', imovelRoutes);
-app.use('/confrontantes', confrontanteRoutes);
 app.use('/documentos', documentoRoutes);
+app.use('/cartorios', cartorioRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

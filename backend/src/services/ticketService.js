@@ -4,13 +4,13 @@ import { prisma } from '../prisma.js';
 export const ticketService = {
   async listarTodos() {
     return prisma.ticket.findMany({
-      include: { 
-        workflow: true,
+      include: {
+        workflow: { include: { servico: { select: { nomeCliente: true } } } },
         currentStep: { include: { requiredRole: true } },
         history: { include: { user: true, fromStep: true, toStep: true }, orderBy: { action_timestamp: 'desc' } },
         comments: { include: { user: true }, orderBy: { created_at: 'desc' } }
       },
-      orderBy: { created_at: 'desc' } 
+      orderBy: { created_at: 'desc' }
     });
   },
 

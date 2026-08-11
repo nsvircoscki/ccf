@@ -1,19 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useKanban } from './hooks/useKanban';
 import { Navbar } from './components/Navbar';
-import { DashboardView } from './components/DashboardView';
 import { KanbanView } from './components/KanbanView';
+import { PesquisaView } from './components/PesquisaView';
 import { LoginView } from './components/LoginView';
 import IntroScreen from './components/IntroScreen';
+import ModuleSelectorView from './components/ModuleSelectorView';
 import CadastroServicoView from './components/CadastroServicoView';
 import Orcamento from './page/Orcamento';
 import EmissaoDocumentos from './page/EmissaoDocumentos';
 import CadastroClienteView from './page/CadastroClienteView';
 import CadastroImovelView from './page/CadastroImovelView';
-import CadastroConfrontanteView from './page/CadastroConfrontanteView';
 import VinculacaoView from './page/VinculacaoView';
+import ConfigDocumentosView from './page/ConfigDocumentosView';
 
-import { NovoProjetoModal } from './modals/NovoProjetoModal';
 import { EditarProjetoModal } from './modals/EditarProjetoModal';
 import { TicketDetailModal } from './modals/TicketDetailModal';
 import { AuditoriaModal } from './modals/AuditoriaModal';
@@ -31,12 +31,15 @@ export default function App() {
   // "concluída" ela não volta a aparecer mesmo se o usuário sair e entrar de
   // novo (senão o "Sair" no Navbar viraria um replay da splash toda vez).
   const [introConcluida, setIntroConcluida] = useState(false);
+  // O seletor de módulos aparece a cada entrada no site — diferente da intro,
+  // ele reaparece sempre que o usuário faz login de novo (não fica "visto"
+  // para sempre na sessão).
+  const [moduloEscolhido, setModuloEscolhido] = useState(false);
   const [telaAtiva, setTelaAtiva] = useState('dashboard');
   const [buscaTexto, setBuscaTexto] = useState('');
   const [workflowParaImpressao, setWorkflowParaImpressao] = useState(null);
 
   const [modais, setModais] = useState({
-    novoProjeto: false,
     editarProjeto: false,
     ticketDetalhe: null,
     auditoria: null,
@@ -77,8 +80,9 @@ export default function App() {
 
   const globalCss = (
     <style>{`
-      * { font-family: 'Roboto', sans-serif !important; }
-      body { font-family: 'Roboto', sans-serif; }
+      html, body, #root { font-family: 'Roboto', sans-serif; }
+      input, button, select, textarea { font-family: inherit; }
+      @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       .animated-dropdown-container { position: relative; }
       .animated-dropdown-button { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-radius: 12px; border: 1px solid #D7E1F0; background: #FBFDFF; cursor: pointer; color: #111827; font-weight: 500; transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease; }
       .animated-dropdown-button:hover { background: #EEF4FF; border-color: #A8C4FF; }
@@ -110,8 +114,33 @@ export default function App() {
     return <IntroScreen onDone={() => setIntroConcluida(true)} />;
   }
 
+  const handleLogin = (nome) => {
+    setModuloEscolhido(false);
+    setUsuarioLogado(nome);
+  };
+
+  const handleLogout = () => {
+    setModuloEscolhido(false);
+    setUsuarioLogado(null);
+  };
+
   if (!usuarioLogado) {
-    return <LoginView onLogin={setUsuarioLogado} globalCss={globalCss} />;
+    return <LoginView onLogin={handleLogin} globalCss={globalCss} />;
+  }
+
+  if (!moduloEscolhido) {
+    return (
+      <>
+        {globalCss}
+        <ModuleSelectorView
+          usuarioLogado={usuarioLogado}
+          onAbrirModulo={(id) => {
+            setTelaAtiva(id);
+            setModuloEscolhido(true);
+          }}
+        />
+      </>
+    );
   }
 
   return (
@@ -127,8 +156,7 @@ export default function App() {
           buscaTexto={buscaTexto}
           setBuscaTexto={setBuscaTexto}
           usuarioLogado={usuarioLogado}
-          setUsuarioLogado={setUsuarioLogado}
-          onAbrirNovoProjeto={() => setModais({ ...modais, novoProjeto: true })}
+          setUsuarioLogado={handleLogout}
         />
 
         <div className="flex-1 flex flex-col min-h-0" style={{ minHeight: 0, overflow: 'hidden' }}>
@@ -140,13 +168,11 @@ export default function App() {
           )}
 
           {telaAtiva === 'dashboard' && (
-            <DashboardView
+            <PesquisaView
               kanban={kanban}
               usuarioLogado={usuarioLogado}
-              buscaTexto={buscaTexto}
-              onAbrirAuditoria={(proj) => setModais({ ...modais, auditoria: proj })}
               setTelaAtiva={setTelaAtiva}
-              onImprimirProjeto={imprimirProjeto}
+              onAbrirAuditoria={(proj) => setModais({ ...modais, auditoria: proj })}
             />
           )}
 
@@ -183,23 +209,16 @@ export default function App() {
             <CadastroImovelView onBack={() => setTelaAtiva('dashboard')} />
           )}
 
-          {telaAtiva === 'confrontantes' && (
-            <CadastroConfrontanteView onBack={() => setTelaAtiva('dashboard')} />
-          )}
-
           {telaAtiva === 'vinculacao' && (
             <VinculacaoView onBack={() => setTelaAtiva('dashboard')} />
+          )}
+
+          {telaAtiva === 'config-documentos' && (
+            <ConfigDocumentosView onBack={() => setTelaAtiva('dashboard')} />
           )}
         </div>
 
 
-        {modais.novoProjeto && (
-          <NovoProjetoModal
-            kanban={kanban}
-            onClose={() => setModais({ ...modais, novoProjeto: false })}
-            setTelaAtiva={setTelaAtiva}
-          />
-        )}
         {modais.editarProjeto && (
           <EditarProjetoModal kanban={kanban} onClose={() => setModais({ ...modais, editarProjeto: false })} />
         )}

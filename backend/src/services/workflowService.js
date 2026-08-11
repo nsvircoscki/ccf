@@ -45,12 +45,19 @@ CATALOGO_PROCESSOS["Extremação"] = [...CATALOGO_PROCESSOS["Retificação"]];
 export const workflowService = {
   async listarTodos() {
     return prisma.workflow.findMany({
-      include: { steps: { include: { requiredRole: true }, orderBy: { sequence_order: 'asc' } } },
+      include: {
+        steps: { include: { requiredRole: true }, orderBy: { sequence_order: 'asc' } },
+        // Nome do cliente não faz parte do nome do projeto — só entra aqui pra
+        // dar suporte à busca por pessoa nos dropdowns do Kanban/Dashboard.
+        servico: { select: { nomeCliente: true } },
+      },
       orderBy: { created_at: 'desc' }
     });
   },
 
-  async fabricarProjeto(name, types, terreno = 'Urbano', servicoId = null, tx = prisma) {
+  // matricula: vem do Servico e já nasce preenchida no projeto, sem precisar
+  // de edição manual — é o que aparece no card do Kanban e entra na busca.
+  async fabricarProjeto(name, types, terreno = 'Urbano', servicoId = null, matricula = null, tx = prisma) {
     if (!types || types.length === 0) throw new Error("Selecione pelo menos um tipo de processo");
     const projetoExistente = await tx.workflow.findFirst({ where: { name } });
     if (projetoExistente) throw new Error("Já existe um projeto com este nome.");
@@ -79,7 +86,7 @@ export const workflowService = {
 
     const roles = await tx.role.findMany();
     const workflow = await tx.workflow.create({
-      data: { name, description: types.join(', '), terreno, servicoId }
+      data: { name, description: types.join(', '), terreno, servicoId, matricula }
     });
 
     const colunasVisuais = ['Iniciar', 'Em Andamento', 'Concluído'];

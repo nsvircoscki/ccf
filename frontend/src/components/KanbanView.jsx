@@ -88,10 +88,17 @@ export function KanbanView({
               label="Projeto Kanban"
               value={workflowAtivo || ''}
               onChange={setWorkflowAtivo}
-              options={[{ value: '', label: 'Nenhum trabalho criado' }, ...workflows.map(w => ({ value: w.id, label: w.name }))]}
+              options={[
+                { value: '', label: 'Nenhum trabalho criado' },
+                ...workflows.map(w => ({
+                  value: w.id,
+                  label: w.name,
+                  keywords: `${w.servico?.nomeCliente || ''} ${w.matricula || ''}`,
+                })),
+              ]}
               width="400px"
               searchable
-              searchPlaceholder="Pesquisar projeto"
+              searchPlaceholder="Buscar projeto, cliente ou matricula"
             />
 
             {/* PROCESSO, DADOS VISÍVEIS E BOTÃO DE DETALHES */}
@@ -163,11 +170,11 @@ export function KanbanView({
 
           {/* BOTÕES DE AÇÃO DO PROJETO COM ÍCONES */}
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button title="Histórico do Projeto" onClick={() => onAbrirAuditoria(projeto)} style={{ padding: '12px', background: '#333', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s' }}>
+            <button title="Histórico do Projeto" onClick={() => onAbrirAuditoria(projeto)} style={{ padding: '12px', background: '#2D7AFD', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s' }}>
               <FiClock size={20} />
             </button>
 
-            <button title="Imprimir Etapas" onClick={() => { setWorkflowImpressao(workflowAtivo || (workflows[0]?.id ?? null)); setModalImpressaoAberto(true); }} style={{ padding: '12px', background: '#4A90E2', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s' }}>
+            <button title="Imprimir Etapas" onClick={() => { setWorkflowImpressao(workflowAtivo || (workflows[0]?.id ?? null)); setModalImpressaoAberto(true); }} style={{ padding: '12px', background: '#2D7AFD', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s' }}>
               <FiPrinter size={20} />
             </button>
 

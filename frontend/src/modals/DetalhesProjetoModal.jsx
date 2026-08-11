@@ -57,7 +57,7 @@ export function DetalhesProjetoModal({ kanban, onClose }) {
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px', marginTop: '20px' }}>
           <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#F0F0F0', color: '#777', cursor: 'pointer', fontWeight: 'bold' }}>Fechar</button>
-          <button onClick={salvar} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#4A90E2', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>Salvar</button>
+          <button onClick={salvar} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#2D7AFD', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>Salvar</button>
         </div>
       </div>
     </div>

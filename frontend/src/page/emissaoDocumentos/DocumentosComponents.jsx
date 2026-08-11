@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, ChevronDown, UserRound, X } from 'lucide-react';
 
-import { catalogoServicos } from './documentosData.js';
 import { currency, fieldBase, labelStyle, parseCurrency } from './documentosUtils.js';
 
 const dropdownWrapperVariants = {
@@ -148,9 +147,16 @@ export function ContractModal({ onClose }) {
 
 export function OrcamentoDocumentoModal({ cliente, servicosSelecionados, onClose, onConfirm, onClienteChange }) {
   const [servicosModal, setServicosModal] = useState(() =>
-    catalogoServicos.map((servico) => ({ ...servico, selecionado: servicosSelecionados.includes(servico.nome) })),
+    (cliente.itensOrcamento || []).map((item, index) => ({
+      id: index,
+      nome: item.nome,
+      detalhe: '',
+      indice: item.indice,
+      ativo: true,
+      selecionado: servicosSelecionados.includes(item.nome),
+    })),
   );
-  const [valorReferencia, setValorReferencia] = useState(parseCurrency(cliente.valorGlobal) || 1621);
+  const [valorReferencia, setValorReferencia] = useState(cliente.valorReferencia || 0);
 
   const servicosAtivos = useMemo(() => servicosModal.filter((service) => service.selecionado && service.ativo), [servicosModal]);
   const totalValor = useMemo(() => servicosAtivos.reduce((acc, service) => acc + service.indice * valorReferencia, 0), [servicosAtivos, valorReferencia]);

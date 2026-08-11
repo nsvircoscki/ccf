@@ -1,7 +1,8 @@
 // src/services/imovelService.js
 import { prisma } from '../prisma.js';
+import { cartorioService } from './cartorioService.js';
 
-const INCLUDE_PADRAO = { proprietario: true, confrontantes: true };
+const INCLUDE_PADRAO = { proprietarios: true, usufrutuarios: true };
 
 export const imovelService = {
   async listar() {
@@ -16,16 +17,33 @@ export const imovelService = {
   },
 
   async criar(dados) {
-    const data = await montarDados(dados, 'connect');
-    return prisma.imovel.create({ data, include: INCLUDE_PADRAO });
+    const { idsProprietarios, idsUsufrutuarios, ...data } = await montarDados(dados);
+    await cartorioService.salvar(data.cns, { cartorio: data.cartorio, comarca: data.comarca });
+    return prisma.imovel.create({
+      data: {
+        ...data,
+        proprietarios: { connect: idsProprietarios.map((id) => ({ id })) },
+        usufrutuarios: { connect: idsUsufrutuarios.map((id) => ({ id })) },
+      },
+      include: INCLUDE_PADRAO,
+    });
   },
 
   async atualizar(id, dados) {
     const imovel = await prisma.imovel.findUnique({ where: { id } });
     if (!imovel) throw new Error('Imóvel não encontrado.');
 
-    const data = await montarDados(dados, 'set');
-    return prisma.imovel.update({ where: { id }, data, include: INCLUDE_PADRAO });
+    const { idsProprietarios, idsUsufrutuarios, ...data } = await montarDados(dados);
+    await cartorioService.salvar(data.cns, { cartorio: data.cartorio, comarca: data.comarca });
+    return prisma.imovel.update({
+      where: { id },
+      data: {
+        ...data,
+        proprietarios: { set: idsProprietarios.map((id) => ({ id })) },
+        usufrutuarios: { set: idsUsufrutuarios.map((id) => ({ id })) },
+      },
+      include: INCLUDE_PADRAO,
+    });
   },
 
   async remover(id) {
@@ -36,22 +54,38 @@ export const imovelService = {
   },
 };
 
-// modoRelacao: "connect" na criação (não existe "set" para relações no
-// create do Prisma) e "set" na edição (troca a lista inteira pela enviada,
-// mais simples que calcular o diff de connect/disconnect).
-async function montarDados(dados, modoRelacao) {
+// proprietarioIds/usufrutuarioIds: tanto o imóvel quanto o usufruto sobre ele
+// podem ter mais de uma pessoa (casal, herdeiros em condomínio...) — todos
+// entram na qualificação dos documentos.
+async function montarDados(dados) {
   const {
-    proprietarioId, cartorio, matricula, cns, incra, cib, logradouro, municipio, area, descricao,
-    tipoTitulo, confrontanteIds, comarca, zoneamento,
+    proprietarioIds, cartorio, matricula, cns, incra, cib, logradouro, municipio, area, descricao,
+    tipoTitulo, comarca, zoneamento, usufruto, usufrutuarioIds,
   } = dados;
 
-  if (!proprietarioId) throw new Error('Selecione o cliente proprietário do imóvel.');
+  const idsProprietarios = Array.isArray(proprietarioIds) ? [...new Set(proprietarioIds.filter(Boolean))] : [];
+  if (idsProprietarios.length === 0) throw new Error('Selecione ao menos um cliente proprietário do imóvel.');
 
-  const proprietario = await prisma.cliente.findUnique({ where: { id: proprietarioId } });
-  if (!proprietario) throw new Error('Cliente proprietário não encontrado.');
+  const proprietariosEncontrados = await prisma.cliente.findMany({ where: { id: { in: idsProprietarios } } });
+  if (proprietariosEncontrados.length !== idsProprietarios.length) {
+    throw new Error('Um ou mais clientes proprietários não foram encontrados.');
+  }
+
+  const idsUsufrutuariosBrutos = Array.isArray(usufrutuarioIds) ? [...new Set(usufrutuarioIds.filter(Boolean))] : [];
+  if (usufruto && idsUsufrutuariosBrutos.length === 0) {
+    throw new Error('Selecione ao menos um usufrutuário do imóvel.');
+  }
+  if (idsUsufrutuariosBrutos.length > 0) {
+    const usufrutuariosEncontrados = await prisma.cliente.findMany({ where: { id: { in: idsUsufrutuariosBrutos } } });
+    if (usufrutuariosEncontrados.length !== idsUsufrutuariosBrutos.length) {
+      throw new Error('Um ou mais clientes usufrutuários não foram encontrados.');
+    }
+  }
+  const idsUsufrutuarios = usufruto ? idsUsufrutuariosBrutos : [];
 
   return {
-    proprietarioId,
+    idsProprietarios,
+    idsUsufrutuarios,
     cartorio: cartorio || null,
     matricula: matricula || null,
     cns: cns || null,
@@ -64,8 +98,6 @@ async function montarDados(dados, modoRelacao) {
     tipoTitulo: tipoTitulo || 'matrícula',
     comarca: comarca || null,
     zoneamento: zoneamento || null,
-    ...(Array.isArray(confrontanteIds)
-      ? { confrontantes: { [modoRelacao]: confrontanteIds.map((id) => ({ id })) } }
-      : {}),
+    usufruto: Boolean(usufruto),
   };
 }

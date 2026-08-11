@@ -217,37 +217,10 @@ export const api = {
         await fetch(`${BASE_URL}/imoveis/${id}`, { method: 'DELETE' });
     },
 
-    // ---- CONFRONTANTES ----
-    getConfrontantes: async () => {
-        const res = await fetch(`${BASE_URL}/confrontantes`);
+    buscarCartorioPorCns: async (cns) => {
+        const res = await fetch(`${BASE_URL}/cartorios/${encodeURIComponent(cns)}`);
+        if (!res.ok) return null;
         return res.json();
-    },
-
-    getConfrontanteById: async (id) => {
-        const res = await fetch(`${BASE_URL}/confrontantes/${id}`);
-        return res.json();
-    },
-
-    createConfrontante: async (dadosConfrontante) => {
-        const res = await fetch(`${BASE_URL}/confrontantes`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(dadosConfrontante)
-        });
-        return { data: await res.json(), ok: res.ok };
-    },
-
-    updateConfrontante: async (id, dadosConfrontante) => {
-        const res = await fetch(`${BASE_URL}/confrontantes/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(dadosConfrontante)
-        });
-        return { data: await res.json(), ok: res.ok };
-    },
-
-    deleteConfrontante: async (id) => {
-        await fetch(`${BASE_URL}/confrontantes/${id}`, { method: 'DELETE' });
     },
 
     // ---- VINCULAÇÃO ----
@@ -264,6 +237,15 @@ export const api = {
     getTemplatesDocumento: async () => {
         const res = await fetch(`${BASE_URL}/documentos/templates`);
         return res.json();
+    },
+
+    salvarMapeamentoTiposDocumento: async (mapa) => {
+        const res = await fetch(`${BASE_URL}/documentos/mapeamento-tipos`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mapa }),
+        });
+        return { data: await res.json(), ok: res.ok };
     },
 
     // URL direta: o navegador dispara o download, não é consumida via fetch.

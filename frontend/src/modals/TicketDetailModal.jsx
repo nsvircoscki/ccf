@@ -69,7 +69,7 @@ export function TicketDetailModal({ ticket, kanban, usuarioLogado, onClose }) {
                   style={{ width: '100%', minHeight: '80px', padding: '10px', borderRadius: '8px', border: '1px solid #4A90E2', outline: 'none', resize: 'vertical', fontSize: '13px', fontFamily: 'inherit', boxSizing: 'border-box' }}
                 />
                 <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-                  <button onClick={salvarDescricao} style={{ padding: '6px 12px', background: '#4A90E2', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>Salvar</button>
+                  <button onClick={salvarDescricao} style={{ padding: '6px 12px', background: '#2D7AFD', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>Salvar</button>
                   <button onClick={() => setEditandoDescricao(false)} style={{ padding: '6px 12px', background: 'rgba(0,0,0,0.1)', color: '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>Cancelar</button>
                 </div>
               </div>
@@ -87,7 +87,7 @@ export function TicketDetailModal({ ticket, kanban, usuarioLogado, onClose }) {
           <h3 style={{ margin: '0 0 15px', color: '#333' }}>Comentários e Histórico</h3>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
             <input value={novoComentario} onChange={e => setNovoComentario(e.target.value)} placeholder="Escreva uma observação..." style={{ flex: 1, padding: '12px 15px', borderRadius: '8px', border: '1px solid #DDD', outline: 'none' }} />
-            <button onClick={enviarComentario} style={{ padding: '12px 20px', background: '#333', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Enviar</button>
+            <button onClick={enviarComentario} style={{ padding: '12px 20px', background: '#2D7AFD', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Enviar</button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {timelineCartao.length === 0 && <p style={{ color: '#999', fontStyle: 'italic' }}>Nenhuma atividade registrada.</p>}

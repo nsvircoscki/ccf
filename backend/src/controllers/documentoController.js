@@ -3,7 +3,15 @@ import { documentoService } from '../services/documentoService.js';
 
 export const documentoController = {
   async listarTemplates(req, res) {
-    res.json(documentoService.listarTemplates());
+    res.json(await documentoService.listarTemplates());
+  },
+
+  async salvarMapeamentoTipos(req, res) {
+    try {
+      res.json(await documentoService.salvarMapeamentoTipos(req.body.mapa));
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
   },
 
   async gerar(req, res) {

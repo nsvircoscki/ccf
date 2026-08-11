@@ -1,68 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowLeft, Download, FileText, Save, Users } from 'lucide-react';
 import { servicoService } from '../services/servicoService';
 import { clienteService } from '../services/clienteService';
 import { imovelService } from '../services/imovelService';
-import { AnimatedDropdown } from '../components/AnimatedDropdown';
-
-const baseFieldStyle = {
-  height: '44px',
-  borderRadius: '12px',
-  border: '1px solid rgba(15, 23, 42, 0.12)',
-  background: '#F8FAFD',
-  padding: '0 14px',
-  fontSize: '14px',
-  outline: 'none',
-  color: '#1F2937',
-};
-
-const activeFieldStyle = {
-  border: '1px solid #2D7AFD',
-  boxShadow: '0 0 0 3px rgba(45, 122, 253, 0.12)',
-};
-
-const labelStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '6px',
-  fontSize: '12px',
-  fontWeight: 800,
-  color: '#5F6B83',
-  textTransform: 'uppercase',
-};
-
-function OptionButton({ ativo, onClick, children }) {
-  return (
-    <motion.button
-      type="button"
-      whileHover={{ scale: 1.03, y: -1 }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onClick}
-      style={{
-        flex: 1,
-        height: '36px',
-        borderRadius: '8px',
-        border: ativo ? '1px solid #2D7AFD' : '1px solid rgba(15, 23, 42, 0.12)',
-        background: ativo ? '#2D7AFD' : '#FFFFFF',
-        color: ativo ? '#FFFFFF' : '#5F6B83',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontWeight: 700,
-        fontSize: '13px',
-        transition: 'all 0.15s ease',
-      }}
-    >
-      {children}
-    </motion.button>
-  );
-}
+import {
+  Actions, CheckboxList, ChipList, Field, Icon, SearchableSelect, SelectField, Section, Segmented, Shell, Toast, useToast, C,
+} from '../components/cadastros/CadastroKit.jsx';
 
 const vinculacaoVazia = {
-  proprietarioId: '',
+  proprietarioIds: [],
   imovelId: '',
+  situacaoProprietario: '',
+  procuradorId: '',
+  confrontanteIds: [],
   descricaoAtualImovel: '',
   memorialDescritivoRetificacao: '',
   superiorOuInferior: 'superior',
@@ -72,16 +21,35 @@ const vinculacaoVazia = {
   listaProtocoloEntrega: '',
 };
 
+const paraOpcaoPessoa = (cliente) => ({ value: cliente.id, label: cliente.nome, sub: cliente.documento });
+const nomesProprietarios = (imovel) => (imovel.proprietarios || []).map((p) => p.nome).join(', ') || 'Sem proprietário';
+const paraOpcaoImovel = (imovel) => ({
+  value: imovel.id,
+  label: imovel.matricula || 'Sem matrícula',
+  sub: nomesProprietarios(imovel),
+});
+const paraOpcaoServico = (servico) => ({ value: servico.id, label: servico.numeroServico, sub: servico.nomeCliente });
+
+const TABS = [
+  { id: 'vinc', label: 'Vínculos', icon: 'link', desc: 'Proprietários, imóvel e confrontantes' },
+  { id: 'retif', label: 'Descrição', icon: 'ruler', desc: 'Descrição atual e memorial descritivo' },
+  { id: 'docs', label: 'Documentos', icon: 'doc', desc: 'Lotes, averbações e protocolos' },
+];
+
 export default function VinculacaoView({ onBack }) {
+  const accent = C.accent;
+  const { toast, show } = useToast();
   const [servicoId, setServicoId] = useState(null);
   const [servicos, setServicos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [imoveis, setImoveis] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [tiposDoServico, setTiposDoServico] = useState([]);
+  const [tipoFoco, setTipoFoco] = useState('');
+  const [docsSelecionados, setDocsSelecionados] = useState([]);
   const [form, setForm] = useState(vinculacaoVazia);
-  const [campoAtivo, setCampoAtivo] = useState(null);
+  const [tab, setTab] = useState('vinc');
   const [salvando, setSalvando] = useState(false);
-  const [mensagem, setMensagem] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -104,24 +72,29 @@ export default function VinculacaoView({ onBack }) {
 
   const set = (campo) => (valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
 
-  const avisar = (tipo, texto) => {
-    setMensagem({ tipo, texto });
-    window.setTimeout(() => setMensagem(null), 2600);
-  };
-
   const carregarServico = async (id) => {
     if (!id) {
       setServicoId(null);
       setForm(vinculacaoVazia);
+      setTiposDoServico([]);
+      setTipoFoco('');
+      setDocsSelecionados([]);
       return;
     }
 
     try {
       const servico = await servicoService.buscarPorId(id);
       setServicoId(servico.id);
+      setTab('vinc');
+      setTiposDoServico(servico.tiposSolicitados || []);
+      setTipoFoco((servico.tiposSolicitados || [])[0] || '');
+      setDocsSelecionados([]);
       setForm({
-        proprietarioId: servico.proprietarioId || '',
+        proprietarioIds: (servico.proprietarios || []).map((p) => p.id),
         imovelId: servico.imovelId || '',
+        situacaoProprietario: servico.situacaoProprietario || '',
+        procuradorId: servico.procuradorId || '',
+        confrontanteIds: (servico.confrontantes || []).map((c) => c.id),
         descricaoAtualImovel: servico.descricaoAtualImovel || '',
         memorialDescritivoRetificacao: servico.memorialDescritivoRetificacao || '',
         superiorOuInferior: servico.superiorOuInferior || 'superior',
@@ -132,13 +105,13 @@ export default function VinculacaoView({ onBack }) {
       });
     } catch (erro) {
       console.error(erro);
-      avisar('erro', 'Erro ao carregar o serviço.');
+      show('Erro ao carregar o serviço.', 'err');
     }
   };
 
   const handleSalvar = async () => {
     if (!servicoId) {
-      avisar('erro', 'Selecione um serviço para vincular.');
+      show('Selecione um serviço para vincular.', 'err');
       return;
     }
 
@@ -146,433 +119,216 @@ export default function VinculacaoView({ onBack }) {
     try {
       const res = await servicoService.salvarVinculacao(servicoId, form);
       if (!res.ok) {
-        avisar('erro', res.data?.error || 'Erro ao salvar vinculação.');
+        show(res.data?.error || 'Erro ao salvar vinculação.', 'err');
         return;
       }
-      avisar('sucesso', 'Vinculação salva com sucesso!');
+      show('Vinculação salva com sucesso.');
     } catch (erro) {
       console.error(erro);
-      avisar('erro', 'Erro ao conectar com o servidor.');
+      show('Erro ao conectar com o servidor.', 'err');
     } finally {
       setSalvando(false);
     }
   };
 
-  const imovelSelecionado = imoveis.find((i) => i.id === form.imovelId);
-  const confrontantesDoImovel = imovelSelecionado?.confrontantes || [];
-  const podeGerarDocumento = Boolean(servicoId && form.proprietarioId && form.imovelId);
+  // Baixa cada documento marcado — como são downloads diretos (não popups),
+  // cliques programáticos em sequência funcionam sem esbarrar em bloqueador.
+  const baixarSelecionados = () => {
+    docsSelecionados.forEach((chave) => {
+      const link = document.createElement('a');
+      link.href = servicoService.urlGerarDocumento(servicoId, chave);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  };
+
+  // O protocolo de entrega é guardado como texto (um nome de documento por
+  // linha) — aqui a gente só traduz isso pra um checklist nos dois sentidos.
+  const protocoloSelecionado = templates
+    .filter((t) => (form.listaProtocoloEntrega || '').split('\n').includes(t.nome))
+    .map((t) => t.chave);
+  const handleProtocoloChange = (chaves) => {
+    const nomes = templates.filter((t) => chaves.includes(t.chave)).map((t) => t.nome);
+    set('listaProtocoloEntrega')(nomes.join('\n'));
+  };
+
+  const svcSelecionado = servicos.find((s) => s.id === servicoId);
+  const podeGerarDocumento = Boolean(servicoId && form.proprietarioIds.length > 0 && form.imovelId);
+
+  // Templates sem tiposServico são "gerais" (protocolo, dossiê, declarações
+  // padrão) e aparecem sempre; os demais só aparecem se baterem com o tipo
+  // de serviço em foco.
+  const templatesDoTipo = templates.filter(
+    (t) => !t.tiposServico?.length || !tipoFoco || t.tiposServico.includes(tipoFoco),
+  );
+
+  const handleTipoFocoChange = (novoTipo) => {
+    setTipoFoco(novoTipo);
+    const chavesVisiveis = new Set(
+      templates
+        .filter((t) => !t.tiposServico?.length || t.tiposServico.includes(novoTipo))
+        .map((t) => t.chave),
+    );
+    setDocsSelecionados((atuais) => atuais.filter((chave) => chavesVisiveis.has(chave)));
+  };
 
   return (
-    <div style={{ position: 'relative', flex: 1, minHeight: 0, background: '#F4F6FA', color: '#2D2A35', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <header
-        style={{
-          height: '64px',
-          background: '#FFFFFF',
-          borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 24px',
-          boxShadow: '0 2px 10px rgba(15, 23, 42, 0.05)',
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
-          <motion.button
-            type="button"
-            whileHover={{ scale: 1.03, y: -1 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={onBack}
-            style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '12px',
-              border: '1px solid rgba(15, 23, 42, 0.12)',
-              background: '#FFFFFF',
-              color: '#54607A',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <ArrowLeft size={18} />
-          </motion.button>
+    <Shell
+      title="SIS DOC"
+      wide
+      accent={accent}
+      subtitle={svcSelecionado ? `${svcSelecionado.numeroServico} — ${svcSelecionado.nomeCliente}` : 'Selecione um serviço para começar'}
+      onBack={onBack}
+    >
+      {toast && <Toast msg={toast.msg} kind={toast.kind} />}
 
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: '17px', fontWeight: 800, color: '#1F2937', lineHeight: 1.1 }}>
-              Vinculação
-            </div>
-            <div style={{ fontSize: '12px', color: '#95A0B5', marginTop: '2px' }}>
-              Proprietário, imóvel e confrontantes do serviço
-            </div>
-          </div>
+      <div style={{ marginBottom: 20 }}>
+        <SearchableSelect label="Serviço" icon="brief" accent={accent}
+          options={servicos.map(paraOpcaoServico)} value={servicoId}
+          onChange={carregarServico} placeholder="Buscar serviço (número — cliente)…" />
+      </div>
+
+      {!servicoId ? (
+        <div style={{
+          background: '#fff', border: `1.5px dashed ${C.border}`, borderRadius: 18, padding: '48px 24px',
+          textAlign: 'center', color: C.muted,
+        }}>
+          <div style={{ color: accent, display: 'inline-flex', marginBottom: 12 }}><Icon name="link" size={34} /></div>
+          <p style={{ fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 15, color: C.text, margin: '0 0 4px' }}>Escolha um serviço</p>
+          <p style={{ fontFamily: '"Open Sans", sans-serif', fontSize: 13.5, margin: 0 }}>
+            Ao selecionar, você poderá vincular proprietários, imóvel, confrontantes e preencher só os documentos que o serviço exige.
+          </p>
         </div>
-      </header>
-
-      {mensagem ? (
-        <div
-          style={{
-            position: 'absolute',
-            top: '76px',
-            right: '24px',
-            background: mensagem.tipo === 'sucesso' ? '#EAF8F3' : '#FEECEC',
-            color: mensagem.tipo === 'sucesso' ? '#0F8B6B' : '#C24141',
-            border: `1px solid ${mensagem.tipo === 'sucesso' ? 'rgba(16, 163, 127, 0.18)' : 'rgba(248, 113, 113, 0.18)'}`,
-            borderRadius: '14px',
-            padding: '10px 14px',
-            boxShadow: '0 12px 30px rgba(15, 23, 42, 0.10)',
-            zIndex: 40,
-            fontSize: '12px',
-            fontWeight: 700,
-          }}
-        >
-          {mensagem.texto}
-        </div>
-      ) : null}
-
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: '28px 20px' }}>
-        <div style={{ width: 'min(720px, 100%)' }}>
-          <div style={{ marginBottom: '16px' }}>
-            <AnimatedDropdown
-              label="Serviço"
-              value={servicoId || ''}
-              onChange={carregarServico}
-              options={[
-                { value: '', label: 'Selecione o serviço' },
-                ...servicos.map((servico) => ({
-                  value: servico.id,
-                  label: `${servico.numeroServico} — ${servico.nomeCliente}`,
-                })),
-              ]}
-              width="100%"
-              searchable
-              searchPlaceholder="Pesquisar serviço cadastrado"
-            />
+      ) : (
+        <div style={{ animation: 'fadeUp 0.3s ease both' }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
+            {TABS.map((t) => {
+              const on = tab === t.id;
+              return (
+                <button key={t.id} type="button" onClick={() => setTab(t.id)} style={{
+                  flex: '1 1 200px', textAlign: 'left', cursor: 'pointer',
+                  background: on ? '#fff' : 'transparent',
+                  border: `1.5px solid ${on ? accent : C.border}`, borderRadius: 14, padding: '13px 16px',
+                  boxShadow: on ? `0 6px 18px ${accent}22` : 'none', transition: 'all 0.2s ease',
+                  display: 'flex', alignItems: 'center', gap: 11,
+                }}>
+                  <span style={{
+                    width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: on ? `linear-gradient(150deg, ${accent}, ${accent}cc)` : C.bg,
+                    color: on ? '#fff' : C.muted,
+                  }}><Icon name={t.icon} size={17} /></span>
+                  <span>
+                    <span style={{ display: 'block', fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 13, color: on ? C.text : C.label }}>{t.label}</span>
+                    <span style={{ display: 'block', fontFamily: '"Open Sans", sans-serif', fontSize: 11, color: C.muted }}>{t.desc}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          {servicoId ? (
-            <>
-              <div
-                style={{
-                  background: '#FFFFFF',
-                  borderRadius: '18px',
-                  border: '1px solid rgba(15, 23, 42, 0.08)',
-                  boxShadow: '0 1px 2px rgba(16,24,40,0.04), 0 12px 32px -12px rgba(16,24,40,0.10)',
-                  padding: '22px 20px',
-                  marginBottom: '16px',
-                }}
-              >
-                <div style={{ marginBottom: '18px' }}>
-                  <AnimatedDropdown
-                    label="Proprietário"
-                    value={form.proprietarioId}
-                    onChange={set('proprietarioId')}
-                    options={[
-                      { value: '', label: 'Selecione o cliente proprietário' },
-                      ...clientes.map((cliente) => ({
-                        value: cliente.id,
-                        label: `${cliente.nome} — ${cliente.documento}`,
-                      })),
-                    ]}
-                    width="100%"
-                    searchable
-                    searchPlaceholder="Pesquisar cliente"
-                  />
+          {tab === 'vinc' && (
+            <div style={{ animation: 'fadeUp 0.25s ease both' }}>
+              <Section icon="link" title="Vínculos do serviço" accent={accent}>
+                <ChipList label="Proprietários" icon="user" accent={accent} span={2}
+                  options={clientes.map(paraOpcaoPessoa)} values={form.proprietarioIds}
+                  onChange={(v) => set('proprietarioIds')(v)} placeholder="Buscar cliente para adicionar…"
+                  emptyHint="Nenhum proprietário vinculado a este serviço ainda." />
+                <SelectField label="Situação neste serviço" icon="scale" value={form.situacaoProprietario} onChange={set('situacaoProprietario')}
+                  options={[
+                    { value: 'proprietário', label: 'Proprietário' },
+                    { value: 'herdeiro', label: 'Herdeiro' },
+                    { value: 'inventariante', label: 'Inventariante' },
+                    { value: 'representante', label: 'Representante' },
+                  ]} />
+                <SearchableSelect label="Imóvel" icon="home" accent={accent} span={2}
+                  options={imoveis.map(paraOpcaoImovel)} value={form.imovelId || null}
+                  onChange={(v) => set('imovelId')(v || '')} placeholder="Buscar imóvel (matrícula — proprietário)…" />
+
+                <SearchableSelect label="Procurador (opcional)" icon="user" accent={accent} span={2}
+                  options={clientes.filter((c) => !form.proprietarioIds.includes(c.id)).map(paraOpcaoPessoa)}
+                  value={form.procuradorId || null} onChange={(v) => set('procuradorId')(v || '')}
+                  placeholder="Buscar pessoa com procuração neste serviço…" />
+
+                <ChipList label="Adicionar confrontante" icon="plus" accent={accent} span={2}
+                  options={imoveis.filter((i) => i.id !== form.imovelId).map(paraOpcaoImovel)}
+                  values={form.confrontanteIds} onChange={(v) => set('confrontanteIds')(v)}
+                  placeholder="Buscar imóvel confrontante para adicionar…"
+                  emptyHint="Nenhum confrontante vinculado a este serviço ainda." />
+              </Section>
+            </div>
+          )}
+
+          {tab === 'retif' && (
+            <div style={{ animation: 'fadeUp 0.25s ease both' }}>
+              <Section icon="ruler" title="Descrição do imóvel" desc="Descrição atual e memorial descritivo" accent={accent}>
+                <Field label="Descrição atual do imóvel (conforme registro)" icon="doc" span={2} textarea rows={4}
+                  value={form.descricaoAtualImovel} onChange={set('descricaoAtualImovel')} placeholder="Descrição do imóvel constante na matrícula atual…" />
+                <Field label="Memorial descritivo da retificação" icon="doc" span={2} textarea rows={8}
+                  value={form.memorialDescritivoRetificacao} onChange={set('memorialDescritivoRetificacao')} placeholder="Descrição do levantamento topográfico com as novas medidas…" />
+
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', fontFamily: '"Montserrat", sans-serif', fontWeight: 600, fontSize: 10.5, color: C.label, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
+                    A área medida é superior ou inferior à registrada?
+                  </label>
+                  <Segmented accent={accent} value={form.superiorOuInferior} onChange={set('superiorOuInferior')}
+                    options={[{ value: 'superior', label: 'Superior' }, { value: 'inferior', label: 'Inferior' }]} />
                 </div>
+              </Section>
+            </div>
+          )}
 
-                <div style={{ marginBottom: '18px' }}>
-                  <AnimatedDropdown
-                    label="Imóvel"
-                    value={form.imovelId}
-                    onChange={set('imovelId')}
-                    options={[
-                      { value: '', label: 'Selecione o imóvel' },
-                      ...imoveis.map((imovel) => ({
-                        value: imovel.id,
-                        label: `${imovel.matricula || 'Sem matrícula'} — ${imovel.proprietario?.nome || 'Sem proprietário'}`,
-                      })),
-                    ]}
-                    width="100%"
-                    searchable
-                    searchPlaceholder="Pesquisar imóvel"
-                  />
+          {tab === 'docs' && (
+            <div style={{ animation: 'fadeUp 0.25s ease both' }}>
+              <Section icon="doc" title="Dados para outros documentos" desc="Campos usados conforme o documento a gerar" accent={accent}>
+                <Field label="Número de lotes" icon="hash" value={form.totalLotes} onChange={(v) => set('totalLotes')(v.replace(/\D/g, ''))} placeholder="Para Consulta Prévia (PMSBS)" />
+                <div />
+                <Field label="Averbações" icon="doc" span={2} textarea rows={3} value={form.averbacoes} onChange={set('averbacoes')} placeholder="Averbações a registrar…" />
+                <Field label="Áreas do desmembramento" icon="ruler" span={2} textarea rows={3} value={form.areasDesmembramento} onChange={set('areasDesmembramento')} placeholder="Descrição das áreas resultantes…" />
+
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', fontFamily: '"Montserrat", sans-serif', fontWeight: 600, fontSize: 10.5, color: C.label, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
+                    Lista do protocolo de entrega — marque os documentos que compõem o protocolo
+                  </label>
+                  <CheckboxList accent={accent} span={2}
+                    options={templates.map((t) => ({ value: t.chave, label: t.nome }))}
+                    values={protocoloSelecionado} onChange={handleProtocoloChange} />
                 </div>
+              </Section>
+            </div>
+          )}
 
-                {form.imovelId ? (
-                  <div style={{ marginBottom: '6px' }}>
-                    <span style={labelStyle}>
-                      <Users size={14} /> Confrontantes deste imóvel
-                    </span>
-                    {confrontantesDoImovel.length > 0 ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
-                        {confrontantesDoImovel.map((c) => (
-                          <div
-                            key={c.id}
-                            style={{
-                              padding: '6px 10px',
-                              borderRadius: '999px',
-                              background: '#E8F0FF',
-                              color: '#2D7AFD',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                            }}
-                          >
-                            {c.nome}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p style={{ margin: '10px 0 0', fontSize: '11px', color: '#8A94A6' }}>
-                        Nenhum confrontante vinculado a este imóvel ainda — cadastre em Confrontantes ou edite o imóvel.
-                      </p>
-                    )}
-                  </div>
-                ) : null}
-              </div>
+          <Actions editing accent={accent} saving={salvando} onSave={handleSalvar} saveLabel={salvando ? 'Salvando…' : 'Salvar vinculação'} />
 
-              <div
-                style={{
-                  background: '#FFFFFF',
-                  borderRadius: '18px',
-                  border: '1px solid rgba(15, 23, 42, 0.08)',
-                  boxShadow: '0 1px 2px rgba(16,24,40,0.04), 0 12px 32px -12px rgba(16,24,40,0.10)',
-                  padding: '22px 20px',
-                  marginBottom: '16px',
-                }}
-              >
-                <div style={{ fontSize: '13px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase', marginBottom: '14px' }}>
-                  Dados da Retificação
-                </div>
-
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                  <span style={labelStyle}>Descrição Atual do Imóvel (conforme registro)</span>
-                  <textarea
-                    value={form.descricaoAtualImovel}
-                    onChange={(event) => set('descricaoAtualImovel')(event.target.value)}
-                    onFocus={() => setCampoAtivo('descricaoAtualImovel')}
-                    onBlur={() => setCampoAtivo(null)}
-                    placeholder="Descrição do imóvel constante na matrícula atual..."
-                    rows={4}
-                    style={{
-                      ...baseFieldStyle,
-                      ...(campoAtivo === 'descricaoAtualImovel' ? activeFieldStyle : {}),
-                      height: 'auto',
-                      padding: '12px 14px',
-                      resize: 'vertical',
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                </label>
-
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                  <span style={labelStyle}>Memorial Descritivo da Retificação</span>
-                  <textarea
-                    value={form.memorialDescritivoRetificacao}
-                    onChange={(event) => set('memorialDescritivoRetificacao')(event.target.value)}
-                    onFocus={() => setCampoAtivo('memorialDescritivoRetificacao')}
-                    onBlur={() => setCampoAtivo(null)}
-                    placeholder="Descrição do levantamento topográfico com as novas medidas..."
-                    rows={6}
-                    style={{
-                      ...baseFieldStyle,
-                      ...(campoAtivo === 'memorialDescritivoRetificacao' ? activeFieldStyle : {}),
-                      height: 'auto',
-                      padding: '12px 14px',
-                      resize: 'vertical',
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                </label>
-
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <span style={labelStyle}>A área medida é Superior ou Inferior à registrada?</span>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <OptionButton
-                      ativo={form.superiorOuInferior === 'superior'}
-                      onClick={() => set('superiorOuInferior')('superior')}
-                    >
-                      Superior
-                    </OptionButton>
-                    <OptionButton
-                      ativo={form.superiorOuInferior === 'inferior'}
-                      onClick={() => set('superiorOuInferior')('inferior')}
-                    >
-                      Inferior
-                    </OptionButton>
-                  </div>
-                </label>
-              </div>
-
-              <div
-                style={{
-                  background: '#FFFFFF',
-                  borderRadius: '18px',
-                  border: '1px solid rgba(15, 23, 42, 0.08)',
-                  boxShadow: '0 1px 2px rgba(16,24,40,0.04), 0 12px 32px -12px rgba(16,24,40,0.10)',
-                  padding: '22px 20px',
-                  marginBottom: '16px',
-                }}
-              >
-                <div style={{ fontSize: '13px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase', marginBottom: '14px' }}>
-                  Dados para Outros Documentos
-                </div>
-
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                  <span style={labelStyle}>Número de Lotes (Consulta Prévia PMSBS)</span>
-                  <input
-                    value={form.totalLotes}
-                    onChange={(event) => set('totalLotes')(event.target.value.replace(/\D/g, ''))}
-                    onFocus={() => setCampoAtivo('totalLotes')}
-                    onBlur={() => setCampoAtivo(null)}
-                    placeholder="Ex.: 2"
-                    style={{
-                      ...baseFieldStyle,
-                      ...(campoAtivo === 'totalLotes' ? activeFieldStyle : {}),
-                    }}
-                  />
-                </label>
-
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                  <span style={labelStyle}>Averbações (Requerimento de Averbações RISBS)</span>
-                  <textarea
-                    value={form.averbacoes}
-                    onChange={(event) => set('averbacoes')(event.target.value)}
-                    onFocus={() => setCampoAtivo('averbacoes')}
-                    onBlur={() => setCampoAtivo(null)}
-                    placeholder="Lista dos documentos a averbar..."
-                    rows={3}
-                    style={{
-                      ...baseFieldStyle,
-                      ...(campoAtivo === 'averbacoes' ? activeFieldStyle : {}),
-                      height: 'auto',
-                      padding: '12px 14px',
-                      resize: 'vertical',
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                </label>
-
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                  <span style={labelStyle}>Áreas do Desmembramento (PMSBS)</span>
-                  <textarea
-                    value={form.areasDesmembramento}
-                    onChange={(event) => set('areasDesmembramento')(event.target.value)}
-                    onFocus={() => setCampoAtivo('areasDesmembramento')}
-                    onBlur={() => setCampoAtivo(null)}
-                    placeholder="Descrição das áreas resultantes do desmembramento..."
-                    rows={3}
-                    style={{
-                      ...baseFieldStyle,
-                      ...(campoAtivo === 'areasDesmembramento' ? activeFieldStyle : {}),
-                      height: 'auto',
-                      padding: '12px 14px',
-                      resize: 'vertical',
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                </label>
-
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <span style={labelStyle}>Lista do Protocolo de Entrega</span>
-                  <textarea
-                    value={form.listaProtocoloEntrega}
-                    onChange={(event) => set('listaProtocoloEntrega')(event.target.value)}
-                    onFocus={() => setCampoAtivo('listaProtocoloEntrega')}
-                    onBlur={() => setCampoAtivo(null)}
-                    placeholder="Itens entregues ao cliente (ART, planta, memorial...)..."
-                    rows={3}
-                    style={{
-                      ...baseFieldStyle,
-                      ...(campoAtivo === 'listaProtocoloEntrega' ? activeFieldStyle : {}),
-                      height: 'auto',
-                      padding: '12px 14px',
-                      resize: 'vertical',
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                </label>
-              </div>
-
-              <motion.button
-                type="button"
-                onClick={handleSalvar}
-                disabled={salvando}
-                whileHover={{ scale: 1.01, y: -1 }}
-                whileTap={{ scale: 0.99 }}
-                style={{
-                  width: '100%',
-                  height: '46px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #14B38B 0%, #0F9E7A 100%)',
-                  cursor: salvando ? 'not-allowed' : 'pointer',
-                  opacity: salvando ? 0.7 : 1,
-                  fontSize: '13px',
-                  fontWeight: 800,
-                  color: '#FFFFFF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  boxShadow: '0 10px 20px rgba(15, 163, 127, 0.22)',
-                  marginBottom: '16px',
-                }}
-              >
-                <Save size={16} /> {salvando ? 'Salvando...' : 'Salvar Vinculação'}
-              </motion.button>
-
-              <div
-                style={{
-                  background: '#FFFFFF',
-                  borderRadius: '18px',
-                  border: '1px solid rgba(15, 23, 42, 0.08)',
-                  boxShadow: '0 1px 2px rgba(16,24,40,0.04), 0 12px 32px -12px rgba(16,24,40,0.10)',
-                  padding: '22px 20px',
-                }}
-              >
-                <div style={{ fontSize: '13px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase', marginBottom: '14px' }}>
-                  Gerar Documento
-                </div>
-
-                {!podeGerarDocumento ? (
-                  <p style={{ margin: 0, fontSize: '12px', color: '#8A94A6' }}>
-                    Selecione e salve o proprietário e o imóvel deste serviço para liberar a geração dos documentos.
-                  </p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {templates.map((template) => (
-                      <a
-                        key={template.chave}
-                        href={servicoService.urlGerarDocumento(servicoId, template.chave)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '12px 16px',
-                          borderRadius: '12px',
-                          border: '1px solid rgba(15, 23, 42, 0.10)',
-                          background: '#F8FAFD',
-                          color: '#1F2937',
-                          textDecoration: 'none',
-                          fontSize: '13px',
-                          fontWeight: 700,
-                        }}
-                      >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <FileText size={16} /> {template.nome}
-                        </span>
-                        <Download size={16} />
-                      </a>
-                    ))}
+          <Section icon="download" title="Gerar documento" accent={accent}
+            desc={podeGerarDocumento ? 'Marque os documentos e baixe de uma vez' : 'Selecione e salve os proprietários e o imóvel deste serviço para liberar a geração dos documentos.'}>
+            {podeGerarDocumento && (
+              <>
+                {tiposDoServico.length > 1 && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <SelectField label="Tipo de serviço para este documento" icon="brief" value={tipoFoco} onChange={handleTipoFocoChange} options={tiposDoServico} />
                   </div>
                 )}
-              </div>
-            </>
-          ) : null}
+                <CheckboxList accent={accent} span={2}
+                  options={templatesDoTipo.map((t) => ({ value: t.chave, label: t.nome }))}
+                  values={docsSelecionados} onChange={setDocsSelecionados} />
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <button type="button" onClick={baixarSelecionados} disabled={docsSelecionados.length === 0} style={{
+                    marginTop: 14, padding: '12px 28px', borderRadius: 11, border: 'none',
+                    background: docsSelecionados.length ? `linear-gradient(135deg, ${accent} 0%, ${C.green} 100%)` : C.border,
+                    color: '#fff', fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 13, letterSpacing: '0.05em',
+                    cursor: docsSelecionados.length ? 'pointer' : 'not-allowed',
+                    display: 'inline-flex', alignItems: 'center', gap: 8,
+                  }}>
+                    <Icon name="download" size={16} />
+                    Baixar {docsSelecionados.length > 0 ? `${docsSelecionados.length} documento(s)` : 'documentos selecionados'}
+                  </button>
+                </div>
+              </>
+            )}
+          </Section>
         </div>
-      </div>
-    </div>
+      )}
+    </Shell>
   );
 }

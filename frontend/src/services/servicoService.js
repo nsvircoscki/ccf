@@ -46,6 +46,10 @@ export const servicoService = {
     return api.getTemplatesDocumento();
   },
 
+  async salvarMapeamentoTiposDocumento(mapa) {
+    return api.salvarMapeamentoTiposDocumento(mapa);
+  },
+
   urlGerarDocumento(servicoId, templateKey) {
     return api.urlGerarDocumento(servicoId, templateKey);
   }

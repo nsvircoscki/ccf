@@ -7,6 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 import { prisma } from '../prisma.js';
 import { docxTemplateEngine } from './docxTemplateEngine.js';
 
@@ -190,13 +191,20 @@ function dossiePessoas(pessoas) {
     .join('\n');
 }
 
+// Confrontantes são Imóveis (não Pessoas) — quem entra na qualificação dos
+// documentos são os proprietários de cada um (pode ser mais de um por imóvel).
+function proprietariosDosConfrontantes(imoveisConfrontantes) {
+  return (imoveisConfrontantes || [])
+    .flatMap((imovel) => imovel.proprietarios || []);
+}
+
 // Reúne os campos comuns à maioria dos modelos (proprietário, imóvel, datas).
 // Cada montador específico parte disso e sobrepõe/acrescenta só o que muda.
 function valoresComuns(servico) {
-  const proprietario = servico.proprietario;
+  const proprietarios = servico.proprietarios || [];
+  const primeiroProprietario = proprietarios[0] || null;
   const imovel = servico.imovel;
-  const confrontantes = imovel?.confrontantes || [];
-  const proprietarios = proprietario ? [proprietario] : [];
+  const confrontantes = proprietariosDosConfrontantes(servico.confrontantes);
   const municipio = imovel?.municipio || servico.municipio;
 
   return {
@@ -207,9 +215,9 @@ function valoresComuns(servico) {
     QualificacaoCompletaConfrontantes: qualificacaoLista(confrontantes),
     AssinaturaCompletaProprietarios: assinaturaCompleta(proprietarios),
     NomeCompletoProprietarios: proprietarios.map((p) => p.nome).join(' e '),
-    CPFCNPJPrimeiroProprietario: proprietario?.documento || '',
-    NomePrimeiroProprietario: proprietario?.nome || '',
-    EnderecoPrimeiroProprietario: proprietario ? enderecoCompleto(proprietario) : '',
+    CPFCNPJPrimeiroProprietario: primeiroProprietario?.documento || '',
+    NomePrimeiroProprietario: primeiroProprietario?.nome || '',
+    EnderecoPrimeiroProprietario: primeiroProprietario ? enderecoCompleto(primeiroProprietario) : '',
     EnderecoImovel: imovel ? [imovel.logradouro, imovel.municipio].filter(Boolean).join(', ') : '',
     CodigoDeCadastro: imovel?.cib || '',
     Comarca: imovel?.comarca || '',
@@ -221,7 +229,7 @@ function valoresComuns(servico) {
 }
 
 function exigirProprietarioEImovel(servico) {
-  if (!servico.proprietario) throw new Error('Vincule um proprietário ao serviço antes de gerar o documento.');
+  if (!servico.proprietarios || servico.proprietarios.length === 0) throw new Error('Vincule ao menos um proprietário ao serviço antes de gerar o documento.');
   if (!servico.imovel) throw new Error('Vincule um imóvel ao serviço antes de gerar o documento.');
 }
 
@@ -296,8 +304,8 @@ function montarProtocoloEntregaServico(servico) {
 // nome do proprietário/confrontantes vindo de valoresComuns.
 function montarInformacaoMapa(servico) {
   exigirProprietarioEImovel(servico);
-  const proprietarios = [servico.proprietario];
-  const confrontantes = servico.imovel.confrontantes || [];
+  const proprietarios = servico.proprietarios || [];
+  const confrontantes = proprietariosDosConfrontantes(servico.confrontantes);
   return {
     ...valoresComuns(servico),
     AssinaturaMapaProprietario: assinaturaCompleta(proprietarios),
@@ -308,8 +316,8 @@ function montarInformacaoMapa(servico) {
 
 function montarDossie(servico) {
   exigirProprietarioEImovel(servico);
-  const proprietarios = [servico.proprietario];
-  const confrontantes = servico.imovel.confrontantes || [];
+  const proprietarios = servico.proprietarios || [];
+  const confrontantes = proprietariosDosConfrontantes(servico.confrontantes);
   return {
     DossieProprietario: dossiePessoas(proprietarios),
     DossieConfrontante: dossiePessoas(confrontantes),
@@ -340,8 +348,42 @@ const MONTADORES = {
 };
 
 export const documentoService = {
-  listarTemplates() {
-    return Object.entries(TEMPLATES).map(([chave, { nome }]) => ({ chave, nome }));
+  // Cada template vem com os tipos de serviço aos quais está associado
+  // (tabela editável TemplateTipoServico). Um template sem nenhuma linha lá
+  // é "geral" — tiposServico volta como [] e o front deve mostrá-lo sempre.
+  async listarTemplates() {
+    const linhas = await prisma.templateTipoServico.findMany();
+    const porTemplate = {};
+    linhas.forEach((linha) => {
+      if (!porTemplate[linha.templateChave]) porTemplate[linha.templateChave] = [];
+      porTemplate[linha.templateChave].push(linha.tipoServico);
+    });
+
+    return Object.entries(TEMPLATES).map(([chave, { nome }]) => ({
+      chave,
+      nome,
+      tiposServico: porTemplate[chave] || [],
+    }));
+  },
+
+  // Substitui o mapeamento inteiro pelo enviado pela tela de configuração.
+  // mapa: { [templateChave]: string[] de tipos de serviço (vazio = geral) }
+  async salvarMapeamentoTipos(mapa) {
+    const linhas = Object.entries(mapa || {}).flatMap(([templateChave, tipos]) => {
+      if (!TEMPLATES[templateChave]) return [];
+      return (tipos || []).map((tipoServico) => ({
+        id: randomUUID(),
+        templateChave,
+        tipoServico,
+      }));
+    });
+
+    await prisma.$transaction([
+      prisma.templateTipoServico.deleteMany({}),
+      prisma.templateTipoServico.createMany({ data: linhas }),
+    ]);
+
+    return documentoService.listarTemplates();
   },
 
   async gerar(servicoId, templateKey) {
@@ -351,8 +393,9 @@ export const documentoService = {
     const servico = await prisma.servico.findUnique({
       where: { id: servicoId },
       include: {
-        proprietario: true,
-        imovel: { include: { confrontantes: true } },
+        proprietarios: { include: { conjuge: true, conjugeDe: true } },
+        imovel: { include: { proprietarios: true, usufrutuarios: true } },
+        confrontantes: { include: { proprietarios: { include: { conjuge: true, conjugeDe: true } } } },
       },
     });
     if (!servico) throw new Error('Serviço não encontrado.');

@@ -39,7 +39,7 @@ export function EditarProjetoModal({ kanban, onClose }) {
           <button
             type="button"
             onClick={() => setTerrenoEditando('Urbano')}
-            style={{ flex: 1, padding: '12px', borderRadius: '10px', border: terrenoEditando === 'Urbano' ? '2px solid #4A90E2' : '1px solid #DDD', background: terrenoEditando === 'Urbano' ? '#EFF6FF' : '#FFF', color: terrenoEditando === 'Urbano' ? '#4A90E2' : '#555', fontWeight: 'bold', cursor: 'pointer' }}
+            style={{ flex: 1, padding: '12px', borderRadius: '10px', border: terrenoEditando === 'Urbano' ? '2px solid #2D7AFD' : '1px solid #DDD', background: terrenoEditando === 'Urbano' ? '#EFF6FF' : '#FFF', color: terrenoEditando === 'Urbano' ? '#2D7AFD' : '#555', fontWeight: 'bold', cursor: 'pointer' }}
           >
             Urbano
           </button>
@@ -64,7 +64,7 @@ export function EditarProjetoModal({ kanban, onClose }) {
         
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px' }}>
           <button onClick={onClose} style={{ padding: '12px 25px', borderRadius: '10px', border: 'none', background: '#F0F0F0', color: '#777', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
-          <button onClick={salvarEdicaoProjeto} disabled={tiposEditando.length === 0} style={{ padding: '12px 25px', borderRadius: '10px', border: 'none', background: tiposEditando.length === 0 ? '#CCC' : '#333', color: 'white', cursor: tiposEditando.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>Salvar Alterações</button>
+          <button onClick={salvarEdicaoProjeto} disabled={tiposEditando.length === 0} style={{ padding: '12px 25px', borderRadius: '10px', border: 'none', background: tiposEditando.length === 0 ? '#CCC' : '#2D7AFD', color: 'white', cursor: tiposEditando.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>Salvar Alterações</button>
         </div>
       </div>
     </div>

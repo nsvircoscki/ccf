@@ -23,7 +23,7 @@ import VisualizadorFicha from './VisualizadorFicha.jsx';
 
 const initialServices = [
   { id: 1, nome: 'Lev Topo', indice_r: '1,0', indice_s: '1,0', indice: 0, ativo: true, selecionado: false },
-  { id: 2, nome: 'Ret', indice: 1.5, ativo: true, selecionado: true },
+  { id: 2, nome: 'Ret', indice: 1.5, ativo: true, selecionado: false },
   { id: 3, nome: 'Desm', indice: 1.0, ativo: true, selecionado: false },
   { id: 4, nome: 'Uni', indice: 1.0, ativo: true, selecionado: false },
   { id: 5, nome: 'Usu', indice: 1.0, ativo: true, selecionado: false },
