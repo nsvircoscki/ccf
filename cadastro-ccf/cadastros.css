@@ -1,0 +1,8 @@
+/* Fontes usadas pela tela de cadastros */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&family=Open+Sans:wght@400;600&display=swap');
+
+/* Animação de entrada usada pelos formulários e dropdowns */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}

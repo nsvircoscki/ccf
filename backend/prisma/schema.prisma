@@ -94,7 +94,8 @@ model Imovel {
   cib            String?
   logradouro     String?
   municipio      String?
-  area           Float?
+  estado         String? // UF, separado do município
+  area           Float?  // Área registrada do imóvel, em m²
   descricao      String?
   // "Matrícula" ou "Transcrição" — entra em minúsculo no meio da frase dos
   // documentos ("constante na matrícula 12.345").

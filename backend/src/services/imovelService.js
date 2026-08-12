@@ -54,12 +54,23 @@ export const imovelService = {
   },
 };
 
+// Aceita tanto "1234,56" (formato antigo) quanto "1.234,56 m²" (máscara nova
+// do front) — remove o sufixo "m²", os pontos de milhar e troca a vírgula
+// decimal por ponto antes de converter pra Float.
+function parseArea(valor) {
+  if (valor === '' || valor == null) return null;
+  const limpo = String(valor).replace(/m²/gi, '').trim().replace(/\./g, '').replace(',', '.');
+  if (limpo === '') return null;
+  const numero = Number(limpo);
+  return Number.isFinite(numero) ? numero : null;
+}
+
 // proprietarioIds/usufrutuarioIds: tanto o imóvel quanto o usufruto sobre ele
 // podem ter mais de uma pessoa (casal, herdeiros em condomínio...) — todos
 // entram na qualificação dos documentos.
 async function montarDados(dados) {
   const {
-    proprietarioIds, cartorio, matricula, cns, incra, cib, logradouro, municipio, area, descricao,
+    proprietarioIds, cartorio, matricula, cns, incra, cib, logradouro, municipio, estado, area, descricao,
     tipoTitulo, comarca, zoneamento, usufruto, usufrutuarioIds,
   } = dados;
 
@@ -93,7 +104,8 @@ async function montarDados(dados) {
     cib: cib || null,
     logradouro: logradouro || null,
     municipio: municipio || null,
-    area: area === '' || area == null ? null : Number(String(area).replace(',', '.')),
+    estado: estado || null,
+    area: parseArea(area),
     descricao: descricao || null,
     tipoTitulo: tipoTitulo || 'matrícula',
     comarca: comarca || null,

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { imovelService } from '../services/imovelService';
 import { clienteService } from '../services/clienteService';
+import { formatarArea } from '../utils/mascaras';
 import {
   Actions, ChipList, Field, Reveal, SearchableSelect, Section, Segmented, Shell, Switch, Toast, useToast, C,
 } from '../components/cadastros/CadastroKit.jsx';
@@ -14,6 +15,7 @@ const imovelVazio = {
   cib: '',
   logradouro: '',
   municipio: '',
+  estado: '',
   area: '',
   descricao: '',
   tipoTitulo: 'matrícula',
@@ -98,7 +100,8 @@ export default function CadastroImovelView({ onBack }) {
       cib: imovel.cib || '',
       logradouro: imovel.logradouro || '',
       municipio: imovel.municipio || '',
-      area: imovel.area != null ? String(imovel.area).replace('.', ',') : '',
+      estado: imovel.estado || '',
+      area: imovel.area != null ? formatarArea(String(imovel.area).replace('.', ',')) : '',
       descricao: imovel.descricao || '',
       tipoTitulo: imovel.tipoTitulo || 'matrícula',
       usufruto: Boolean(imovel.usufruto),
@@ -199,9 +202,10 @@ export default function CadastroImovelView({ onBack }) {
 
       <Section icon="pin" title="Localização" desc="Endereço e caracterização" accent={accent}>
         <Field label="Logradouro" icon="home" span={2} value={form.logradouro} onChange={set('logradouro')} placeholder="Localização do imóvel" />
-        <Field label="Município / UF" icon="map" value={form.municipio} onChange={set('municipio')} placeholder="Cidade — UF" />
-        <Field label="Área registrada (ha)" icon="ruler" value={form.area} onChange={set('area')} placeholder="0,00" />
-        <Field label="Zoneamento" icon="layers" span={2} value={form.zoneamento} onChange={set('zoneamento')} placeholder="Ex.: Zona Residencial 2" />
+        <Field label="Município" icon="map" value={form.municipio} onChange={set('municipio')} placeholder="Cidade" />
+        <Field label="Estado" icon="map" value={form.estado} onChange={set('estado')} placeholder="UF" />
+        <Field label="Área registrada (m²)" icon="ruler" value={form.area} onChange={(v) => set('area')(formatarArea(v))} placeholder="0,00 m²" />
+        <Field label="Zoneamento" icon="layers" value={form.zoneamento} onChange={set('zoneamento')} placeholder="Ex.: Zona Residencial 2" />
         <Field label="Descrição do imóvel" icon="doc" span={2} textarea rows={4} value={form.descricao} onChange={set('descricao')} placeholder="Características, benfeitorias, observações…" />
       </Section>
 

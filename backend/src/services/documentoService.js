@@ -225,7 +225,7 @@ function valoresComuns(servico) {
     CodigoDeCadastro: imovel?.cib || '',
     Comarca: imovel?.comarca || '',
     Zoneamento: imovel?.zoneamento || '',
-    MunicipioEUF: municipio ? `${municipio} - ${UF_PADRAO}` : '',
+    MunicipioEUF: municipio ? `${municipio} - ${imovel?.estado || UF_PADRAO}` : '',
     AreaMedida: servico.area != null ? `${numeroBr(servico.area)} m²` : '',
     MunicipioEData: municipioEData(municipio),
   };

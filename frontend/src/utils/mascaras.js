@@ -45,3 +45,28 @@ export function formatarCEP(valor) {
   if (digitos.length <= 5) return digitos;
   return `${digitos.slice(0, 5)}-${digitos.slice(5)}`;
 }
+
+// Formata a área enquanto a pessoa digita: milhar com ponto, decimal com
+// vírgula (até 2 casas), sempre terminando em "m²" — ex.: "12345,6" -> "12.345,6 m²".
+export function formatarArea(valor) {
+  const limpo = String(valor || '').replace(/[^\d,]/g, '');
+  if (!limpo) return '';
+
+  const [parteInteira, ...resto] = limpo.split(',');
+  const inteiro = parteInteira.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+  if (resto.length === 0) return `${inteiro} m²`;
+
+  const decimal = resto.join('').slice(0, 2);
+  return `${inteiro || '0'},${decimal} m²`;
+}
+
+// Reverte a formatação de formatarArea() para um número puro (string com
+// ponto decimal), pronto pra virar Float no backend.
+export function desformatarArea(valor) {
+  return String(valor || '')
+    .replace(/m²/gi, '')
+    .trim()
+    .replace(/\./g, '')
+    .replace(',', '.');
+}
