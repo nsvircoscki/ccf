@@ -21,6 +21,7 @@ const clienteVazio = {
   telefone: '',
   email: '',
   logradouro: '',
+  numero: '',
   bairro: '',
   cidade: '',
   estado: '',
@@ -112,6 +113,7 @@ export default function CadastroClienteView({ onBack }) {
       telefone: cliente.telefone || '',
       email: cliente.email || '',
       logradouro: cliente.logradouro || '',
+      numero: cliente.numero || '',
       bairro: cliente.bairro || '',
       cidade: cliente.cidade || '',
       estado: cliente.estado || '',
@@ -127,18 +129,6 @@ export default function CadastroClienteView({ onBack }) {
   const handleSalvar = async () => {
     if (!form.nome.trim()) {
       show(form.tipo === 'Física' ? 'Informe o nome do cliente.' : 'Informe a razão social.', 'err');
-      return;
-    }
-    if (!form.documento.trim()) {
-      show(form.tipo === 'Física' ? 'Informe o CPF.' : 'Informe o CNPJ.', 'err');
-      return;
-    }
-    if (form.tipo === 'Jurídica' && !form.representanteLegalNome.trim()) {
-      show('Informe o nome do representante legal.', 'err');
-      return;
-    }
-    if (form.tipo === 'Jurídica' && !form.representanteLegalCpf.trim()) {
-      show('Informe o CPF do representante legal.', 'err');
       return;
     }
 
@@ -259,7 +249,8 @@ export default function CadastroClienteView({ onBack }) {
               onChange={(v) => { const formatado = formatarCEP(v); set('cep')(formatado); buscarEnderecoPorCep(formatado); }}
               placeholder="00000-000" hint="Preenche o endereço automaticamente" />
             <Field label="Bairro" icon="map" value={form.bairro} onChange={set('bairro')} placeholder="Bairro" />
-            <Field label="Logradouro" icon="home" span={2} value={form.logradouro} onChange={set('logradouro')} placeholder={isPF ? 'Endereço residencial' : 'Endereço da sede'} />
+            <Field label="Logradouro" icon="home" value={form.logradouro} onChange={set('logradouro')} placeholder={isPF ? 'Endereço residencial' : 'Endereço da sede'} />
+            <Field label="Número" icon="hash" value={form.numero} onChange={set('numero')} placeholder="Nº" />
             <Field label="Cidade" icon="map" value={form.cidade} onChange={set('cidade')} placeholder="Cidade" />
             <Field label="Estado" icon="map" value={form.estado} onChange={set('estado')} placeholder="UF" />
           </Section>

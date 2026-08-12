@@ -110,8 +110,11 @@ function enderecoCompleto(pessoa) {
   const cidadeUf = pessoa.cidade && pessoa.estado
     ? `${pessoa.cidade} - ${pessoa.estado}`
     : (pessoa.cidade || pessoa.estado || null);
+  const logradouroComNumero = pessoa.logradouro && pessoa.numero
+    ? `${pessoa.logradouro}, nº ${pessoa.numero}`
+    : (pessoa.logradouro || null);
 
-  return [pessoa.logradouro, pessoa.bairro, cidadeUf, pessoa.cep ? `CEP ${pessoa.cep}` : null]
+  return [logradouroComNumero, pessoa.bairro, cidadeUf, pessoa.cep ? `CEP ${pessoa.cep}` : null]
     .filter(Boolean)
     .join(', ');
 }

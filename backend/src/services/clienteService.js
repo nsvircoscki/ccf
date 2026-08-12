@@ -13,14 +13,24 @@ export const clienteService = {
   },
 
   async criar(dados) {
-    return prisma.cliente.create({ data: montarDados(dados), include: INCLUDE_CONJUGE });
+    const data = montarDados(dados);
+    return prisma.$transaction(async (tx) => {
+      const cliente = await tx.cliente.create({ data });
+      await sincronizarEstadoCivilDoConjuge(tx, cliente);
+      return tx.cliente.findUnique({ where: { id: cliente.id }, include: INCLUDE_CONJUGE });
+    });
   },
 
   async atualizar(id, dados) {
     const cliente = await prisma.cliente.findUnique({ where: { id } });
     if (!cliente) throw new Error('Cliente não encontrado.');
 
-    return prisma.cliente.update({ where: { id }, data: montarDados(dados), include: INCLUDE_CONJUGE });
+    const data = montarDados(dados);
+    return prisma.$transaction(async (tx) => {
+      const atualizado = await tx.cliente.update({ where: { id }, data });
+      await sincronizarEstadoCivilDoConjuge(tx, atualizado);
+      return tx.cliente.findUnique({ where: { id: atualizado.id }, include: INCLUDE_CONJUGE });
+    });
   },
 
   async remover(id) {
@@ -37,9 +47,28 @@ export function resolverConjuge(cliente) {
   return cliente?.conjuge || cliente?.conjugeDe || null;
 }
 
+const ESTADOS_CASADO = ['casado(a)', 'em união estável'];
+
+// Ao marcar outra pessoa já cadastrada como cônjuge, o casamento precisa
+// aparecer nos dois cadastros — sem isso, abrir o cadastro do cônjuge direto
+// mostraria "solteiro(a)" mesmo estando vinculado. Não mexe no conjugeId do
+// outro lado (o vínculo em si já é lido dos dois lados via conjuge/conjugeDe,
+// ver resolverConjuge acima) — só alinha o estado civil.
+async function sincronizarEstadoCivilDoConjuge(tx, cliente) {
+  if (!cliente.conjugeId || !ESTADOS_CASADO.includes(cliente.estadoCivil)) return;
+
+  const conjuge = await tx.cliente.findUnique({ where: { id: cliente.conjugeId } });
+  if (!conjuge || ESTADOS_CASADO.includes(conjuge.estadoCivil)) return;
+
+  await tx.cliente.update({
+    where: { id: conjuge.id },
+    data: { estadoCivil: cliente.estadoCivil },
+  });
+}
+
 function montarDados(dados) {
   const {
-    tipo, nome, documento, rg, orgaoEmissor, rgDataExpedicao, dataNascimento, situacao, telefone, email, logradouro, bairro, cidade, estado, cep, pastaLink,
+    tipo, nome, documento, rg, orgaoEmissor, rgDataExpedicao, dataNascimento, situacao, telefone, email, logradouro, numero, bairro, cidade, estado, cep, pastaLink,
     representanteLegalNome, representanteLegalCpf, representanteLegalCargo, representanteLegalDataNascimento,
     nacionalidade, estadoCivil, profissao, conjugeId,
   } = dados;
@@ -48,18 +77,11 @@ function montarDados(dados) {
     throw new Error('Informe o tipo do cliente (Física ou Jurídica).');
   }
   if (!nome?.trim()) throw new Error('Informe o nome do cliente.');
-  if (!documento?.trim()) throw new Error(tipo === 'Física' ? 'Informe o CPF.' : 'Informe o CNPJ.');
-  if (tipo === 'Jurídica' && !representanteLegalNome?.trim()) {
-    throw new Error('Informe o nome do representante legal.');
-  }
-  if (tipo === 'Jurídica' && !representanteLegalCpf?.trim()) {
-    throw new Error('Informe o CPF do representante legal.');
-  }
 
   return {
     tipo,
     nome: nome.trim(),
-    documento: documento.trim(),
+    documento: documento?.trim() || null,
     rg: tipo === 'Física' ? (rg || null) : null,
     orgaoEmissor: tipo ==='Física' ? (orgaoEmissor || null) : null,
     rgDataExpedicao: tipo === 'Física' && rgDataExpedicao ? new Date(rgDataExpedicao) : null,
@@ -72,6 +94,7 @@ function montarDados(dados) {
     telefone: telefone || null,
     email: email || null,
     logradouro: logradouro || null,
+    numero: numero || null,
     bairro: bairro || null,
     cidade: cidade || null,
     estado: estado || null,
