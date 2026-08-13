@@ -54,16 +54,24 @@ function EmissaoDocumentos() {
 
   const gerarPdf = () => {
     const numeroOrcamento = `OS-${String(clienteSelecionado.matricula || '').replace(/\D/g, '') || Date.now().toString().slice(-6)}`;
+    const totalServicos = servicosSelecionados.reduce((soma, servico) => {
+      if (typeof servico === 'string') return soma;
+      return soma + Number(servico.valor || 0);
+    }, 0);
+
     const linhasServicos = servicosSelecionados
-      .map(
-        (servico, index) => `
+      .map((servico, index) => {
+        const nome = typeof servico === 'string' ? servico : servico.nome;
+        const valor = typeof servico === 'string' ? 0 : Number(servico.valor || 0);
+
+        return `
                     <tr>
                       <td class="col-item item-number">${index + 1}</td>
-                      <td class="col-desc">${escapeHtml(servico)}</td>
+                      <td class="col-desc">${escapeHtml(nome)}</td>
                       <td class="col-unid item-number">1</td>
-                      <td></td>
-                    </tr>`,
-      )
+                      <td class="col-valor">R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>`;
+      })
       .join('');
     const printWindow = window.open('', '_blank', 'width=900,height=700');
 
@@ -85,6 +93,7 @@ function EmissaoDocumentos() {
             body { background: #525659; display: flex; justify-content: center; padding: 40px 20px; font-family: Arial, sans-serif; color: #000; }
             .page-a4 { width: 210mm; height: 297mm; background: #fff url('${marcaDagua}') no-repeat center / 100% 100%; position: relative; box-shadow: 0 4px 12px rgba(0,0,0,0.4); padding: 12mm 18mm; overflow: hidden; }
             .content-wrapper { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; }
+            .doc-topline { border-top: 3px solid #0d294a; margin-bottom: 8mm; }
             .doc-header { display: flex; justify-content: space-between; margin-bottom: 6mm; }
             .doc-header img { max-width: 150px; }
             .doc-header strong { font-size: 10pt; margin-top: 6mm; }
@@ -92,15 +101,17 @@ function EmissaoDocumentos() {
             .budget-table { width: 100%; border-collapse: collapse; margin-bottom: 1mm; font-size: 11pt; }
             .budget-table th { border: solid #000; border-width: 2px 0; padding: 4px 0; }
             .budget-table td { padding: 10px 0; text-align: center; }
-            .col-item { width: 15%; text-align: left; padding-left: 5px; }
-            .col-desc { width: 50%; text-align: left; }
-            .col-unid { width: 15%; }
+            .col-item { width: 12%; text-align: left; padding-left: 5px; }
+            .col-desc { width: 52%; text-align: left; }
+            .col-unid { width: 14%; }
+            .col-valor { width: 22%; text-align: right; padding-right: 5px; }
             .item-number { color: #b05030; font-weight: bold; }
             .total-row td { border-top: 2px solid #000; border-bottom: 3px solid #000; padding: 2px 0; font-weight: bold; }
             .observations, .closing { font-size: 10.5pt; line-height: 1.2; margin-bottom: 8mm; }
             .doc-footer { margin-top: auto; }
             .signatures { display: flex; justify-content: space-between; margin-bottom: 10mm; }
             .sig-box { width: 45%; font-size: 10pt; line-height: 1.15; border-top: 2px solid #000; padding-top: 3px; }
+            .sig-box-ccf { text-align: right; }
             .contact-info { text-align: center; font-size: 9.5pt; border-top: 1px solid #000; padding-top: 10px; }
             @media print {
               body { background: transparent; padding: 0; }
@@ -111,6 +122,7 @@ function EmissaoDocumentos() {
         <body>
           <div class="page-a4">
             <div class="content-wrapper">
+              <div class="doc-topline"></div>
               <header class="doc-header">
                 <img src="${logoCcf}" alt="Logotipo CCF" />
                 <strong>${escapeHtml(numeroOrcamento)}</strong>
@@ -121,10 +133,10 @@ function EmissaoDocumentos() {
 
               <table class="budget-table">
                 <thead>
-                  <tr><th class="col-item">ITEM</th><th class="col-desc">DESCRICAO</th><th class="col-unid">UNIDADE</th><th>VALOR<br>(R$)</th></tr>
+                  <tr><th class="col-item">ITEM</th><th class="col-desc">DESCRICAO</th><th class="col-unid">UNIDADE</th><th class="col-valor">VALOR<br>(R$)</th></tr>
                 </thead>
                 <tbody>${linhasServicos}
-                  <tr class="total-row"><td colspan="3">TOTAL</td><td>R$ ${escapeHtml(valorGlobal)}</td></tr>
+                  <tr class="total-row"><td colspan="3">TOTAL</td><td class="col-valor">R$ ${escapeHtml(valorGlobal || totalServicos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</td></tr>
                 </tbody>
               </table>
 
@@ -141,9 +153,11 @@ function EmissaoDocumentos() {
               <footer class="doc-footer">
                 <div class="signatures">
                   <div class="sig-box">
+                    <strong>Assinatura do Cliente</strong><br><br>Nome:<br>CPF/CNPJ:<br>Data:
+                  </div>
+                  <div class="sig-box sig-box-ccf">
                     <strong>Eng. CHARLES COSTI</strong><br>CCF Consultores Ltda.<br>Eng. Florestal<br>Eng. de Seguranca do Trabalho<br>Esp. em Gestao Ambiental<br>Esp. em Licenciamento Ambiental<br>Esp. em Georreferenciamento de Imoveis RL
                   </div>
-                  <div class="sig-box" style="text-align: right;">Aprovacao</div>
                 </div>
                 <address class="contact-info">
                   Rua Carlos Bayerl, 214 - Progresso - CEP: 89.281-066 _ Sao Bento do Sul/SC<br>
@@ -196,11 +210,14 @@ function EmissaoDocumentos() {
             <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid #E5EBF5' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#334155', fontSize: '12px', fontWeight: 900, textTransform: 'uppercase' }}><BriefcaseBusiness size={16} color="#475569" /> Servicos Selecionados</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                {servicosSelecionados.map((servico) => (
-                  <span key={servico} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', borderRadius: '12px', background: '#061733', color: '#FFFFFF', padding: '10px 13px', fontSize: '13px', fontWeight: 900 }}>
-                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22C55E' }} />{servico}
-                  </span>
-                ))}
+                {servicosSelecionados.map((servico) => {
+                  const nome = typeof servico === 'string' ? servico : servico.nome;
+                  return (
+                    <span key={nome} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', borderRadius: '12px', background: '#061733', color: '#FFFFFF', padding: '10px 13px', fontSize: '13px', fontWeight: 900 }}>
+                      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22C55E' }} />{nome}
+                    </span>
+                  );
+                })}
                 <button type="button" onClick={() => setModalOrcamentoAberto(true)} aria-label="Adicionar servico" style={{ minWidth: '46px', height: '42px', borderRadius: '12px', border: '1px dashed #94A3B8', background: '#E2E8F0', color: '#334155', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={21} strokeWidth={2.6} /></button>
               </div>
             </div>

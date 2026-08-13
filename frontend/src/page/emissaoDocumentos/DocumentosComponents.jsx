@@ -166,7 +166,14 @@ export function OrcamentoDocumentoModal({ cliente, servicosSelecionados, onClose
   };
 
   const handleConfirm = () => {
-    onConfirm(servicosAtivos.map((service) => service.nome), currency(totalValor));
+    onConfirm(
+      servicosAtivos.map((service) => ({
+        nome: service.nome,
+        indice: service.indice,
+        valor: service.indice * valorReferencia,
+      })),
+      currency(totalValor),
+    );
   };
 
   return (
