@@ -22,11 +22,10 @@ const getCorStatus = (status) => {
   return '#999';
 };
 
-export function KanbanView({ 
-  kanban, 
-  usuarioLogado, 
-  buscaTexto, 
-  onAbrirDetalhe, 
+export function KanbanView({
+  kanban,
+  usuarioLogado,
+  onAbrirDetalhe,
   onAbrirAuditoria, 
   onAbrirEdicao, 
   onAbrirExcluirProjeto, 
@@ -224,11 +223,6 @@ export function KanbanView({
                   .filter(t => {
                     const dono = t.currentStep?.requiredRole?.name || 'Coordenação';
                     return filtroResponsavel === 'Todos' || dono === filtroResponsavel;
-                  })
-                  .filter(t => {
-                    if (buscaTexto.trim() === '') return true;
-                    const termo = buscaTexto.toLowerCase();
-                    return t.title.toLowerCase().includes(termo) || t.workflow?.name.toLowerCase().includes(termo);
                   })
                   .filter(t => {
                     if (etapaTerm === '') return true;

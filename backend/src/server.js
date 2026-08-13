@@ -9,6 +9,7 @@ import clienteRoutes from './routes/clienteRoutes.js';
 import imovelRoutes from './routes/imovelRoutes.js';
 import documentoRoutes from './routes/documentoRoutes.js';
 import cartorioRoutes from './routes/cartorioRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 
 const app = express();
 
@@ -25,6 +26,7 @@ app.use('/clientes', clienteRoutes);
 app.use('/imoveis', imovelRoutes);
 app.use('/documentos', documentoRoutes);
 app.use('/cartorios', cartorioRoutes);
+app.use('/auth', authRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

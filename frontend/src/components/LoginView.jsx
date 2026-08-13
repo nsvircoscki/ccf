@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import LeafIcon from './LeafIcon';
+import { authService } from '../services/authService';
 
 const USUARIOS = ['Desenho', 'Topografia', 'Charles', 'Coordenação'];
 
@@ -30,13 +31,68 @@ const labelStyle = {
 
 export function LoginView({ onLogin, globalCss }) {
   const [senhaInput, setSenhaInput] = useState('');
+  const [confirmarSenhaInput, setConfirmarSenhaInput] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [usuarioSelecionadoLogin, setUsuarioSelecionadoLogin] = useState('Charles');
+  // 'login': tela normal. 'criar-senha': primeiro acesso desse usuário —
+  // password_hash ainda é nulo no banco, então pedimos pra ele definir uma.
+  const [modo, setModo] = useState('login');
+  const [erro, setErro] = useState('');
+  const [carregando, setCarregando] = useState(false);
 
-  const handleLogin = (e) => {
+  const trocarUsuario = (nome) => {
+    setUsuarioSelecionadoLogin(nome);
+    setModo('login');
+    setSenhaInput('');
+    setConfirmarSenhaInput('');
+    setErro('');
+  };
+
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (senhaInput === '123' || senhaInput === '') {
+    setErro('');
+
+    if (modo === 'criar-senha') {
+      if (senhaInput !== confirmarSenhaInput) {
+        setErro('As senhas não coincidem.');
+        return;
+      }
+      setCarregando(true);
+      try {
+        const res = await authService.criarSenha(usuarioSelecionadoLogin, senhaInput);
+        if (!res.ok) {
+          setErro(res.data?.error || 'Erro ao criar senha.');
+          return;
+        }
+        onLogin(usuarioSelecionadoLogin);
+      } catch (erro) {
+        console.error(erro);
+        setErro('Erro ao conectar com o servidor.');
+      } finally {
+        setCarregando(false);
+      }
+      return;
+    }
+
+    setCarregando(true);
+    try {
+      const res = await authService.login(usuarioSelecionadoLogin, senhaInput);
+      if (!res.ok) {
+        setErro(res.data?.error || 'Erro ao entrar.');
+        return;
+      }
+      if (res.data.precisaCriarSenha) {
+        setModo('criar-senha');
+        setSenhaInput('');
+        setConfirmarSenhaInput('');
+        return;
+      }
       onLogin(usuarioSelecionadoLogin);
+    } catch (erro) {
+      console.error(erro);
+      setErro('Erro ao conectar com o servidor.');
+    } finally {
+      setCarregando(false);
     }
   };
 
@@ -78,17 +134,31 @@ export function LoginView({ onLogin, globalCss }) {
 
         <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28 }}>
           <LeafIcon size={150} />
-          <div
-            style={{
-              fontFamily: '"Montserrat", sans-serif',
-              fontWeight: 900,
-              fontSize: 64,
-              lineHeight: 1,
-              color: '#ffffff',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            CCF
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+            <div
+              style={{
+                fontFamily: '"Montserrat", sans-serif',
+                fontWeight: 900,
+                fontSize: 64,
+                lineHeight: 1,
+                color: '#ffffff',
+                letterSpacing: '-0.02em',
+              }}
+            >
+              CCF
+            </div>
+            <div
+              style={{
+                fontFamily: '"Montserrat", sans-serif',
+                fontWeight: 700,
+                fontSize: 15,
+                color: 'rgba(255,255,255,0.75)',
+                letterSpacing: '0.28em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Consultores
+            </div>
           </div>
         </div>
 
@@ -125,10 +195,12 @@ export function LoginView({ onLogin, globalCss }) {
                 letterSpacing: '-0.01em',
               }}
             >
-              Bem-vindo
+              {modo === 'criar-senha' ? 'Crie sua senha' : 'Bem-vindo'}
             </h1>
             <p style={{ fontFamily: '"Open Sans", sans-serif', fontSize: 14, color: '#6b7a99', margin: 0 }}>
-              Acesse o sistema CCF 
+              {modo === 'criar-senha'
+                ? `Primeiro acesso de ${usuarioSelecionadoLogin} — defina uma senha para continuar.`
+                : 'Acesse o sistema CCF Consultores'}
             </p>
           </div>
 
@@ -137,7 +209,7 @@ export function LoginView({ onLogin, globalCss }) {
               <label style={labelStyle}>Usuário</label>
               <select
                 value={usuarioSelecionadoLogin}
-                onChange={(e) => setUsuarioSelecionadoLogin(e.target.value)}
+                onChange={(e) => trocarUsuario(e.target.value)}
                 style={{ ...fieldStyle, cursor: 'pointer' }}
               >
                 {USUARIOS.map((u) => (
@@ -147,13 +219,14 @@ export function LoginView({ onLogin, globalCss }) {
             </div>
 
             <div>
-              <label style={labelStyle}>Senha</label>
+              <label style={labelStyle}>{modo === 'criar-senha' ? 'Nova senha' : 'Senha'}</label>
               <div style={{ position: 'relative' }}>
                 <input
                   type={mostrarSenha ? 'text' : 'password'}
                   value={senhaInput}
                   onChange={(e) => setSenhaInput(e.target.value)}
                   placeholder="••••••••"
+                  autoFocus
                   style={{ ...fieldStyle, padding: '12px 44px 12px 16px' }}
                   onFocus={(e) => (e.target.style.borderColor = '#1a3a8a')}
                   onBlur={(e) => (e.target.style.borderColor = '#d8e0f0')}
@@ -181,8 +254,30 @@ export function LoginView({ onLogin, globalCss }) {
               </div>
             </div>
 
+            {modo === 'criar-senha' && (
+              <div>
+                <label style={labelStyle}>Confirmar senha</label>
+                <input
+                  type={mostrarSenha ? 'text' : 'password'}
+                  value={confirmarSenhaInput}
+                  onChange={(e) => setConfirmarSenhaInput(e.target.value)}
+                  placeholder="••••••••"
+                  style={fieldStyle}
+                  onFocus={(e) => (e.target.style.borderColor = '#1a3a8a')}
+                  onBlur={(e) => (e.target.style.borderColor = '#d8e0f0')}
+                />
+              </div>
+            )}
+
+            {erro && (
+              <p style={{ fontFamily: '"Open Sans", sans-serif', fontSize: 13, color: '#DC2626', margin: 0, fontWeight: 600 }}>
+                {erro}
+              </p>
+            )}
+
             <button
               type="submit"
+              disabled={carregando}
               style={{
                 width: '100%',
                 padding: '13px',
@@ -194,20 +289,23 @@ export function LoginView({ onLogin, globalCss }) {
                 fontSize: 14,
                 letterSpacing: '0.06em',
                 color: '#ffffff',
-                cursor: 'pointer',
+                cursor: carregando ? 'default' : 'pointer',
+                opacity: carregando ? 0.7 : 1,
                 transition: 'opacity 0.2s, transform 0.15s',
                 marginTop: 4,
               }}
               onMouseEnter={(e) => {
+                if (carregando) return;
                 e.currentTarget.style.opacity = '0.9';
                 e.currentTarget.style.transform = 'translateY(-1px)';
               }}
               onMouseLeave={(e) => {
+                if (carregando) return;
                 e.currentTarget.style.opacity = '1';
                 e.currentTarget.style.transform = 'translateY(0)';
               }}
             >
-              ENTRAR
+              {carregando ? '...' : modo === 'criar-senha' ? 'CRIAR SENHA E ENTRAR' : 'ENTRAR'}
             </button>
           </div>
 
@@ -220,7 +318,7 @@ export function LoginView({ onLogin, globalCss }) {
               marginTop: 36,
             }}
           >
-            © {new Date().getFullYear()} CCF 
+            © {new Date().getFullYear()} CCF Consultores
           </p>
         </form>
       </div>

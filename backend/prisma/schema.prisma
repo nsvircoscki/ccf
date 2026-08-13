@@ -137,14 +137,16 @@ model Role {
 }
 
 model User {
-  id            String @id @default(uuid())
+  id            String  @id @default(uuid())
   name          String
-  email         String @unique
-  password_hash String
-  
+  email         String  @unique
+  // Nulo = usuário ainda não criou a própria senha (força o fluxo de
+  // "criar senha" no primeiro login, em vez de aceitar qualquer coisa).
+  password_hash String?
+
   roleId        String
   role          Role   @relation(fields: [roleId], references: [id])
-  
+
   history       TicketHistory[]
   comments      Comment[]
 }

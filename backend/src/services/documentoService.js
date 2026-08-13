@@ -238,10 +238,27 @@ function exigirProprietarioEImovel(servico) {
 
 // --- Montadores específicos por modelo -------------------------------------
 
+// Só para a Retificação RISBS: cada confrontante entra com a matrícula do seu
+// imóvel, e cada imóvel confrontante vira um parágrafo separado (linha em
+// branco entre eles) — os demais documentos continuam usando
+// QualificacaoCompletaConfrontantes normal (lista corrida, sem matrícula).
+function qualificacaoConfrontantesComMatricula(imoveisConfrontantes) {
+  return (imoveisConfrontantes || [])
+    .map((imovel) => {
+      const rotuloTitulo = imovel.tipoTitulo === 'transcrição' ? 'Transcrição' : 'Matrícula';
+      const titulo = imovel.matricula ? `${rotuloTitulo} nº ${imovel.matricula}` : null;
+      const qualificacao = qualificacaoLista(imovel.proprietarios || []);
+      return [titulo, qualificacao].filter(Boolean).join(': ');
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 function montarRetificacaoRisbs(servico) {
   exigirProprietarioEImovel(servico);
   return {
     ...valoresComuns(servico),
+    QualificacaoCompletaConfrontantes: qualificacaoConfrontantesComMatricula(servico.confrontantes),
     DescricaoAtualDoImovel: servico.descricaoAtualImovel || '',
     MemorialDescritivoRetificacao: servico.memorialDescritivoRetificacao || '',
     SuperiorOuInferior: servico.superiorOuInferior || 'superior',
@@ -350,6 +367,50 @@ const MONTADORES = {
   dossie: montarDossie,
 };
 
+async function buscarServicoParaDocumento(servicoId) {
+  const servico = await prisma.servico.findUnique({
+    where: { id: servicoId },
+    include: {
+      proprietarios: { include: { conjuge: true, conjugeDe: true } },
+      imovel: { include: { proprietarios: true, usufrutuarios: true } },
+      confrontantes: { include: { proprietarios: { include: { conjuge: true, conjugeDe: true } } } },
+    },
+  });
+  if (!servico) throw new Error('Serviço não encontrado.');
+  return servico;
+}
+
+// Gera um único documento a partir do serviço já carregado (evita buscar o
+// serviço de novo pra cada arquivo do lote) e salva uma cópia na pasta dele.
+async function gerarUmDocumento(servico, templateKey) {
+  const template = TEMPLATES[templateKey];
+  if (!template) throw new Error('Modelo de documento não encontrado.');
+
+  const montador = MONTADORES[templateKey];
+  const valores = montador(servico);
+
+  const caminhoTemplate = path.join(PASTA_MODELOS, template.arquivo);
+  const templateBuffer = fs.readFileSync(caminhoTemplate);
+  const docxGerado = await docxTemplateEngine.gerarDocx(templateBuffer, valores);
+  const nomeArquivo = `${template.nome} - ${servico.numeroServico}.docx`;
+
+  // Salva na pasta do próprio serviço, do mesmo jeito que a ficha em PDF —
+  // se o serviço ainda não tem pasta (caminhoPasta nulo), cria uma agora
+  // seguindo a mesma convenção de nome (backend/servicos/<numeroServico>).
+  const pastaServico = servico.caminhoPasta || path.join(PASTA_BASE_SERVICOS, servico.numeroServico);
+  fs.mkdirSync(pastaServico, { recursive: true });
+  try {
+    fs.writeFileSync(path.join(pastaServico, nomeArquivo), docxGerado);
+  } catch (erro) {
+    // Não deixa uma cópia aberta no Word (arquivo travado pelo Windows)
+    // impedir o download — o usuário ainda recebe o documento atualizado,
+    // só não substitui o arquivo em disco desta vez.
+    console.error(`Não foi possível salvar "${nomeArquivo}" na pasta do serviço:`, erro.message);
+  }
+
+  return { buffer: docxGerado, nomeArquivo };
+}
+
 export const documentoService = {
   // Cada template vem com os tipos de serviço aos quais está associado
   // (tabela editável TemplateTipoServico). Um template sem nenhuma linha lá
@@ -390,40 +451,25 @@ export const documentoService = {
   },
 
   async gerar(servicoId, templateKey) {
-    const template = TEMPLATES[templateKey];
-    if (!template) throw new Error('Modelo de documento não encontrado.');
+    const servico = await buscarServicoParaDocumento(servicoId);
+    const { buffer, nomeArquivo } = await gerarUmDocumento(servico, templateKey);
+    return { buffer, nomeArquivo };
+  },
 
-    const servico = await prisma.servico.findUnique({
-      where: { id: servicoId },
-      include: {
-        proprietarios: { include: { conjuge: true, conjugeDe: true } },
-        imovel: { include: { proprietarios: true, usufrutuarios: true } },
-        confrontantes: { include: { proprietarios: { include: { conjuge: true, conjugeDe: true } } } },
-      },
-    });
+  // Registra, na lista do protocolo de entrega do serviço, os documentos que
+  // acabaram de ser gerados — soma com o que já estava marcado ali (não
+  // substitui), pra não perder itens marcados à mão que não passam por aqui.
+  async registrarDocumentosNoProtocolo(servicoId, templateKeys) {
+    const servico = await prisma.servico.findUnique({ where: { id: servicoId }, select: { listaProtocoloEntrega: true } });
     if (!servico) throw new Error('Serviço não encontrado.');
 
-    const valores = MONTADORES[templateKey](servico);
+    const nomesAtuais = (servico.listaProtocoloEntrega || '').split('\n').map((l) => l.trim()).filter(Boolean);
+    const nomesGerados = templateKeys.map((chave) => TEMPLATES[chave]?.nome).filter(Boolean);
+    const listaFinal = [...new Set([...nomesAtuais, ...nomesGerados])];
 
-    const caminhoTemplate = path.join(PASTA_MODELOS, template.arquivo);
-    const templateBuffer = fs.readFileSync(caminhoTemplate);
-    const docxGerado = await docxTemplateEngine.gerarDocx(templateBuffer, valores);
-    const nomeArquivo = `${template.nome} - ${servico.numeroServico}.docx`;
-
-    // Salva na pasta do próprio serviço, do mesmo jeito que a ficha em PDF —
-    // se o serviço ainda não tem pasta (caminhoPasta nulo), cria uma agora
-    // seguindo a mesma convenção de nome (backend/servicos/<numeroServico>).
-    const pastaServico = servico.caminhoPasta || path.join(PASTA_BASE_SERVICOS, servico.numeroServico);
-    fs.mkdirSync(pastaServico, { recursive: true });
-    try {
-      fs.writeFileSync(path.join(pastaServico, nomeArquivo), docxGerado);
-    } catch (erro) {
-      // Não deixa uma cópia aberta no Word (arquivo travado pelo Windows)
-      // impedir o download — o usuário ainda recebe o documento atualizado,
-      // só não substitui o arquivo em disco desta vez.
-      console.error(`Não foi possível salvar "${nomeArquivo}" na pasta do serviço:`, erro.message);
-    }
-
-    return { buffer: docxGerado, nomeArquivo };
+    return prisma.servico.update({
+      where: { id: servicoId },
+      data: { listaProtocoloEntrega: listaFinal.join('\n') },
+    });
   },
 };

@@ -1,64 +1,86 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Search } from 'lucide-react';
+import {
+  ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, KeyRound,
+} from 'lucide-react';
+import { AlterarSenhaModal } from '../modals/AlterarSenhaModal.jsx';
 
-const CORES = {
-  'Charles': '#FBC02D',
-  'Topografia': '#1E88E5',
-  'Desenho': '#43A047',
-  'Coordenação': '#795548',
-};
-
+// Mesmo ícone/cor de cada módulo no ModuleSelectorView.jsx — mantém os dois
+// selecionáveis (a tela de módulos e a navbar) visualmente consistentes.
 const ITENS = [
-  { id: 'dashboard', label: 'Pesquisa' },
-  { id: 'kanban', label: 'Kanban' },
-  { id: 'orcamento', label: 'Orçamento' },
-  { id: 'emissao-documentos', label: 'OS/Contrato' },
-  { id: 'clientes', label: 'Pessoas' },
-  { id: 'imoveis', label: 'Imóveis' },
-  { id: 'vinculacao', label: 'SIS DOC' },
-  { id: 'config-documentos', label: 'Documentos × Tipos' },
+  { id: 'dashboard', label: 'Pesquisa', icon: Search, color: '#2e8b2e' },
+  { id: 'kanban', label: 'SIS SOS', icon: LayoutGrid, color: '#0e7490' },
+  { id: 'orcamento', label: 'Orçamento', icon: Calculator, color: '#b45309' },
+  { id: 'emissao-documentos', label: 'OS/Contrato', icon: FileText, color: '#0f766e' },
+  { id: 'clientes', label: 'Pessoas', icon: Users, color: '#be185d' },
+  { id: 'imoveis', label: 'Imóveis', icon: Home, color: '#7c3aed' },
+  { id: 'vinculacao', label: 'SIS DOC', icon: Link2, color: '#1a3a8a' },
+  { id: 'config-documentos', label: 'Configurações', icon: Settings2, color: '#64748b' },
 ];
 
-// A busca só é consumida pelo Kanban — a tela de Pesquisa tem sua própria
-// busca embutida, e mostrar esse campo nas outras telas não faria nada.
-const TELAS_COM_BUSCA = ['kanban'];
+function NavItem({ ativo, onClick, item }) {
+  const [hover, setHover] = useState(false);
+  const Icon = item.icon;
+  const destacado = ativo || hover;
 
-function NavItem({ ativo, onClick, children }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       style={{
-        position: 'relative',
-        padding: '8px 2px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '5px',
         border: 'none',
         background: 'transparent',
+        padding: '6px 2px 4px',
         cursor: 'pointer',
-        fontSize: '14px',
-        fontWeight: ativo ? 700 : 500,
-        color: ativo ? '#0F172A' : '#64748B',
-        transition: 'color 0.18s ease',
+        outline: 'none',
         whiteSpace: 'nowrap',
       }}
-      onMouseEnter={(event) => { if (!ativo) event.currentTarget.style.color = '#0F172A'; }}
-      onMouseLeave={(event) => { if (!ativo) event.currentTarget.style.color = '#64748B'; }}
     >
-      {children}
+      <div
+        style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '10px',
+          background: `linear-gradient(150deg, ${item.color} 0%, ${item.color}cc 100%)`,
+          color: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: destacado ? `0 8px 16px ${item.color}55` : `0 3px 8px ${item.color}30`,
+          transform: destacado ? 'translateY(-2px) scale(1.05)' : 'none',
+          transition: 'transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 0.22s ease',
+        }}
+      >
+        <Icon size={16} strokeWidth={2} />
+      </div>
+      <span style={{
+        fontSize: '10.5px',
+        fontWeight: ativo ? 800 : 600,
+        color: ativo ? '#0F172A' : '#64748B',
+        transition: 'color 0.18s ease',
+      }}>
+        {item.label}
+      </span>
       {ativo ? (
         <motion.span
           layoutId="navbar-underline"
           transition={{ type: 'spring', stiffness: 420, damping: 34 }}
           style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: '-2px',
-            height: '2px',
+            width: '18px',
+            height: '2.5px',
             borderRadius: '2px',
-            background: '#0F172A',
+            background: item.color,
           }}
         />
-      ) : null}
+      ) : (
+        <span style={{ height: '2.5px' }} />
+      )}
     </button>
   );
 }
@@ -66,18 +88,17 @@ function NavItem({ ativo, onClick, children }) {
 export function Navbar({
   telaAtiva,
   setTelaAtiva,
-  buscaTexto,
-  setBuscaTexto,
   usuarioLogado,
   setUsuarioLogado,
+  onVoltarModulos,
 }) {
-  const mostrarBusca = TELAS_COM_BUSCA.includes(telaAtiva);
+  const [alterarSenhaAberto, setAlterarSenhaAberto] = useState(false);
 
   return (
     <header
       style={{
         flexShrink: 0,
-        height: '64px',
+        height: '76px',
         background: '#FFFFFF',
         borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
         display: 'grid',
@@ -93,114 +114,112 @@ export function Navbar({
         zIndex: 30,
       }}
     >
-      {/* Esquerda: marca */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+      {/* Esquerda: marca — volta ao seletor de módulos */}
+      <button
+        type="button"
+        onClick={onVoltarModulos}
+        title="Voltar ao seletor de módulos"
+        style={{
+          display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0,
+          border: 'none', background: 'transparent', padding: 0, cursor: 'pointer',
+        }}
+      >
         <img src="/ccf_icon.png" alt="" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
         <span style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.01em' }}>
           CCF
         </span>
-      </div>
+      </button>
 
       {/* Centro: navegação */}
-      <nav style={{ display: 'flex', alignItems: 'center', gap: '30px' }}>
+      <nav style={{ display: 'flex', alignItems: 'flex-start', gap: '18px' }}>
         {ITENS.map((item) => (
           <NavItem
             key={item.id}
+            item={item}
             ativo={telaAtiva === item.id}
             onClick={() => setTelaAtiva(item.id)}
-          >
-            {item.label}
-          </NavItem>
+          />
         ))}
       </nav>
 
-      {/* Direita: busca, ação principal e sessão */}
+      {/* Direita: ação principal e sessão */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', minWidth: 0 }}>
-        {mostrarBusca ? (
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <Search size={15} color="#94A3B8" style={{ position: 'absolute', left: '12px', pointerEvents: 'none' }} />
-            <input
-              type="text"
-              placeholder="Pesquisar..."
-              value={buscaTexto}
-              onChange={(event) => setBuscaTexto(event.target.value)}
-              style={{
-                height: '38px',
-                width: '210px',
-                borderRadius: '999px',
-                border: '1px solid transparent',
-                background: '#F1F5F9',
-                padding: '0 14px 0 34px',
-                fontSize: '13px',
-                fontWeight: 500,
-                color: '#0F172A',
-                outline: 'none',
-                transition: 'background 0.18s ease, border-color 0.18s ease',
-              }}
-              onFocus={(event) => {
-                event.currentTarget.style.background = '#FFFFFF';
-                event.currentTarget.style.borderColor = '#CBD5E1';
-              }}
-              onBlur={(event) => {
-                event.currentTarget.style.background = '#F1F5F9';
-                event.currentTarget.style.borderColor = 'transparent';
-              }}
-            />
-          </div>
-        ) : null}
-
         <motion.button
           type="button"
           onClick={() => setTelaAtiva('cadastro')}
           whileHover={{ y: -1 }}
           whileTap={{ scale: 0.98 }}
           style={{
-            height: '38px',
+            height: '36px',
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            padding: '0 16px',
+            padding: '0 14px',
             borderRadius: '999px',
-            border: 'none',
-            background: '#2D7AFD',
-            color: '#FFFFFF',
-            fontSize: '13px',
+            border: '1px solid rgba(26, 58, 138, 0.22)',
+            background: 'rgba(26, 58, 138, 0.06)',
+            color: '#1a3a8a',
+            fontSize: '12.5px',
             fontWeight: 700,
             cursor: 'pointer',
             whiteSpace: 'nowrap',
             flexShrink: 0,
           }}
         >
-          <Plus size={15} strokeWidth={2.5} /> Cadastrar Serviço
+          <ClipboardList size={15} strokeWidth={2.1} /> Cadastrar Serviço
         </motion.button>
 
         <div style={{ width: '1px', height: '24px', background: 'rgba(15, 23, 42, 0.10)', flexShrink: 0 }} />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '28px', flexShrink: 1, overflow: 'hidden' }}>
-          <span
-            style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '999px',
-              background: CORES[usuarioLogado] || '#94A3B8',
-              flexShrink: 0,
-            }}
-          />
-          <span
-            title={usuarioLogado}
-            style={{
-              fontSize: '13px',
-              fontWeight: 700,
-              color: '#0F172A',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              minWidth: 0,
-            }}
-          >
-            {usuarioLogado}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '28px', flexShrink: 1, overflow: 'hidden' }}>
+          <div style={{
+            width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0,
+            background: 'linear-gradient(135deg, #1a3a8a, #2e8b2e)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 700, fontSize: '14px', color: '#fff',
+          }}>
+            {(usuarioLogado || '?').charAt(0).toUpperCase()}
+          </div>
+          <div style={{ overflow: 'hidden', minWidth: 0 }}>
+            <div
+              title={usuarioLogado}
+              style={{
+                fontSize: '13px',
+                fontWeight: 700,
+                color: '#0F172A',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {usuarioLogado}
+            </div>
+            <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600, whiteSpace: 'nowrap' }}>CCF Consultores</div>
+          </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setAlterarSenhaAberto(true)}
+          title="Alterar senha"
+          aria-label="Alterar senha"
+          style={{
+            width: '36px', height: '36px', borderRadius: '999px', flexShrink: 0,
+            border: '1px solid rgba(15, 23, 42, 0.12)', background: '#FFFFFF', color: '#64748B',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.18s ease',
+          }}
+          onMouseEnter={(event) => {
+            event.currentTarget.style.color = '#1a3a8a';
+            event.currentTarget.style.borderColor = 'rgba(26, 58, 138, 0.3)';
+          }}
+          onMouseLeave={(event) => {
+            event.currentTarget.style.color = '#64748B';
+            event.currentTarget.style.borderColor = 'rgba(15, 23, 42, 0.12)';
+          }}
+        >
+          <KeyRound size={15} />
+        </button>
 
         <button
           type="button"
@@ -230,6 +249,10 @@ export function Navbar({
           Sair
         </button>
       </div>
+
+      {alterarSenhaAberto && (
+        <AlterarSenhaModal usuarioLogado={usuarioLogado} onClose={() => setAlterarSenhaAberto(false)} />
+      )}
     </header>
   );
 }

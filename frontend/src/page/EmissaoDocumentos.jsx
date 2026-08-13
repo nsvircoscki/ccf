@@ -208,7 +208,7 @@ function EmissaoDocumentos() {
       <div style={{ maxWidth: '1180px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '18px', paddingBottom: '12px', borderBottom: '1px solid #DDE5F2' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#061733', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><FileBadge size={21} /></span>
+            <span style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><FileBadge size={21} /></span>
             <div><h1 style={{ margin: 0, fontSize: '22px', fontWeight: 900 }}>Emissao de Documentos</h1><p style={{ margin: '3px 0 0', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>Geracao visual de OS tecnica e contrato formal</p></div>
           </div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', borderRadius: '999px', background: '#ECFDF5', border: '1px solid #A7F3D0', color: '#047857', padding: '10px 16px', fontSize: '12px', fontWeight: 900 }}>
@@ -218,7 +218,7 @@ function EmissaoDocumentos() {
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.95fr', gap: '18px', alignItems: 'stretch' }}>
           <section style={{ ...cardStyle, padding: '22px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#061733', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>1</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Conferencia de Dados Minimos</h2></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>1</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Conferencia de Dados Minimos</h2></div>
               <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 800 }}>Cliente selecionavel</span>
             </div>
 
@@ -240,7 +240,7 @@ function EmissaoDocumentos() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#334155', fontSize: '12px', fontWeight: 900, textTransform: 'uppercase' }}><BriefcaseBusiness size={16} color="#475569" /> Servicos Selecionados</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                 {servicosSelecionados.map((servico) => (
-                  <span key={servico} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', borderRadius: '12px', background: '#061733', color: '#FFFFFF', padding: '10px 13px', fontSize: '13px', fontWeight: 900 }}>
+                  <span key={servico} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', borderRadius: '12px', background: '#2D7AFD', color: '#FFFFFF', padding: '10px 13px', fontSize: '13px', fontWeight: 900 }}>
                     <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22C55E' }} />{servico}
                   </span>
                 ))}
@@ -250,7 +250,7 @@ function EmissaoDocumentos() {
           </section>
 
           <section style={{ ...cardStyle, padding: '22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '20px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#061733', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>2</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Configuracoes Tecnicas da OS</h2></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '20px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>2</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Configuracoes Tecnicas da OS</h2></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <label style={labelStyle}>Colaborador Tecnico Responsavel<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><FieldIcon icon={UserRound} /><select value={responsavel} onChange={(event) => setResponsavel(event.target.value)} style={fieldBase}><option>Eng. Charles Costi</option></select></div></label>
               <label style={labelStyle}>Valor Global da Obra (R$)<input value={valorGlobal} onChange={(event) => setValorGlobal(event.target.value)} inputMode="decimal" style={fieldBase} /></label>
@@ -260,7 +260,7 @@ function EmissaoDocumentos() {
         </div>
 
         <section style={{ ...cardStyle, padding: '22px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '18px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#061733', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>3</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Acoes de Documentos</h2></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '18px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>3</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Acoes de Documentos</h2></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <button type="button" onClick={gerarPdf} style={{ minHeight: '88px', borderRadius: '16px', border: 'none', background: '#2D7AFD', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '18px 20px', boxShadow: '0 14px 28px rgba(45, 122, 253, 0.28)' }}><span style={{ display: 'flex', alignItems: 'center', gap: '13px', textAlign: 'left' }}><span style={{ width: '42px', height: '42px', borderRadius: '13px', background: 'rgba(255,255,255,0.12)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Download size={21} /></span><span><strong style={{ display: 'block', fontSize: '15px' }}>Gerar Ordem de Servico (PDF)</strong><small style={{ display: 'block', marginTop: '4px', color: '#CBD5E1', fontWeight: 700 }}>Abre a impressao para salvar em PDF</small></span></span><BadgeCheck size={24} color="#34D399" /></button>
             <button type="button" onClick={() => setModalContratoAberto(true)} style={{ minHeight: '88px', borderRadius: '16px', border: '1px solid #FDBA74', background: '#FFF7ED', color: '#9A3412', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '18px 20px' }}><span style={{ display: 'flex', alignItems: 'center', gap: '13px', textAlign: 'left' }}><span style={{ width: '42px', height: '42px', borderRadius: '13px', background: '#FFEDD5', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Building2 size={21} /></span><span><strong style={{ display: 'block', fontSize: '15px' }}>Gerar Contrato Padrao (DOCX)</strong><small style={{ display: 'block', marginTop: '4px', color: '#C2410C', fontWeight: 800 }}>Requer validacao juridica complementar</small></span></span><AlertTriangle size={23} /></button>

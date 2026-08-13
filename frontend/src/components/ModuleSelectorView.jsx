@@ -17,7 +17,7 @@ const MODULOS = [
   { id: 'clientes', label: 'Pessoas', desc: 'Cadastro de clientes, pessoas físicas e jurídicas', icon: Users, color: '#be185d' },
   { id: 'imoveis', label: 'Imóveis', desc: 'Cadastro de imóveis, proprietários e usufrutuários', icon: Home, color: '#7c3aed' },
   { id: 'vinculacao', label: 'SIS DOC', desc: 'Vincular proprietários, imóvel e confrontantes ao serviço', icon: Link2, color: '#1a3a8a' },
-  { id: 'config-documentos', label: 'Documentos × Tipos', desc: 'Configurar quais documentos aparecem para cada tipo de serviço', icon: Settings2, color: '#64748b' },
+  { id: 'config-documentos', label: 'Configurações', desc: 'Configurar quais documentos aparecem para cada tipo de serviço', icon: Settings2, color: '#64748b' },
 ];
 
 function ModuleTile({ mod, index, onOpen }) {

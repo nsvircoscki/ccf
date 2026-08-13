@@ -250,4 +250,41 @@ export const api = {
 
     // URL direta: o navegador dispara o download, não é consumida via fetch.
     urlGerarDocumento: (servicoId, templateKey) => `${BASE_URL}/documentos/${servicoId}/${templateKey}`,
+
+    registrarDocumentosNoProtocolo: async (servicoId, chaves) => {
+        const res = await fetch(`${BASE_URL}/documentos/${servicoId}/protocolo`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chaves }),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    // ---- AUTENTICAÇÃO ----
+    login: async (usuario, senha) => {
+        const res = await fetch(`${BASE_URL}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usuario, senha }),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    criarSenha: async (usuario, novaSenha) => {
+        const res = await fetch(`${BASE_URL}/auth/criar-senha`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usuario, novaSenha }),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    alterarSenha: async (usuario, senhaAtual, novaSenha) => {
+        const res = await fetch(`${BASE_URL}/auth/alterar-senha`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usuario, senhaAtual, novaSenha }),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
 };

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { FiSearch, FiList, FiTrello, FiX } from 'react-icons/fi';
+import React, { useEffect, useState } from 'react';
+import { FiSearch, FiList, FiTrello, FiX, FiBriefcase } from 'react-icons/fi';
 import { AnimatedDropdown } from './AnimatedDropdown';
+import { servicoService } from '../services/servicoService';
 
 const TIPOS_PROCESSO = ["Retificação", "Desmembramento", "Unificação", "Usucapião", "Alteração de Divisas", "CAR", "Certificação INCRA", "Escritura", "Conferência", "Cadastral", "Locação", "Movimentação de Terra", "Danc"];
 
@@ -48,6 +49,42 @@ const contarEtapas = (projeto) =>
     return acc;
   }, {});
 
+// Um anel por etapa (Iniciar / Em Andamento / Concluído) — os três sempre
+// somam 100%, porque toda tarefa está em exatamente uma dessas três.
+function CardEtapaGlobal({ label, cor, count, total }) {
+  const percentual = total === 0 ? 0 : Math.round((count / total) * 100);
+  const raio = 36;
+  const circunferencia = 2 * Math.PI * raio;
+  const offset = circunferencia - (percentual / 100) * circunferencia;
+
+  return (
+    <div style={{ background: 'white', borderRadius: '15px', padding: '14px 18px', boxShadow: '0px 4px 15px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '14px' }}>
+      <div style={{ position: 'relative', width: '60px', height: '60px', flexShrink: 0 }}>
+        <svg width="60" height="60" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx="50" cy="50" r={raio} fill="none" stroke="#F0F0F0" strokeWidth="9" />
+          <circle
+            cx="50" cy="50" r={raio}
+            fill="none"
+            stroke={cor}
+            strokeWidth="9"
+            strokeDasharray={circunferencia}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 0.8s ease-in-out' }}
+          />
+        </svg>
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 900, color: cor }}>
+          {percentual}%
+        </div>
+      </div>
+      <div>
+        <div style={{ fontWeight: 'bold', color: '#333', fontSize: '14px' }}>{label}</div>
+        <div style={{ fontSize: '12px', color: '#777', fontWeight: 'bold' }}>{count} de {total}</div>
+      </div>
+    </div>
+  );
+}
+
 export function PesquisaView({
   kanban,
   usuarioLogado,
@@ -65,43 +102,39 @@ export function PesquisaView({
   // tudo; esse toggle deixa ele restringir pra só as etapas dedicadas a ele
   // quando quiser, sem perder a visão geral (fica só um clique de distância).
   const [somenteMinhasEtapas, setSomenteMinhasEtapas] = useState(false);
+  // Total de Serviço cadastrados (tabela Servico, não os projetos do Kanban
+  // usados no restante desta tela) — mesma contagem de "SELECT COUNT(*) FROM
+  // Servico" que já tínhamos consultado direto no banco.
+  const [totalServicos, setTotalServicos] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const lista = await servicoService.listarTodos();
+        if (Array.isArray(lista)) setTotalServicos(lista.length);
+      } catch (erro) {
+        console.error('Erro ao carregar total de serviços:', erro);
+      }
+    })();
+  }, []);
 
   const etapaTerm = normalize(buscaEtapa.trim());
 
-  // Mesma lógica de filtro por setor do usuário logado que o Dashboard já usava.
+  // Mesma lógica de filtro por setor do usuário logado que o Dashboard já usava
+  // — isso é escopo de acesso (o que esse usuário pode ver), não um filtro de
+  // status, então continua sendo aplicado direto sobre os tickets.
   let tarefas = tickets;
   if (usuarioLogado !== 'Charles') {
     tarefas = tarefas.filter(t => (t.currentStep?.requiredRole?.name || 'Coordenação') === usuarioLogado);
   } else if (somenteMinhasEtapas) {
     tarefas = tarefas.filter(t => (t.currentStep?.requiredRole?.name || 'Coordenação') === 'Charles');
   }
-  if (filtroStatus === 'Pendentes') {
-    tarefas = tarefas.filter(t => (t.currentStep?.step_name || 'Iniciar') !== 'Concluído');
-  } else if (filtroStatus !== 'Todas') {
-    tarefas = tarefas.filter(t => (t.currentStep?.step_name || 'Iniciar') === filtroStatus);
-  }
-  if (filtroTipo !== 'Todos') {
-    tarefas = tarefas.filter(t => t.workflow?.description?.includes(filtroTipo));
-  }
-  if (etapaTerm !== '') {
-    tarefas = tarefas.filter(t => {
-      const etapaTexto = normalize(t.currentStep?.step_name || 'Iniciar');
-      return etapaTexto.includes(etapaTerm) || normalize(t.title).includes(etapaTerm);
-    });
-  }
 
-  // Progresso global — mesmos números que o Dashboard mostrava, calculados
-  // sobre o conjunto já filtrado (status, tipo, etapa).
-  const totalTarefas = tarefas.length;
-  const concluidasGlobal = tarefas.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Concluído').length;
-  const progressoGlobal = totalTarefas === 0 ? 0 : Math.round((concluidasGlobal / totalTarefas) * 100);
-  const raio = 36;
-  const circunferencia = 2 * Math.PI * raio;
-  const offsetProgresso = circunferencia - (progressoGlobal / 100) * circunferencia;
-
-  // Agrupamento por projeto, igual ao Dashboard — cada projeto carrega junto o
-  // nome do cliente e a matrícula (via workflow.servico), pra dar pra buscar.
-  const projetos = tarefas.reduce((acc, ticket) => {
+  // Agrupamento por projeto ANTES de filtrar por status/tipo/etapa — cada
+  // projeto precisa manter a lista completa de tarefas (dentro do escopo do
+  // usuário) pra progresso e setores baterem certo, mesmo quando o filtro só
+  // combina com parte dos setores dele.
+  const todosProjetos = tarefas.reduce((acc, ticket) => {
     if (!ticket.workflow) return acc;
     let projeto = acc.find(p => p.id === ticket.workflowId);
     if (!projeto) {
@@ -118,6 +151,43 @@ export function PesquisaView({
     projeto.tasks.push(ticket);
     return acc;
   }, []);
+
+  // Status do PROJETO como um todo, não de uma etapa isolada: só "Concluído"
+  // se todos os setores terminaram, só "Iniciar" se nenhum começou — qualquer
+  // mistura entre os dois é "Em Andamento". Antes o filtro olhava pra cada
+  // ticket separado, então um projeto aparecia em "Concluído" só por ter UM
+  // setor pronto, mesmo com o resto travado — e o painel de detalhe só
+  // mostrava os setores que sobraram do filtro, escondendo os outros.
+  const statusDoProjeto = (projeto) => {
+    const etapas = projeto.tasks.map(t => t.currentStep?.step_name || 'Iniciar');
+    if (etapas.every(e => e === 'Concluído')) return 'Concluído';
+    if (etapas.every(e => e === 'Iniciar')) return 'Iniciar';
+    return 'Em Andamento';
+  };
+
+  let projetos = todosProjetos;
+  if (filtroStatus === 'Pendentes') {
+    projetos = projetos.filter(p => statusDoProjeto(p) !== 'Concluído');
+  } else if (filtroStatus !== 'Todas') {
+    projetos = projetos.filter(p => statusDoProjeto(p) === filtroStatus);
+  }
+  if (filtroTipo !== 'Todos') {
+    projetos = projetos.filter(p => p.description?.includes(filtroTipo));
+  }
+  if (etapaTerm !== '') {
+    projetos = projetos.filter(p => p.tasks.some(t => {
+      const etapaTexto = normalize(t.currentStep?.step_name || 'Iniciar');
+      return etapaTexto.includes(etapaTerm) || normalize(t.title).includes(etapaTerm);
+    }));
+  }
+
+  // Progresso global — mesmos números que o Dashboard mostrava, calculados
+  // sobre as tarefas dos projetos já filtrados (status, tipo, etapa).
+  const tarefasFiltradas = projetos.flatMap(p => p.tasks);
+  const totalTarefas = tarefasFiltradas.length;
+  const iniciarGlobal = tarefasFiltradas.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Iniciar').length;
+  const andamentoGlobal = tarefasFiltradas.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Em Andamento').length;
+  const concluidasGlobal = tarefasFiltradas.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Concluído').length;
 
   const q = query.trim().toLowerCase();
   const resultados = q
@@ -187,30 +257,25 @@ export function PesquisaView({
               </div>
             )}
 
-            <div style={{ background: 'white', borderRadius: '15px', padding: '16px 22px', boxShadow: '0px 4px 15px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '18px' }}>
-            <div style={{ position: 'relative', width: '72px', height: '72px' }}>
-              <svg width="72" height="72" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
-                <circle cx="50" cy="50" r={raio} fill="none" stroke="#F0F0F0" strokeWidth="8" />
-                <circle
-                  cx="50" cy="50" r={raio}
-                  fill="none"
-                  stroke={progressoGlobal === 100 ? '#22C55E' : '#4A90E2'}
-                  strokeWidth="8"
-                  strokeDasharray={circunferencia}
-                  strokeDashoffset={offsetProgresso}
-                  strokeLinecap="round"
-                  style={{ transition: 'stroke-dashoffset 0.8s ease-in-out' }}
-                />
-              </svg>
-              <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: '900', color: progressoGlobal === 100 ? '#22C55E' : '#4A90E2' }}>
-                {progressoGlobal}%
+            <div style={{ background: 'white', borderRadius: '15px', padding: '16px 22px', boxShadow: '0px 4px 15px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '46px', height: '46px', borderRadius: '12px', flexShrink: 0,
+                background: '#2D7AFD', color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <FiBriefcase size={20} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 900, color: '#333', fontSize: '20px', lineHeight: 1 }}>
+                  {totalServicos === null ? '—' : totalServicos}
+                </div>
+                <div style={{ fontSize: '12px', color: '#777', fontWeight: 'bold' }}>Serviços cadastrados</div>
               </div>
             </div>
-            <div>
-              <div style={{ fontWeight: 'bold', color: '#333', fontSize: '15px' }}>Progressão Geral</div>
-              <div style={{ fontSize: '13px', color: '#777', fontWeight: 'bold' }}>{concluidasGlobal} de {totalTarefas} tarefas finalizadas</div>
-            </div>
-            </div>
+
+            <CardEtapaGlobal label="Iniciar" cor={getCorStatus('Iniciar')} count={iniciarGlobal} total={totalTarefas} />
+            <CardEtapaGlobal label="Em Andamento" cor={getCorStatus('Em Andamento')} count={andamentoGlobal} total={totalTarefas} />
+            <CardEtapaGlobal label="Concluído" cor={getCorStatus('Concluído')} count={concluidasGlobal} total={totalTarefas} />
           </div>
         </div>
 
@@ -256,9 +321,9 @@ export function PesquisaView({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#999' }}>FILTRAR TIPO</label>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#999' }}>FILTRAR PROJETO</label>
             <AnimatedDropdown
-              label="Tipo"
+              label="Projeto"
               value={filtroTipo}
               onChange={setFiltroTipo}
               options={tipoOptions}
@@ -291,6 +356,8 @@ export function PesquisaView({
                   <div
                     key={p.id}
                     onClick={() => setSelectedId(p.id)}
+                    onDoubleClick={() => { setWorkflowAtivo(p.id); setTelaAtiva('kanban'); }}
+                    title="Clique duas vezes para abrir no Kanban"
                     style={{
                       cursor: 'pointer', background: '#fff', borderRadius: '12px', padding: '13px 16px',
                       border: isActive ? '1px solid #1a3a8a' : '1px solid #EEE',
@@ -327,7 +394,7 @@ export function PesquisaView({
               <>
                 <div style={{
                   padding: '26px 32px', color: '#fff',
-                  background: 'linear-gradient(135deg, #1a3a8a 0%, #0e2549 130%)',
+                  background: '#1a3a8a',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '6px' }}>
                     <h3 style={{ margin: 0, fontSize: '24px', fontWeight: 800, letterSpacing: '-0.01em' }}>{ativo.name}</h3>
@@ -385,13 +452,13 @@ export function PesquisaView({
                       onClick={() => { setWorkflowAtivo(ativo.id); setTelaAtiva('kanban'); }}
                       style={{ padding: '12px 20px', borderRadius: '10px', border: 'none', background: '#2D7AFD', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}
                     >
-                      <FiTrello size={16} /> Abrir no Kanban
+                      <FiTrello size={16} /> Abrir Quadro
                     </button>
                     <button
                       onClick={() => onAbrirAuditoria(workflows.find(w => w.id === ativo.id) || ativo)}
                       style={{ padding: '12px 20px', borderRadius: '10px', border: '1px solid #DDE5F2', background: '#fff', color: '#2D7AFD', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}
                     >
-                      <FiList size={16} /> Ver Etapas
+                      <FiList size={16} /> Ver Histórico
                     </button>
                   </div>
                 </div>

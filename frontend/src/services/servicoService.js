@@ -52,5 +52,9 @@ export const servicoService = {
 
   urlGerarDocumento(servicoId, templateKey) {
     return api.urlGerarDocumento(servicoId, templateKey);
-  }
+  },
+
+  async registrarDocumentosNoProtocolo(servicoId, chaves) {
+    return api.registrarDocumentosNoProtocolo(servicoId, chaves);
+  },
 };

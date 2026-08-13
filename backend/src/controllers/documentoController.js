@@ -27,4 +27,13 @@ export const documentoController = {
       res.status(400).json({ error: error.message });
     }
   },
+
+  async registrarNoProtocolo(req, res) {
+    try {
+      const servico = await documentoService.registrarDocumentosNoProtocolo(req.params.servicoId, req.body.chaves);
+      res.json(servico);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
 };

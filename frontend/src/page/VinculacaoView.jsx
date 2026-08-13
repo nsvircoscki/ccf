@@ -30,6 +30,11 @@ const paraOpcaoImovel = (imovel) => ({
 });
 const paraOpcaoServico = (servico) => ({ value: servico.id, label: servico.numeroServico, sub: servico.nomeCliente });
 
+function nomeArquivoDoHeader(contentDisposition, fallback) {
+  const match = contentDisposition?.match(/filename="([^"]+)"/);
+  return match ? decodeURIComponent(match[1]) : fallback;
+}
+
 const TABS = [
   { id: 'vinc', label: 'Vínculos', icon: 'link', desc: 'Proprietários, imóvel e confrontantes' },
   { id: 'retif', label: 'Descrição', icon: 'ruler', desc: 'Descrição atual e memorial descritivo' },
@@ -50,6 +55,7 @@ export default function VinculacaoView({ onBack }) {
   const [form, setForm] = useState(vinculacaoVazia);
   const [tab, setTab] = useState('vinc');
   const [salvando, setSalvando] = useState(false);
+  const [baixando, setBaixando] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -131,16 +137,49 @@ export default function VinculacaoView({ onBack }) {
     }
   };
 
-  // Baixa cada documento marcado — como são downloads diretos (não popups),
-  // cliques programáticos em sequência funcionam sem esbarrar em bloqueador.
-  const baixarSelecionados = () => {
-    docsSelecionados.forEach((chave) => {
-      const link = document.createElement('a');
-      link.href = servicoService.urlGerarDocumento(servicoId, chave);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    });
+  // Baixa um documento por vez, esperando cada download terminar antes do
+  // próximo — disparar vários cliques de download de uma vez (como era antes)
+  // faz o navegador bloquear ou perder os downloads depois do primeiro.
+  // Cada arquivo continua saindo em .docx normal, nada de zip.
+  const baixarSelecionados = async () => {
+    if (docsSelecionados.length === 0) return;
+
+    setBaixando(true);
+    let falhas = 0;
+    for (const chave of docsSelecionados) {
+      const nomeTemplate = templates.find((t) => t.chave === chave)?.nome || chave;
+      try {
+        const res = await fetch(servicoService.urlGerarDocumento(servicoId, chave));
+        if (!res.ok) throw new Error('Falha ao gerar documento.');
+        const blob = await res.blob();
+        const nomeArquivo = nomeArquivoDoHeader(res.headers.get('Content-Disposition'), `${nomeTemplate}.docx`);
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = nomeArquivo;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (erro) {
+        console.error(`Erro ao gerar "${nomeTemplate}":`, erro);
+        falhas += 1;
+      }
+    }
+
+    // Registra no protocolo de entrega os documentos que deram certo — soma
+    // com o que já estava marcado ali, e reflete no formulário aberto.
+    try {
+      const res = await servicoService.registrarDocumentosNoProtocolo(servicoId, docsSelecionados);
+      if (res.ok) set('listaProtocoloEntrega')(res.data.listaProtocoloEntrega || '');
+    } catch (erro) {
+      console.error('Erro ao registrar documentos no protocolo de entrega:', erro);
+    }
+
+    setBaixando(false);
+    if (falhas > 0) show(`${falhas} de ${docsSelecionados.length} documento(s) falharam ao gerar.`, 'err');
+    else show(`${docsSelecionados.length} documento(s) baixado(s) e registrado(s) no protocolo.`);
   };
 
   // O protocolo de entrega é guardado como texto (um nome de documento por
@@ -313,15 +352,17 @@ export default function VinculacaoView({ onBack }) {
                   options={templatesDoTipo.map((t) => ({ value: t.chave, label: t.nome }))}
                   values={docsSelecionados} onChange={setDocsSelecionados} />
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <button type="button" onClick={baixarSelecionados} disabled={docsSelecionados.length === 0} style={{
+                  <button type="button" onClick={baixarSelecionados} disabled={docsSelecionados.length === 0 || baixando} style={{
                     marginTop: 14, padding: '12px 28px', borderRadius: 11, border: 'none',
-                    background: docsSelecionados.length ? `linear-gradient(135deg, ${accent} 0%, ${C.green} 100%)` : C.border,
+                    background: docsSelecionados.length && !baixando ? `linear-gradient(135deg, ${accent} 0%, ${C.green} 100%)` : C.border,
                     color: '#fff', fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 13, letterSpacing: '0.05em',
-                    cursor: docsSelecionados.length ? 'pointer' : 'not-allowed',
+                    cursor: docsSelecionados.length && !baixando ? 'pointer' : 'not-allowed',
                     display: 'inline-flex', alignItems: 'center', gap: 8,
                   }}>
                     <Icon name="download" size={16} />
-                    Baixar {docsSelecionados.length > 0 ? `${docsSelecionados.length} documento(s)` : 'documentos selecionados'}
+                    {baixando
+                      ? 'Gerando documentos…'
+                      : `Baixar ${docsSelecionados.length > 0 ? `${docsSelecionados.length} documento(s)` : 'documentos selecionados'}`}
                   </button>
                 </div>
               </>

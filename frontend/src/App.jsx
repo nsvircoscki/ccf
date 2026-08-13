@@ -36,7 +36,6 @@ export default function App() {
   // para sempre na sessão).
   const [moduloEscolhido, setModuloEscolhido] = useState(false);
   const [telaAtiva, setTelaAtiva] = useState('dashboard');
-  const [buscaTexto, setBuscaTexto] = useState('');
   const [workflowParaImpressao, setWorkflowParaImpressao] = useState(null);
 
   const [modais, setModais] = useState({
@@ -153,10 +152,9 @@ export default function App() {
         <Navbar
           telaAtiva={telaAtiva}
           setTelaAtiva={setTelaAtiva}
-          buscaTexto={buscaTexto}
-          setBuscaTexto={setBuscaTexto}
           usuarioLogado={usuarioLogado}
           setUsuarioLogado={handleLogout}
+          onVoltarModulos={() => setModuloEscolhido(false)}
         />
 
         <div className="flex-1 flex flex-col min-h-0" style={{ minHeight: 0, overflow: 'hidden' }}>
@@ -180,7 +178,6 @@ export default function App() {
             <KanbanView
               kanban={kanban}
               usuarioLogado={usuarioLogado}
-              buscaTexto={buscaTexto}
               onAbrirDetalhe={(ticket) => setModais({ ...modais, ticketDetalhe: ticket })}
               onAbrirAuditoria={(proj) => setModais({ ...modais, auditoria: proj })}
               onAbrirEdicao={() => setModais({ ...modais, editarProjeto: true })}
