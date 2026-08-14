@@ -172,31 +172,38 @@ export function OrcamentoDocumentoModal({ cliente, servicosSelecionados, onClose
   };
 
   const handleConfirm = () => {
-    onConfirm(servicosAtivos.map((service) => service.nome), currency(totalValor));
+    onConfirm(
+      servicosAtivos.map((service) => ({
+        nome: service.nome,
+        indice: service.indice,
+        valor: service.indice * valorReferencia,
+      })),
+      currency(totalValor),
+    );
   };
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 2800, background: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
       <div style={{ width: 'min(760px, 100%)', height: 'calc(100vh - 48px)', maxHeight: 'calc(100vh - 48px)', borderRadius: '22px', background: '#FFFFFF', overflow: 'hidden', boxShadow: '0 28px 90px rgba(15, 23, 42, 0.32)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #E5EBF5', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '18px', flexShrink: 0 }}>
-          <div><h2 style={{ margin: 0, color: '#061733', fontSize: '18px', fontWeight: 900 }}>Adicionar Servicos ao Documento</h2><p style={{ margin: '5px 0 0', color: '#64748B', fontSize: '13px', fontWeight: 700 }}>Orcamento rapido sem alterar cliente ou matricula.</p></div>
+          <div><h2 style={{ margin: 0, color: '#061733', fontSize: '18px', fontWeight: 900 }}>Adicionar Serviços ao Documento</h2><p style={{ margin: '5px 0 0', color: '#64748B', fontSize: '13px', fontWeight: 700 }}>Orçamento rápido sem alterar cliente ou matrícula.</p></div>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ width: '40px', height: '40px', borderRadius: '12px', border: '1px solid #DDE5F2', background: '#FFFFFF', color: '#64748B', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><X size={19} /></button>
         </div>
 
         <div className="scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', maxHeight: 'calc(100vh - 160px)', padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: '18px', background: '#F6F8FC' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '14px' }}>
             <ReadOnlyField label="Cliente bloqueado" value={cliente.nome} icon={UserRound} />
-            <label style={labelStyle}>Matricula<input value={cliente.matricula} onChange={(event) => onClienteChange('matricula', event.target.value)} style={fieldBase} /></label>
+            <label style={labelStyle}>Matrícula<input value={cliente.matricula} onChange={(event) => onClienteChange('matricula', event.target.value)} style={fieldBase} /></label>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.6fr', gap: '14px', padding: '16px', borderRadius: '16px', border: '1px solid #E5EBF5', background: '#FFFFFF' }}>
-            <label style={labelStyle}>Valor de Referencia<input value={valorReferencia.toFixed(2).replace('.', ',')} onChange={(event) => setValorReferencia(parseCurrency(event.target.value))} style={fieldBase} /></label>
-            <label style={labelStyle}>Area<input value={cliente.area} onChange={(event) => onClienteChange('area', event.target.value)} style={fieldBase} /></label>
+            <label style={labelStyle}>Valor de Referência<input value={valorReferencia.toFixed(2).replace('.', ',')} onChange={(event) => setValorReferencia(parseCurrency(event.target.value))} style={fieldBase} /></label>
+            <label style={labelStyle}>Área<input value={cliente.area} onChange={(event) => onClienteChange('area', event.target.value)} style={fieldBase} /></label>
           </div>
 
           <div style={{ borderRadius: '16px', border: '1px solid #E5EBF5', background: '#FFFFFF', overflow: 'hidden' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.7fr 1fr', gap: '16px', padding: '14px 16px', borderBottom: '2px solid #E8EDF5', color: '#8E8A97', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase' }}>
-              <span>Servico</span><span style={{ textAlign: 'center' }}>Indice</span><span style={{ textAlign: 'right' }}>Valor</span>
+              <span>Serviço</span><span style={{ textAlign: 'center' }}>Índice</span><span style={{ textAlign: 'right' }}>Valor</span>
             </div>
             <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: 'calc(100vh - 420px)', overflowY: 'auto', minHeight: 0 }}>
               {servicosModal.map((service) => {
@@ -216,7 +223,7 @@ export function OrcamentoDocumentoModal({ cliente, servicosSelecionados, onClose
         <div style={{ padding: '16px 24px', borderTop: '1px solid #E5EBF5', background: '#FFFFFF', display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '12px', alignItems: 'center', flexShrink: 0 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '12px', fontSize: '13px', fontWeight: 900, color: '#061733' }}>Total <span style={{ color: '#64748B' }}>{totalIndice.toFixed(1)}</span><span>{currency(totalValor)}</span></div>
           <button type="button" onClick={onClose} style={{ height: '44px', padding: '0 18px', borderRadius: '12px', border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#334155', fontWeight: 800, cursor: 'pointer' }}>Cancelar</button>
-          <button type="button" onClick={handleConfirm} style={{ height: '44px', padding: '0 20px', borderRadius: '12px', border: 'none', background: '#0F766E', color: '#FFFFFF', fontWeight: 900, cursor: 'pointer' }}>Aplicar Servicos</button>
+          <button type="button" onClick={handleConfirm} style={{ height: '44px', padding: '0 20px', borderRadius: '12px', border: 'none', background: '#0F766E', color: '#FFFFFF', fontWeight: 900, cursor: 'pointer' }}>Aplicar Serviços</button>
         </div>
       </div>
     </div>

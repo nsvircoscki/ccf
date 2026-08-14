@@ -33,6 +33,8 @@ function servicoParaFormulario(servico) {
   // bruta dos itens selecionados), que é sempre gravado ao salvar o orçamento.
   const orcamentoAprovado = servico.statusOrcamento === 'APROVADO';
   const valor = orcamentoAprovado ? servico.valorFinal ?? servico.valorTotal ?? 0 : null;
+  const valorReferencia = Number(servico.valorReferencia || 0);
+
   return {
     id: servico.id,
     numeroServico: servico.numeroServico,
@@ -40,10 +42,14 @@ function servicoParaFormulario(servico) {
     matricula: servico.matricula || '',
     area: servico.area != null ? String(servico.area) : '',
     municipio: servico.municipio || '',
-    servicos: itensSelecionados.map((item) => item.nome),
+    servicos: itensSelecionados.map((item) => ({
+      nome: item.nome,
+      indice: Number(item.indice ?? 0),
+      valor: Number(item.valor ?? (Number(item.indice ?? 0) * valorReferencia) ?? 0),
+    })),
     valorGlobal: valor != null ? valor.toFixed(2).replace('.', ',') : '',
     itensOrcamento,
-    valorReferencia: servico.valorReferencia || 0,
+    valorReferencia,
   };
 }
 
@@ -86,6 +92,15 @@ function EmissaoDocumentos() {
     setClienteSelecionado((current) => ({ ...current, [field]: value }));
   };
 
+  const normalizeServico = (servico) => {
+    if (typeof servico === 'string') return { nome: servico, indice: 0, valor: 0 };
+    return {
+      nome: servico?.nome || 'Serviço sem descrição',
+      indice: Number(servico?.indice ?? 0),
+      valor: Number(servico?.valor ?? 0),
+    };
+  };
+
   const handleAplicarServicos = (servicos, totalFormatado) => {
     setServicosSelecionados(servicos);
     setValorGlobal(totalFormatado.replace('R$', '').trim());
@@ -95,15 +110,23 @@ function EmissaoDocumentos() {
   const gerarPdf = () => {
     const numeroOrcamento = clienteSelecionado.numeroServico;
     const linhasServicos = servicosSelecionados
-      .map(
-        (servico, index) => `
+      .map((servico, index) => {
+        const item = normalizeServico(servico);
+        const nomeServico = item.nome;
+        const valorServico = Number(item.valor ?? 0);
+        const valorFormatado = valorServico.toLocaleString('pt-BR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+
+        return `
                     <tr>
                       <td class="col-item item-number">${index + 1}</td>
-                      <td class="col-desc">${escapeHtml(servico)}</td>
+                      <td class="col-desc">${escapeHtml(nomeServico)}</td>
                       <td class="col-unid item-number">1</td>
-                      <td></td>
-                    </tr>`,
-      )
+                      <td>R$ ${escapeHtml(valorFormatado)}</td>
+                    </tr>`;
+      })
       .join('');
     const printWindow = window.open('', '_blank', 'width=900,height=700');
 
@@ -125,9 +148,10 @@ function EmissaoDocumentos() {
             body { background: #525659; display: flex; justify-content: center; padding: 40px 20px; font-family: Arial, sans-serif; color: #000; }
             .page-a4 { width: 210mm; height: 297mm; background: #fff url('${marcaDagua}') no-repeat center / 100% 100%; position: relative; box-shadow: 0 4px 12px rgba(0,0,0,0.4); padding: 12mm 18mm; overflow: hidden; }
             .content-wrapper { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; }
-            .doc-header { display: flex; justify-content: space-between; margin-bottom: 6mm; }
+            .doc-header { display: flex; justify-content: space-between; margin-bottom: 4mm; }
             .doc-header img { max-width: 150px; }
             .doc-header strong { font-size: 10pt; margin-top: 6mm; }
+            .doc-divider { border-top: 2px solid #000; margin-bottom: 5mm; }
             .doc-info, .greeting { font-size: 11pt; margin-bottom: 5mm; line-height: 1.3; }
             .budget-table { width: 100%; border-collapse: collapse; margin-bottom: 1mm; font-size: 11pt; }
             .budget-table th { border: solid #000; border-width: 2px 0; padding: 4px 0; }
@@ -141,6 +165,7 @@ function EmissaoDocumentos() {
             .doc-footer { margin-top: auto; }
             .signatures { display: flex; justify-content: space-between; margin-bottom: 10mm; }
             .sig-box { width: 45%; font-size: 10pt; line-height: 1.15; border-top: 2px solid #000; padding-top: 3px; }
+            .sig-box strong { display: block; margin-bottom: 3px; }
             .contact-info { text-align: center; font-size: 9.5pt; border-top: 1px solid #000; padding-top: 10px; }
             @media print {
               body { background: transparent; padding: 0; }
@@ -155,9 +180,10 @@ function EmissaoDocumentos() {
                 <img src="${logoCcf}" alt="Logotipo CCF" />
                 <strong>${escapeHtml(numeroOrcamento)}</strong>
               </header>
+              <div class="doc-divider"></div>
 
               <div class="doc-info"><strong>Para: &nbsp;&nbsp;&nbsp;${escapeHtml(clienteSelecionado.nome)}</strong></div>
-              <div class="greeting">Prezado,<br>Conforme solicitado, segue abaixo proposta de valores de Prestacao de Servicos:</div>
+              <div class="greeting">Prezado,<br>Conforme solicitado, segue abaixo proposta de valores de Prestação de Serviços:</div>
 
               <table class="budget-table">
                 <thead>
@@ -169,24 +195,27 @@ function EmissaoDocumentos() {
               </table>
 
               <section class="observations">
-                <strong>Obs. (Especificacoes):</strong><br>
-                Matricula: ${escapeHtml(clienteSelecionado.matricula)} &nbsp;|&nbsp; Area Informada: ${escapeHtml(clienteSelecionado.area)} &nbsp;|&nbsp; Municipio/UF: ${escapeHtml(clienteSelecionado.municipio)}<br>
-                Responsavel Tecnico: ${escapeHtml(responsavel || 'Nao informado')}<br>
-                ${escapeHtml(observacoes || 'Sem observacoes adicionais.')}
+                <strong>Obs. (Especificações):</strong><br>
+                Matrícula: ${escapeHtml(clienteSelecionado.matricula)} &nbsp;|&nbsp; Área Informada: ${escapeHtml(clienteSelecionado.area)} &nbsp;|&nbsp; Município/UF: ${escapeHtml(clienteSelecionado.municipio)}<br>
+                Responsável Técnico: ${escapeHtml(responsavel || 'Não informado')}<br>
+                ${escapeHtml(observacoes || 'Sem observações adicionais.')}
                 <div style="margin-top: 15mm;">Pagamento: A combinar.<br>Validade da proposta: 10 dias.</div>
               </section>
 
-              <div class="closing">Coloco-me a disposicao para maiores esclarecimentos que se fizerem necessarios.<br>Atenciosamente,</div>
+              <div class="closing">Coloco-me à disposição para maiores esclarecimentos que se fizerem necessários.<br>Atenciosamente,</div>
 
               <footer class="doc-footer">
                 <div class="signatures">
                   <div class="sig-box">
-                    <strong>Eng. CHARLES COSTI</strong><br>CCF Consultores Ltda.<br>Eng. Florestal<br>Eng. de Seguranca do Trabalho<br>Esp. em Gestao Ambiental<br>Esp. em Licenciamento Ambiental<br>Esp. em Georreferenciamento de Imoveis RL
+                    <strong>Assinatura do Cliente</strong>
+                    <div style="height: 28px; margin-top: 8px; border-bottom: 1px solid #000; width: 100%;"></div>
                   </div>
-                  <div class="sig-box" style="text-align: right;">Aprovacao</div>
+                  <div class="sig-box" style="text-align: right;">
+                    <strong>Eng. CHARLES COSTI</strong><br>CCF Consultores Ltda.<br>Eng. Florestal<br>Eng. de Segurança do Trabalho<br>Esp. em Gestão Ambiental<br>Esp. em Licenciamento Ambiental<br>Esp. em Georreferenciamento de Imóveis RL
+                  </div>
                 </div>
                 <address class="contact-info">
-                  Rua Carlos Bayerl, 214 - Progresso - CEP: 89.281-066 _ Sao Bento do Sul/SC<br>
+                  Rua Carlos Bayerl, 214 - Progresso - CEP: 89.281-066 _ São Bento do Sul/SC<br>
                   Fone: (47) 3633-3711 - <a href="mailto:ccfconsultores@hotmail.com" style="color: #00f;">ccfconsultores@hotmail.com</a>
                 </address>
               </footer>
@@ -200,7 +229,7 @@ function EmissaoDocumentos() {
   };
 
   if (!clienteSelecionado) {
-    return <div style={{ padding: '28px' }}>Carregando servicos...</div>;
+    return <div style={{ padding: '28px' }}>Carregando serviços...</div>;
   }
 
   return (
@@ -209,7 +238,7 @@ function EmissaoDocumentos() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '18px', paddingBottom: '12px', borderBottom: '1px solid #DDE5F2' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><FileBadge size={21} /></span>
-            <div><h1 style={{ margin: 0, fontSize: '22px', fontWeight: 900 }}>Emissao de Documentos</h1><p style={{ margin: '3px 0 0', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>Geracao visual de OS tecnica e contrato formal</p></div>
+            <div><h1 style={{ margin: 0, fontSize: '22px', fontWeight: 900 }}>Emissão de Documentos</h1><p style={{ margin: '3px 0 0', fontSize: '13px', color: '#64748B', fontWeight: 600 }}>Geração visual de OS técnica e contrato formal</p></div>
           </div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', borderRadius: '999px', background: '#ECFDF5', border: '1px solid #A7F3D0', color: '#047857', padding: '10px 16px', fontSize: '12px', fontWeight: 900 }}>
           </div>
@@ -218,16 +247,16 @@ function EmissaoDocumentos() {
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.95fr', gap: '18px', alignItems: 'stretch' }}>
           <section style={{ ...cardStyle, padding: '22px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>1</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Conferencia de Dados Minimos</h2></div>
-              <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 800 }}>Cliente selecionavel</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>1</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Conferência de Dados Mínimos</h2></div>
+              <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 800 }}>Cliente selecionável</span>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 0.75fr', gap: '14px' }}>
               <label style={labelStyle}>Nome do Cliente<AnimatedDropdown value={clienteSelecionado.id} onChange={handleServicoChange} options={opcoesServico} searchable /></label>
-              <label style={labelStyle}>Matricula<input value={clienteSelecionado.matricula} onChange={(event) => handleClienteFieldChange('matricula', event.target.value)} style={fieldBase} /></label>
-              <label style={labelStyle}>Area Informada<input value={clienteSelecionado.area} onChange={(event) => handleClienteFieldChange('area', event.target.value)} style={fieldBase} /></label>
+              <label style={labelStyle}>Matrícula<input value={clienteSelecionado.matricula} onChange={(event) => handleClienteFieldChange('matricula', event.target.value)} style={fieldBase} /></label>
+              <label style={labelStyle}>Área Informada<input value={clienteSelecionado.area} onChange={(event) => handleClienteFieldChange('area', event.target.value)} style={fieldBase} /></label>
               <label style={labelStyle}>
-                Municipio/UF
+                Município/UF
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   {/* <FieldIcon icon={MapPin} /> */}
                   <input value={clienteSelecionado.municipio} list="municipios-documentos" onChange={(event) => handleClienteFieldChange('municipio', event.target.value)} style={fieldBase} />
@@ -237,33 +266,36 @@ function EmissaoDocumentos() {
             </div>
 
             <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid #E5EBF5' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#334155', fontSize: '12px', fontWeight: 900, textTransform: 'uppercase' }}><BriefcaseBusiness size={16} color="#475569" /> Servicos Selecionados</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#334155', fontSize: '12px', fontWeight: 900, textTransform: 'uppercase' }}><BriefcaseBusiness size={16} color="#475569" /> Serviços Selecionados</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                {servicosSelecionados.map((servico) => (
-                  <span key={servico} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', borderRadius: '12px', background: '#2D7AFD', color: '#FFFFFF', padding: '10px 13px', fontSize: '13px', fontWeight: 900 }}>
-                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22C55E' }} />{servico}
-                  </span>
-                ))}
-                <button type="button" onClick={() => setModalOrcamentoAberto(true)} aria-label="Adicionar servico" style={{ minWidth: '46px', height: '42px', borderRadius: '12px', border: '1px dashed #94A3B8', background: '#E2E8F0', color: '#334155', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={21} strokeWidth={2.6} /></button>
+                {servicosSelecionados.map((servico) => {
+                  const item = normalizeServico(servico);
+                  return (
+                    <span key={`${item.nome}-${item.indice}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', borderRadius: '12px', background: '#2D7AFD', color: '#FFFFFF', padding: '10px 13px', fontSize: '13px', fontWeight: 900 }}>
+                      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22C55E' }} />{item.nome}
+                    </span>
+                  );
+                })}
+                <button type="button" onClick={() => setModalOrcamentoAberto(true)} aria-label="Adicionar serviço" style={{ minWidth: '46px', height: '42px', borderRadius: '12px', border: '1px dashed #94A3B8', background: '#E2E8F0', color: '#334155', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={21} strokeWidth={2.6} /></button>
               </div>
             </div>
           </section>
 
           <section style={{ ...cardStyle, padding: '22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '20px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>2</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Configuracoes Tecnicas da OS</h2></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '20px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>2</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Configurações Técnicas da OS</h2></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <label style={labelStyle}>Colaborador Tecnico Responsavel<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><FieldIcon icon={UserRound} /><select value={responsavel} onChange={(event) => setResponsavel(event.target.value)} style={fieldBase}><option>Eng. Charles Costi</option></select></div></label>
+              <label style={labelStyle}>Colaborador Técnico Responsável<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><FieldIcon icon={UserRound} /><select value={responsavel} onChange={(event) => setResponsavel(event.target.value)} style={fieldBase}><option>Eng. Charles Costi</option></select></div></label>
               <label style={labelStyle}>Valor Global da Obra (R$)<input value={valorGlobal} onChange={(event) => setValorGlobal(event.target.value)} inputMode="decimal" style={fieldBase} /></label>
-              <label style={labelStyle}>Observacoes Adicionais do Rodape<textarea value={observacoes} onChange={(event) => setObservacoes(event.target.value)} placeholder="Digite observacoes internas ou restricoes de campo..." style={{ ...fieldBase, minHeight: '104px', resize: 'vertical', padding: '13px', lineHeight: 1.45, fontWeight: 600 }} /></label>
+              <label style={labelStyle}>Observações Adicionais do Rodapé<textarea value={observacoes} onChange={(event) => setObservacoes(event.target.value)} placeholder="Digite observações internas ou restrições de campo..." style={{ ...fieldBase, minHeight: '104px', resize: 'vertical', padding: '13px', lineHeight: 1.45, fontWeight: 600 }} /></label>
             </div>
           </section>
         </div>
 
         <section style={{ ...cardStyle, padding: '22px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '18px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>3</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Acoes de Documentos</h2></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '18px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>3</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Ações de Documentos</h2></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <button type="button" onClick={gerarPdf} style={{ minHeight: '88px', borderRadius: '16px', border: 'none', background: '#2D7AFD', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '18px 20px', boxShadow: '0 14px 28px rgba(45, 122, 253, 0.28)' }}><span style={{ display: 'flex', alignItems: 'center', gap: '13px', textAlign: 'left' }}><span style={{ width: '42px', height: '42px', borderRadius: '13px', background: 'rgba(255,255,255,0.12)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Download size={21} /></span><span><strong style={{ display: 'block', fontSize: '15px' }}>Gerar Ordem de Servico (PDF)</strong><small style={{ display: 'block', marginTop: '4px', color: '#CBD5E1', fontWeight: 700 }}>Abre a impressao para salvar em PDF</small></span></span><BadgeCheck size={24} color="#34D399" /></button>
-            <button type="button" onClick={() => setModalContratoAberto(true)} style={{ minHeight: '88px', borderRadius: '16px', border: '1px solid #FDBA74', background: '#FFF7ED', color: '#9A3412', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '18px 20px' }}><span style={{ display: 'flex', alignItems: 'center', gap: '13px', textAlign: 'left' }}><span style={{ width: '42px', height: '42px', borderRadius: '13px', background: '#FFEDD5', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Building2 size={21} /></span><span><strong style={{ display: 'block', fontSize: '15px' }}>Gerar Contrato Padrao (DOCX)</strong><small style={{ display: 'block', marginTop: '4px', color: '#C2410C', fontWeight: 800 }}>Requer validacao juridica complementar</small></span></span><AlertTriangle size={23} /></button>
+            <button type="button" onClick={gerarPdf} style={{ minHeight: '88px', borderRadius: '16px', border: 'none', background: '#2D7AFD', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '18px 20px', boxShadow: '0 14px 28px rgba(45, 122, 253, 0.28)' }}><span style={{ display: 'flex', alignItems: 'center', gap: '13px', textAlign: 'left' }}><span style={{ width: '42px', height: '42px', borderRadius: '13px', background: 'rgba(255,255,255,0.12)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Download size={21} /></span><span><strong style={{ display: 'block', fontSize: '15px' }}>Gerar Ordem de Serviço (PDF)</strong><small style={{ display: 'block', marginTop: '4px', color: '#CBD5E1', fontWeight: 700 }}>Abre a impressão para salvar em PDF</small></span></span><BadgeCheck size={24} color="#34D399" /></button>
+            <button type="button" onClick={() => setModalContratoAberto(true)} style={{ minHeight: '88px', borderRadius: '16px', border: '1px solid #FDBA74', background: '#FFF7ED', color: '#9A3412', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '18px 20px' }}><span style={{ display: 'flex', alignItems: 'center', gap: '13px', textAlign: 'left' }}><span style={{ width: '42px', height: '42px', borderRadius: '13px', background: '#FFEDD5', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Building2 size={21} /></span><span><strong style={{ display: 'block', fontSize: '15px' }}>Gerar Contrato Padrão (DOCX)</strong><small style={{ display: 'block', marginTop: '4px', color: '#C2410C', fontWeight: 800 }}>Requer validação jurídica complementar</small></span></span><AlertTriangle size={23} /></button>
           </div>
         </section>
       </div>
