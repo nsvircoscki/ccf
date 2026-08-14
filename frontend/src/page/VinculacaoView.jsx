@@ -5,6 +5,8 @@ import { imovelService } from '../services/imovelService';
 import {
   Actions, CheckboxList, ChipList, Field, Icon, SearchableSelect, SelectField, Section, Segmented, Shell, Toast, useToast, C,
 } from '../components/cadastros/CadastroKit.jsx';
+import CadastroClienteView from './CadastroClienteView.jsx';
+import CadastroImovelView from './CadastroImovelView.jsx';
 
 const vinculacaoVazia = {
   proprietarioIds: [],
@@ -56,6 +58,10 @@ export default function VinculacaoView({ onBack }) {
   const [tab, setTab] = useState('vinc');
   const [salvando, setSalvando] = useState(false);
   const [baixando, setBaixando] = useState(false);
+  // null | 'proprietario' | 'procurador' — qual seletor de pessoa disparou o
+  // cadastro rápido, pra saber em qual campo entrar a pessoa criada.
+  const [alvoModalPessoa, setAlvoModalPessoa] = useState(null);
+  const [modalImovelAberto, setModalImovelAberto] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -272,7 +278,8 @@ export default function VinculacaoView({ onBack }) {
                 <ChipList label="Proprietários" icon="user" accent={accent} span={2}
                   options={clientes.map(paraOpcaoPessoa)} values={form.proprietarioIds}
                   onChange={(v) => set('proprietarioIds')(v)} placeholder="Buscar cliente para adicionar…"
-                  emptyHint="Nenhum proprietário vinculado a este serviço ainda." />
+                  emptyHint="Nenhum proprietário vinculado a este serviço ainda."
+                  onCriarNovo={() => setAlvoModalPessoa('proprietario')} criarNovoLabel="Cadastrar nova pessoa" />
                 <SelectField label="Situação neste serviço" icon="scale" value={form.situacaoProprietario} onChange={set('situacaoProprietario')}
                   options={[
                     { value: 'proprietário', label: 'Proprietário' },
@@ -287,13 +294,15 @@ export default function VinculacaoView({ onBack }) {
                 <SearchableSelect label="Procurador (opcional)" icon="user" accent={accent} span={2}
                   options={clientes.filter((c) => !form.proprietarioIds.includes(c.id)).map(paraOpcaoPessoa)}
                   value={form.procuradorId || null} onChange={(v) => set('procuradorId')(v || '')}
-                  placeholder="Buscar pessoa com procuração neste serviço…" />
+                  placeholder="Buscar pessoa com procuração neste serviço…"
+                  onCriarNovo={() => setAlvoModalPessoa('procurador')} criarNovoLabel="Cadastrar nova pessoa" />
 
                 <ChipList label="Adicionar confrontante" icon="plus" accent={accent} span={2}
                   options={imoveis.filter((i) => i.id !== form.imovelId).map(paraOpcaoImovel)}
                   values={form.confrontanteIds} onChange={(v) => set('confrontanteIds')(v)}
                   placeholder="Buscar imóvel confrontante para adicionar…"
-                  emptyHint="Nenhum confrontante vinculado a este serviço ainda." />
+                  emptyHint="Nenhum confrontante vinculado a este serviço ainda."
+                  onCriarNovo={() => setModalImovelAberto(true)} criarNovoLabel="Cadastrar novo imóvel" />
               </Section>
             </div>
           )}
@@ -369,6 +378,34 @@ export default function VinculacaoView({ onBack }) {
             )}
           </Section>
         </div>
+      )}
+
+      {alvoModalPessoa && (
+        <CadastroClienteView
+          modal
+          onBack={() => setAlvoModalPessoa(null)}
+          onSaved={(novaPessoa) => {
+            setClientes((atuais) => [novaPessoa, ...atuais]);
+            if (alvoModalPessoa === 'proprietario') {
+              set('proprietarioIds')([...form.proprietarioIds, novaPessoa.id]);
+            } else {
+              set('procuradorId')(novaPessoa.id);
+            }
+            setAlvoModalPessoa(null);
+          }}
+        />
+      )}
+
+      {modalImovelAberto && (
+        <CadastroImovelView
+          modal
+          onBack={() => setModalImovelAberto(false)}
+          onSaved={(novoImovel) => {
+            setImoveis((atuais) => [novoImovel, ...atuais]);
+            set('confrontanteIds')([...form.confrontanteIds, novoImovel.id]);
+            setModalImovelAberto(false);
+          }}
+        />
       )}
     </Shell>
   );

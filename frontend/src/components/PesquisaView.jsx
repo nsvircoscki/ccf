@@ -49,8 +49,10 @@ const contarEtapas = (projeto) =>
     return acc;
   }, {});
 
-// Um anel por etapa (Iniciar / Em Andamento / Concluído) — os três sempre
-// somam 100%, porque toda tarefa está em exatamente uma dessas três.
+// Um anel por etapa. Iniciar/Em Andamento recebem "total" já sem as tarefas
+// concluídas (ver totalAtivasGlobal), então os dois somam 100% entre si;
+// Concluído recebe o total geral, porque a dele é a taxa de conclusão
+// histórica, não uma fatia do que ainda está ativo.
 function CardEtapaGlobal({ label, cor, count, total }) {
   const percentual = total === 0 ? 0 : Math.round((count / total) * 100);
   const raio = 36;
@@ -98,20 +100,24 @@ export function PesquisaView({
   const [filtroStatus, setFiltroStatus] = useState('Todas');
   const [filtroTipo, setFiltroTipo] = useState('Todos');
   const [selectedId, setSelectedId] = useState(null);
-  // Só o Charles administra as etapas de todo mundo — por padrão ele já vê
-  // tudo; esse toggle deixa ele restringir pra só as etapas dedicadas a ele
-  // quando quiser, sem perder a visão geral (fica só um clique de distância).
+  // Projeto 100% Concluído sai da busca principal e vai pra aba de inativos —
+  // fica fora do fluxo de trabalho do dia a dia sem sumir do sistema.
+  const [abaProjetos, setAbaProjetos] = useState('ativos');
+  // Por padrão todo mundo já vê tudo; esse toggle deixa restringir pra só as
+  // etapas do próprio setor de quem estiver logado, sem perder a visão geral
+  // (fica só um clique de distância).
   const [somenteMinhasEtapas, setSomenteMinhasEtapas] = useState(false);
-  // Total de Serviço cadastrados (tabela Servico, não os projetos do Kanban
-  // usados no restante desta tela) — mesma contagem de "SELECT COUNT(*) FROM
-  // Servico" que já tínhamos consultado direto no banco.
-  const [totalServicos, setTotalServicos] = useState(null);
+  // Lista completa de Serviço (tabela Servico, não os projetos do Kanban
+  // usados no restante desta tela) — guarda a lista, não só o total, porque o
+  // contador exibido precisa descontar os serviços já inativados (ver
+  // servicosInativos abaixo).
+  const [servicosLista, setServicosLista] = useState(null);
 
   useEffect(() => {
     (async () => {
       try {
         const lista = await servicoService.listarTodos();
-        if (Array.isArray(lista)) setTotalServicos(lista.length);
+        if (Array.isArray(lista)) setServicosLista(lista);
       } catch (erro) {
         console.error('Erro ao carregar total de serviços:', erro);
       }
@@ -120,14 +126,12 @@ export function PesquisaView({
 
   const etapaTerm = normalize(buscaEtapa.trim());
 
-  // Mesma lógica de filtro por setor do usuário logado que o Dashboard já usava
-  // — isso é escopo de acesso (o que esse usuário pode ver), não um filtro de
-  // status, então continua sendo aplicado direto sobre os tickets.
+  // "Minhas Etapas" restringe às tarefas do próprio setor do usuário logado —
+  // mesmo toggle pra todo mundo agora, não só o Charles. Sem o toggle, cada
+  // usuário via só as próprias etapas sem opção de ver o resto.
   let tarefas = tickets;
-  if (usuarioLogado !== 'Charles') {
+  if (somenteMinhasEtapas) {
     tarefas = tarefas.filter(t => (t.currentStep?.requiredRole?.name || 'Coordenação') === usuarioLogado);
-  } else if (somenteMinhasEtapas) {
-    tarefas = tarefas.filter(t => (t.currentStep?.requiredRole?.name || 'Coordenação') === 'Charles');
   }
 
   // Agrupamento por projeto ANTES de filtrar por status/tipo/etapa — cada
@@ -165,29 +169,70 @@ export function PesquisaView({
     return 'Em Andamento';
   };
 
-  let projetos = todosProjetos;
-  if (filtroStatus === 'Pendentes') {
-    projetos = projetos.filter(p => statusDoProjeto(p) !== 'Concluído');
-  } else if (filtroStatus !== 'Todas') {
+  // Serviço "ativo" pro contador: tem pelo menos um projeto no Kanban que
+  // ainda não terminou (ou nenhum projeto fabricado ainda). Ignora o escopo
+  // de "Minhas Etapas" de propósito — usa os tickets brutos, porque essa é
+  // uma contagem geral do sistema, não a visão filtrada do usuário.
+  const projetosPorServico = {};
+  tickets.forEach((ticket) => {
+    const servicoId = ticket.workflow?.servicoId;
+    if (!servicoId) return;
+    projetosPorServico[servicoId] ??= {};
+    (projetosPorServico[servicoId][ticket.workflowId] ??= []).push(ticket.currentStep?.step_name || 'Iniciar');
+  });
+  const servicosInativos = new Set(
+    Object.entries(projetosPorServico)
+      .filter(([, projetos]) => {
+        const listas = Object.values(projetos);
+        return listas.length > 0 && listas.every((etapas) => etapas.every((e) => e === 'Concluído'));
+      })
+      .map(([servicoId]) => servicoId)
+  );
+  const totalServicosAtivos = servicosLista === null ? null : servicosLista.filter((s) => !servicosInativos.has(s.id)).length;
+
+  // Aba "Ativos": projetos com pelo menos uma etapa não concluída. Aba
+  // "Inativos": só os 100% Concluído — assim que a última etapa fecha, o
+  // projeto some da busca principal e só aparece ali.
+  let projetos = todosProjetos.filter(p => (
+    abaProjetos === 'inativos' ? statusDoProjeto(p) === 'Concluído' : statusDoProjeto(p) !== 'Concluído'
+  ));
+  if (abaProjetos === 'ativos' && filtroStatus !== 'Todas') {
     projetos = projetos.filter(p => statusDoProjeto(p) === filtroStatus);
   }
   if (filtroTipo !== 'Todos') {
     projetos = projetos.filter(p => p.description?.includes(filtroTipo));
   }
+  // Busca por etapa: o projeto só entra se tiver uma tarefa com esse nome E
+  // essa tarefa específica estiver no status que os outros filtros já
+  // selecionaram — senão um projeto aparecia pela etapa buscada mesmo com
+  // ela já concluída (ou fora do Iniciar/Em Andamento escolhido ao lado).
   if (etapaTerm !== '') {
     projetos = projetos.filter(p => p.tasks.some(t => {
-      const etapaTexto = normalize(t.currentStep?.step_name || 'Iniciar');
-      return etapaTexto.includes(etapaTerm) || normalize(t.title).includes(etapaTerm);
+      if (!normalize(t.title).includes(etapaTerm)) return false;
+      const statusDaTarefa = t.currentStep?.step_name || 'Iniciar';
+      if (abaProjetos === 'inativos') return statusDaTarefa === 'Concluído';
+      if (filtroStatus === 'Todas') return statusDaTarefa !== 'Concluído';
+      return statusDaTarefa === filtroStatus;
     }));
   }
 
-  // Progresso global — mesmos números que o Dashboard mostrava, calculados
-  // sobre as tarefas dos projetos já filtrados (status, tipo, etapa).
-  const tarefasFiltradas = projetos.flatMap(p => p.tasks);
-  const totalTarefas = tarefasFiltradas.length;
-  const iniciarGlobal = tarefasFiltradas.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Iniciar').length;
-  const andamentoGlobal = tarefasFiltradas.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Em Andamento').length;
-  const concluidasGlobal = tarefasFiltradas.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Concluído').length;
+  // Progresso global: só sobre projetos Ativos, independente da aba/filtro
+  // que a pessoa escolheu ver — projeto que já foi pra Inativos (100%
+  // Concluído) não entra na conta nenhuma das três, senão "Concluído" fica
+  // inflado por trabalho antigo e arquivado em vez de refletir o que está em
+  // andamento agora. Cada tarefa tem exatamente um step_name, então as três
+  // nunca se sobrepõem entre si.
+  const projetosAtivosGlobal = todosProjetos.filter(p => statusDoProjeto(p) !== 'Concluído');
+  const tarefasGlobais = projetosAtivosGlobal.flatMap(p => p.tasks);
+  const totalTarefas = tarefasGlobais.length;
+  const iniciarGlobal = tarefasGlobais.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Iniciar').length;
+  const andamentoGlobal = tarefasGlobais.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Em Andamento').length;
+  const concluidasGlobal = tarefasGlobais.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Concluído').length;
+  // Iniciar/Em Andamento têm que somar 100% ENTRE ELAS, não junto com quem já
+  // terminou — senão a % de "Iniciar" fica artificialmente alta só porque o
+  // total inclui tarefa concluída há meses. Concluído continua sobre o total
+  // geral (é a taxa de conclusão histórica, não faz sentido excluir a si mesma).
+  const totalAtivasGlobal = totalTarefas - concluidasGlobal;
 
   const q = query.trim().toLowerCase();
   const resultados = q
@@ -204,12 +249,12 @@ export function PesquisaView({
   const progressoAtivo = totalAtivo === 0 ? 0 : Math.round((concluidasAtivo / totalAtivo) * 100);
   const setoresAtivo = ativo ? [...new Set(ativo.tasks.map(t => t.currentStep?.requiredRole?.name || 'Coordenação'))] : [];
 
+  // Sem "Concluído"/"Pendentes" aqui — quem já concluiu 100% foi pra aba
+  // Inativos (abaProjetos), então dentro de Ativos só cabe Iniciar/Andamento.
   const statusOptions = [
-    { value: 'Pendentes', label: 'Pendentes (Iniciar / Em Andamento)' },
-    { value: 'Todas', label: 'Todas (Incluindo Concluído)' },
+    { value: 'Todas', label: 'Todas (Iniciar / Em Andamento)' },
     { value: 'Iniciar', label: 'Apenas Iniciar' },
     { value: 'Em Andamento', label: 'Apenas Em Andamento' },
-    { value: 'Concluído', label: 'Apenas Concluído' },
   ];
   const tipoOptions = [{ value: 'Todos', label: 'Todos os Tipos' }, ...TIPOS_PROCESSO.map(tipo => ({ value: tipo, label: tipo }))];
 
@@ -225,37 +270,35 @@ export function PesquisaView({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-            {usuarioLogado === 'Charles' && (
-              <div style={{ display: 'flex', background: '#EAEAEA', borderRadius: '20px', padding: '4px' }}>
-                <button
-                  type="button"
-                  onClick={() => setSomenteMinhasEtapas(false)}
-                  style={{
-                    padding: '8px 16px', borderRadius: '16px', border: 'none', cursor: 'pointer',
-                    fontWeight: 'bold', fontSize: '13px',
-                    background: !somenteMinhasEtapas ? '#2D7AFD' : 'transparent',
-                    color: !somenteMinhasEtapas ? '#FFF' : '#787373',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  Todas as Etapas
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSomenteMinhasEtapas(true)}
-                  title="Ver só as etapas dedicadas a você"
-                  style={{
-                    padding: '8px 16px', borderRadius: '16px', border: 'none', cursor: 'pointer',
-                    fontWeight: 'bold', fontSize: '13px',
-                    background: somenteMinhasEtapas ? '#2D7AFD' : 'transparent',
-                    color: somenteMinhasEtapas ? '#FFF' : '#787373',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  Minhas Etapas
-                </button>
-              </div>
-            )}
+            <div style={{ display: 'flex', background: '#EAEAEA', borderRadius: '20px', padding: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setSomenteMinhasEtapas(false)}
+                style={{
+                  padding: '8px 16px', borderRadius: '16px', border: 'none', cursor: 'pointer',
+                  fontWeight: 'bold', fontSize: '13px',
+                  background: !somenteMinhasEtapas ? '#2D7AFD' : 'transparent',
+                  color: !somenteMinhasEtapas ? '#FFF' : '#787373',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                Todas as Etapas
+              </button>
+              <button
+                type="button"
+                onClick={() => setSomenteMinhasEtapas(true)}
+                title="Ver só as etapas dedicadas a você"
+                style={{
+                  padding: '8px 16px', borderRadius: '16px', border: 'none', cursor: 'pointer',
+                  fontWeight: 'bold', fontSize: '13px',
+                  background: somenteMinhasEtapas ? '#2D7AFD' : 'transparent',
+                  color: somenteMinhasEtapas ? '#FFF' : '#787373',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                Minhas Etapas
+              </button>
+            </div>
 
             <div style={{ background: 'white', borderRadius: '15px', padding: '16px 22px', boxShadow: '0px 4px 15px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '14px' }}>
               <div style={{
@@ -267,16 +310,63 @@ export function PesquisaView({
               </div>
               <div>
                 <div style={{ fontWeight: 900, color: '#333', fontSize: '20px', lineHeight: 1 }}>
-                  {totalServicos === null ? '—' : totalServicos}
+                  {totalServicosAtivos === null ? '—' : totalServicosAtivos}
                 </div>
                 <div style={{ fontSize: '12px', color: '#777', fontWeight: 'bold' }}>Serviços cadastrados</div>
               </div>
             </div>
 
-            <CardEtapaGlobal label="Iniciar" cor={getCorStatus('Iniciar')} count={iniciarGlobal} total={totalTarefas} />
-            <CardEtapaGlobal label="Em Andamento" cor={getCorStatus('Em Andamento')} count={andamentoGlobal} total={totalTarefas} />
+            <div style={{ background: 'white', borderRadius: '15px', padding: '16px 22px', boxShadow: '0px 4px 15px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '46px', height: '46px', borderRadius: '12px', flexShrink: 0,
+                background: '#1a3a8a', color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <FiTrello size={20} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 900, color: '#333', fontSize: '20px', lineHeight: 1 }}>
+                  {workflows.length}
+                </div>
+                <div style={{ fontSize: '12px', color: '#777', fontWeight: 'bold' }}>Projetos no Kanban</div>
+              </div>
+            </div>
+
+            <CardEtapaGlobal label="Iniciar" cor={getCorStatus('Iniciar')} count={iniciarGlobal} total={totalAtivasGlobal} />
+            <CardEtapaGlobal label="Em Andamento" cor={getCorStatus('Em Andamento')} count={andamentoGlobal} total={totalAtivasGlobal} />
             <CardEtapaGlobal label="Concluído" cor={getCorStatus('Concluído')} count={concluidasGlobal} total={totalTarefas} />
           </div>
+        </div>
+
+        {/* Aba: projetos em andamento vs. já concluídos (saem da busca principal) */}
+        <div style={{ display: 'flex', background: '#EAEAEA', borderRadius: '20px', padding: '4px', width: 'fit-content' }}>
+          <button
+            type="button"
+            onClick={() => { setAbaProjetos('ativos'); setSelectedId(null); }}
+            style={{
+              padding: '8px 18px', borderRadius: '16px', border: 'none', cursor: 'pointer',
+              fontWeight: 'bold', fontSize: '13px',
+              background: abaProjetos === 'ativos' ? '#2D7AFD' : 'transparent',
+              color: abaProjetos === 'ativos' ? '#FFF' : '#787373',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            Ativos
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAbaProjetos('inativos'); setSelectedId(null); }}
+            title="Projetos com todas as etapas concluídas"
+            style={{
+              padding: '8px 18px', borderRadius: '16px', border: 'none', cursor: 'pointer',
+              fontWeight: 'bold', fontSize: '13px',
+              background: abaProjetos === 'inativos' ? '#2D7AFD' : 'transparent',
+              color: abaProjetos === 'inativos' ? '#FFF' : '#787373',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            Inativos
+          </button>
         </div>
 
         {/* Filtros */}
@@ -331,16 +421,18 @@ export function PesquisaView({
             />
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#999' }}>FILTRAR STATUS</label>
-            <AnimatedDropdown
-              label="Status"
-              value={filtroStatus}
-              onChange={setFiltroStatus}
-              options={statusOptions}
-              width="260px"
-            />
-          </div>
+          {abaProjetos === 'ativos' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#999' }}>FILTRAR STATUS</label>
+              <AnimatedDropdown
+                label="Status"
+                value={filtroStatus}
+                onChange={setFiltroStatus}
+                options={statusOptions}
+                width="260px"
+              />
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '320px minmax(0, 1fr)', gap: '20px', alignItems: 'start' }}>

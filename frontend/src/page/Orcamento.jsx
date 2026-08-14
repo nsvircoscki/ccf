@@ -511,7 +511,14 @@ function Orcamento({ onBack, onOrcamentoDecidido }) {
         })) : [];
 
         setOrcamentos(lista);
-        if (lista.length > 0) applyBudget(lista[0]);
+        if (lista.length > 0) {
+          applyBudget(lista[0]);
+          // Sem isso, o primeiro serviço da lista (o que já abre selecionado)
+          // nunca carrega os tipos pedidos no cadastro nem o orçamento salvo —
+          // só handleOrcamentoChange fazia essa parte, e ele só roda quando o
+          // usuário troca de serviço manualmente no dropdown.
+          carregarOrcamentoSalvo(lista[0].id);
+        }
       } catch (erro) {
         console.error('Erro ao carregar orçamentos:', erro);
       }

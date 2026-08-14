@@ -287,4 +287,22 @@ export const api = {
         });
         return { data: await res.json(), ok: res.ok };
     },
+
+    // ---- TIPOS DE PROCESSO (etapas padrão do Kanban) ----
+    getTiposProcesso: async () => {
+        const res = await fetch(`${BASE_URL}/tipos-processo`);
+        return res.json();
+    },
+
+    // x-usuario: o backend só aceita a escrita vinda de "Charles" (ver
+    // tipoProcessoRoutes.js) — mesmo nível de checagem informal do resto do
+    // sistema, que ainda não tem sessão/token.
+    atualizarTipoProcesso: async (tipoProcesso, etapas, usuarioLogado) => {
+        const res = await fetch(`${BASE_URL}/tipos-processo/${encodeURIComponent(tipoProcesso)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'x-usuario': usuarioLogado || '' },
+            body: JSON.stringify({ etapas }),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
 };

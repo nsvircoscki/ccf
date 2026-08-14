@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2,
+  ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, ListChecks, ArrowLeft,
 } from 'lucide-react';
 
 const MONT = '"Montserrat", sans-serif';
@@ -17,7 +17,15 @@ const MODULOS = [
   { id: 'clientes', label: 'Pessoas', desc: 'Cadastro de clientes, pessoas físicas e jurídicas', icon: Users, color: '#be185d' },
   { id: 'imoveis', label: 'Imóveis', desc: 'Cadastro de imóveis, proprietários e usufrutuários', icon: Home, color: '#7c3aed' },
   { id: 'vinculacao', label: 'SIS DOC', desc: 'Vincular proprietários, imóvel e confrontantes ao serviço', icon: Link2, color: '#1a3a8a' },
-  { id: 'config-documentos', label: 'Configurações', desc: 'Configurar quais documentos aparecem para cada tipo de serviço', icon: Settings2, color: '#64748b' },
+  { id: 'config', label: 'Configurações', desc: 'Documentos, etapas e outros ajustes do sistema', icon: Settings2, color: '#64748b' },
+];
+
+// Sub-módulos dentro de "Configurações" — clicar no tile principal abre esta
+// segunda tela em vez de ir direto pra uma tela específica. "Etapas" só
+// aparece pro usuário Charles (mesma restrição da tela em si).
+const SUBMODULOS_CONFIG = [
+  { id: 'config-documentos', label: 'Documentos', desc: 'Quais documentos aparecem para cada tipo de serviço', icon: FileText, color: '#64748b' },
+  { id: 'config-etapas', label: 'Etapas', desc: 'Etapas padrão de cada tipo de processo no Kanban', icon: ListChecks, color: '#9333ea', apenasCharles: true },
 ];
 
 function ModuleTile({ mod, index, onOpen }) {
@@ -74,6 +82,18 @@ function ModuleTile({ mod, index, onOpen }) {
 }
 
 export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
+  const [submenuConfig, setSubmenuConfig] = useState(false);
+
+  const abrirTilePrincipal = (mod) => {
+    if (mod.id === 'config') {
+      setSubmenuConfig(true);
+      return;
+    }
+    onAbrirModulo(mod.id);
+  };
+
+  const submodulosVisiveis = SUBMODULOS_CONFIG.filter((sub) => !sub.apenasCharles || usuarioLogado === 'Charles');
+
   return (
     <div style={{
       minHeight: '100vh', background: '#f4f7fb', display: 'flex', flexDirection: 'column',
@@ -111,7 +131,21 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
         flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
         padding: '48px 24px 60px', overflowY: 'auto',
       }}>
-        <div style={{ textAlign: 'center', marginBottom: 44 }}>
+        <div style={{ textAlign: 'center', marginBottom: 44, position: 'relative', width: '100%', maxWidth: 640 }}>
+          {submenuConfig && (
+            <button
+              type="button"
+              onClick={() => setSubmenuConfig(false)}
+              aria-label="Voltar aos módulos"
+              style={{
+                position: 'absolute', left: 0, top: 0, width: 36, height: 36, borderRadius: 10,
+                border: '1px solid #e0e7f2', background: '#fff', color: '#3a4a6b',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+              }}
+            >
+              <ArrowLeft size={17} />
+            </button>
+          )}
           <p style={{
             fontFamily: MONT, fontWeight: 600, fontSize: 11, letterSpacing: '0.18em',
             textTransform: 'uppercase', color: '#2e8b2e', margin: '0 0 8px',
@@ -119,7 +153,7 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
             SISTEMA CCF
           </p>
           <h2 style={{ fontFamily: MONT, fontWeight: 700, fontSize: 24, color: '#0e2549', margin: 0, letterSpacing: '-0.01em' }}>
-            Selecione um módulo
+            {submenuConfig ? 'Configurações — escolha o que ajustar' : 'Selecione um módulo'}
           </h2>
         </div>
 
@@ -127,12 +161,12 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
           display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
           gap: '30px 22px', width: '100%', maxWidth: 640, justifyItems: 'center',
         }}>
-          {MODULOS.map((mod, i) => (
+          {(submenuConfig ? submodulosVisiveis : MODULOS).map((mod, i) => (
             <ModuleTile
               key={mod.id}
               mod={mod}
               index={i}
-              onOpen={() => onAbrirModulo(mod.id)}
+              onOpen={() => (submenuConfig ? onAbrirModulo(mod.id) : abrirTilePrincipal(mod))}
             />
           ))}
         </div>

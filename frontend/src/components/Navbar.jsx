@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, KeyRound,
+  ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, KeyRound, ListChecks,
 } from 'lucide-react';
 import { AlterarSenhaModal } from '../modals/AlterarSenhaModal.jsx';
 
@@ -15,7 +15,15 @@ const ITENS = [
   { id: 'clientes', label: 'Pessoas', icon: Users, color: '#be185d' },
   { id: 'imoveis', label: 'Imóveis', icon: Home, color: '#7c3aed' },
   { id: 'vinculacao', label: 'SIS DOC', icon: Link2, color: '#1a3a8a' },
-  { id: 'config-documentos', label: 'Configurações', icon: Settings2, color: '#64748b' },
+  { id: 'config', label: 'Configurações', icon: Settings2, color: '#64748b' },
+];
+
+// Sub-opções do item "Configurações" — clicar nele abre este menu em vez de
+// ir direto pra uma tela, igual ao seletor de módulos. "Etapas" só aparece
+// pro usuário Charles (mesma restrição da tela em si).
+const SUBMENU_CONFIG = [
+  { id: 'config-documentos', label: 'Documentos', icon: FileText, color: '#64748b' },
+  { id: 'config-etapas', label: 'Etapas', icon: ListChecks, color: '#9333ea', apenasCharles: true },
 ];
 
 function NavItem({ ativo, onClick, item }) {
@@ -93,6 +101,19 @@ export function Navbar({
   onVoltarModulos,
 }) {
   const [alterarSenhaAberto, setAlterarSenhaAberto] = useState(false);
+  const [configMenuAberto, setConfigMenuAberto] = useState(false);
+  const configRef = useRef(null);
+
+  useEffect(() => {
+    const fecharSeForaDoMenu = (evento) => {
+      if (configRef.current && !configRef.current.contains(evento.target)) setConfigMenuAberto(false);
+    };
+    document.addEventListener('mousedown', fecharSeForaDoMenu);
+    return () => document.removeEventListener('mousedown', fecharSeForaDoMenu);
+  }, []);
+
+  const submenuConfigVisivel = SUBMENU_CONFIG.filter((sub) => !sub.apenasCharles || usuarioLogado === 'Charles');
+  const emTelaDeConfig = ['config-documentos', 'config-etapas'].includes(telaAtiva);
 
   return (
     <header
@@ -133,12 +154,52 @@ export function Navbar({
       {/* Centro: navegação */}
       <nav style={{ display: 'flex', alignItems: 'flex-start', gap: '18px' }}>
         {ITENS.map((item) => (
-          <NavItem
-            key={item.id}
-            item={item}
-            ativo={telaAtiva === item.id}
-            onClick={() => setTelaAtiva(item.id)}
-          />
+          item.id === 'config' ? (
+            <div key={item.id} ref={configRef} style={{ position: 'relative' }}>
+              <NavItem
+                item={item}
+                ativo={emTelaDeConfig || configMenuAberto}
+                onClick={() => setConfigMenuAberto((aberto) => !aberto)}
+              />
+              {configMenuAberto && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 8px)', left: '50%', transform: 'translateX(-50%)',
+                  background: '#fff', border: '1px solid rgba(15, 23, 42, 0.10)', borderRadius: 12,
+                  boxShadow: '0 12px 34px rgba(14,37,73,0.16)', overflow: 'hidden', zIndex: 40,
+                  minWidth: 170,
+                }}>
+                  {submenuConfigVisivel.map((sub) => {
+                    const SubIcon = sub.icon;
+                    return (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        onClick={() => { setTelaAtiva(sub.id); setConfigMenuAberto(false); }}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '10px 14px', border: 'none', cursor: 'pointer',
+                          background: telaAtiva === sub.id ? `${sub.color}12` : 'transparent',
+                          fontSize: 13, fontWeight: 600, color: telaAtiva === sub.id ? sub.color : '#334155',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = `${sub.color}12`; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = telaAtiva === sub.id ? `${sub.color}12` : 'transparent'; }}
+                      >
+                        <SubIcon size={15} color={sub.color} />
+                        {sub.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <NavItem
+              key={item.id}
+              item={item}
+              ativo={telaAtiva === item.id}
+              onClick={() => setTelaAtiva(item.id)}
+            />
+          )
         ))}
       </nav>
 

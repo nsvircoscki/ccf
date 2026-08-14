@@ -13,6 +13,7 @@ import CadastroClienteView from './page/CadastroClienteView';
 import CadastroImovelView from './page/CadastroImovelView';
 import VinculacaoView from './page/VinculacaoView';
 import ConfigDocumentosView from './page/ConfigDocumentosView';
+import ConfigEtapasView from './page/ConfigEtapasView';
 
 import { EditarProjetoModal } from './modals/EditarProjetoModal';
 import { TicketDetailModal } from './modals/TicketDetailModal';
@@ -212,6 +213,10 @@ export default function App() {
 
           {telaAtiva === 'config-documentos' && (
             <ConfigDocumentosView onBack={() => setTelaAtiva('dashboard')} />
+          )}
+
+          {telaAtiva === 'config-etapas' && (
+            <ConfigEtapasView onBack={() => setTelaAtiva('dashboard')} usuarioLogado={usuarioLogado} />
           )}
         </div>
 

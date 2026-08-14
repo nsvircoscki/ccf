@@ -5,6 +5,7 @@ import { formatarArea } from '../utils/mascaras';
 import {
   Actions, ChipList, Field, Reveal, SearchableSelect, Section, Segmented, Shell, Switch, Toast, useToast, C,
 } from '../components/cadastros/CadastroKit.jsx';
+import CadastroClienteView from './CadastroClienteView.jsx';
 
 const imovelVazio = {
   proprietarioIds: [],
@@ -33,7 +34,7 @@ const paraOpcaoImovel = (imovel) => ({
   sub: nomesProprietarios(imovel),
 });
 
-export default function CadastroImovelView({ onBack }) {
+export default function CadastroImovelView({ onBack, modal, onSaved }) {
   const accent = C.accent;
   const { toast, show } = useToast();
   const [imovelId, setImovelId] = useState(null);
@@ -41,6 +42,9 @@ export default function CadastroImovelView({ onBack }) {
   const [imoveisSalvos, setImoveisSalvos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [salvando, setSalvando] = useState(false);
+  // null | 'proprietario' | 'usufrutuario' — qual ChipList disparou o modal
+  // de cadastro rápido, pra saber em qual campo entrar a pessoa criada.
+  const [alvoModalPessoa, setAlvoModalPessoa] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -135,6 +139,7 @@ export default function CadastroImovelView({ onBack }) {
         return [res.data, ...outros];
       });
       show(editando ? 'Imóvel atualizado com sucesso.' : 'Imóvel cadastrado com sucesso.');
+      onSaved?.(res.data);
     } catch (erro) {
       console.error(erro);
       show('Erro ao conectar com o servidor.', 'err');
@@ -167,6 +172,7 @@ export default function CadastroImovelView({ onBack }) {
       accent={accent}
       subtitle={editing ? 'Editando imóvel' : 'Novo imóvel'}
       onBack={onBack}
+      modal={modal}
     >
       {toast && <Toast msg={toast.msg} kind={toast.kind} />}
 
@@ -181,7 +187,8 @@ export default function CadastroImovelView({ onBack }) {
         <ChipList label="Proprietários" icon="user" accent={accent} span={2}
           options={clientes.map(paraOpcaoPessoa)} values={form.proprietarioIds}
           onChange={(v) => set('proprietarioIds')(v)} placeholder="Buscar proprietário cadastrado para adicionar…"
-          emptyHint="Nenhum proprietário adicionado ainda." />
+          emptyHint="Nenhum proprietário adicionado ainda."
+          onCriarNovo={() => setAlvoModalPessoa('proprietario')} criarNovoLabel="Cadastrar nova pessoa" />
         <Field label="Cartório" icon="doc" value={form.cartorio} onChange={set('cartorio')} placeholder="Cartório de registro" />
         <Field label="Comarca" icon="scale" value={form.comarca} onChange={set('comarca')} placeholder="Comarca de São Bento do Sul" />
 
@@ -222,7 +229,8 @@ export default function CadastroImovelView({ onBack }) {
               <ChipList label="Usufrutuários" icon="user" accent={accent} span={2}
                 options={clientes.map(paraOpcaoPessoa)} values={form.usufrutuarioIds}
                 onChange={(v) => set('usufrutuarioIds')(v)} placeholder="Buscar pessoa cadastrada para adicionar…"
-                emptyHint="Nenhum usufrutuário adicionado ainda." />
+                emptyHint="Nenhum usufrutuário adicionado ainda."
+                onCriarNovo={() => setAlvoModalPessoa('usufrutuario')} criarNovoLabel="Cadastrar nova pessoa" />
             </div>
           </Reveal>
         </div>
@@ -230,6 +238,19 @@ export default function CadastroImovelView({ onBack }) {
 
       <Actions editing={editing} accent={accent} saving={salvando}
         onSave={handleSalvar} onDelete={editing ? handleExcluir : undefined} />
+
+      {alvoModalPessoa && (
+        <CadastroClienteView
+          modal
+          onBack={() => setAlvoModalPessoa(null)}
+          onSaved={(novaPessoa) => {
+            setClientes((atuais) => [novaPessoa, ...atuais]);
+            const campo = alvoModalPessoa === 'proprietario' ? 'proprietarioIds' : 'usufrutuarioIds';
+            set(campo)([...form[campo], novaPessoa.id]);
+            setAlvoModalPessoa(null);
+          }}
+        />
+      )}
     </Shell>
   );
 }
