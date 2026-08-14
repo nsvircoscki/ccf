@@ -128,10 +128,25 @@ model CartorioCns {
   updated_at  DateTime @updatedAt
 }
 
+// Etapas padrão de cada tipo de processo (Retificação, Desmembramento...),
+// usadas ao fabricar/editar um projeto no Kanban (ver fabricarProjeto e
+// editarProjeto em workflowService.js). Editável pela tela de Configurações
+// > Etapas, restrita ao usuário Charles — substituiu o antigo
+// CATALOGO_PROCESSOS/MAPEAMENTO_SETORES fixo no código.
+model TipoProcessoEtapa {
+  id           String @id @default(uuid())
+  tipoProcesso String
+  nome         String
+  setor        String
+  ordem        Int
+
+  @@unique([tipoProcesso, nome])
+}
+
 model Role {
   id    String @id @default(uuid())
-  name  String @unique 
-  
+  name  String @unique
+
   users User[]
   steps WorkflowStep[]
 }

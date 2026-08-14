@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'node:crypto';
 import { prisma } from '../prisma.js';
-import { workflowService, CATALOGO_PROCESSOS } from './workflowService.js';
+import { workflowService } from './workflowService.js';
 import { gerarPdfServico, gerarPdfServicoBuffer } from './pdfServico.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -17,8 +17,8 @@ const PASTA_BASE_SERVICOS = process.env.PASTA_SERVICOS || path.join(__dirname, '
 const INCLUDE_CONJUGE = { conjuge: true, conjugeDe: true };
 
 // Nomes abreviados usados no Cadastro de Serviço -> nomes completos do
-// catálogo de processos (workflowService.js / CATALOGO_PROCESSOS). Sem essa
-// tradução, aprovar um orçamento cria o projeto mas sem nenhuma tarefa.
+// catálogo de processos (tabela TipoProcessoEtapa, ver workflowService.js).
+// Sem essa tradução, aprovar um orçamento cria o projeto mas sem nenhuma tarefa.
 const MAPA_TIPOS_ABREVIADOS = {
   'Ret': 'Retificação',
   'Desm': 'Desmembramento',
@@ -33,13 +33,16 @@ const MAPA_TIPOS_ABREVIADOS = {
   'Loc': 'Locação',
   'Mov de Terra': 'Movimentação de Terra',
   // Mapeia para si mesmo: precisa entrar em tiposSolicitados para aparecer na
-  // ficha em PDF, mesmo sem virar projeto no Kanban (não há entrada
-  // correspondente em CATALOGO_PROCESSOS — ver o filtro antes de
-  // fabricarProjeto, em criar() e atualizar()).
+  // ficha em PDF, mesmo sem virar projeto no Kanban (não há tipo "Outros"
+  // cadastrado em TipoProcessoEtapa — ver o filtro antes de fabricarProjeto,
+  // em criar() e atualizar()).
   'Outros': 'Outros',
   'Ext': 'Extremação',
-  // 'Lev Topo' é a linha de cobrança do levantamento topográfico (tem
-  // cálculo próprio de índice), não um tipo de projeto do Kanban.
+  // Mapeia para si mesmo pelo mesmo motivo de 'Outros': precisa entrar em
+  // tiposSolicitados para a tela de Orçamento marcar a caixa sozinha ao abrir
+  // o serviço, mesmo não virando projeto no Kanban (sem tipo "Lev Topo"
+  // cadastrado em TipoProcessoEtapa — o filtro antes de fabricarProjeto já exclui).
+  'Lev Topo': 'Lev Topo',
 };
 
 function mapearTiposSolicitados(nomesAbreviados) {
@@ -551,10 +554,11 @@ export const servicoService = {
     // cadastro e não acompanha o que o usuário de fato selecionou/ajustou na
     // tela de Orçamento. Mantém a ordem em que os itens foram registrados
     // (não reordena por ordem alfabética).
+    const tiposDisponiveis = await workflowService.listarTiposDisponiveis();
     const tiposParaFabricar = servico.itensOrcamento
       .filter((item) => item.selecionado)
       .map((item) => MAPA_TIPOS_ABREVIADOS[item.nome])
-      .filter((tipo) => tipo && CATALOGO_PROCESSOS[tipo]);
+      .filter((tipo) => tipo && tiposDisponiveis.includes(tipo));
 
     const [ano, sequencialGlobal] = servico.numeroServico.split('-');
 

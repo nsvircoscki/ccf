@@ -35,13 +35,14 @@ const clienteVazio = {
 
 const paraOpcao = (cliente) => ({ value: cliente.id, label: cliente.nome, sub: cliente.documento });
 
-export default function CadastroClienteView({ onBack }) {
+export default function CadastroClienteView({ onBack, modal, onSaved }) {
   const accent = C.accent;
   const { toast, show } = useToast();
   const [clienteId, setClienteId] = useState(null);
   const [form, setForm] = useState(clienteVazio);
   const [clientesSalvos, setClientesSalvos] = useState([]);
   const [salvando, setSalvando] = useState(false);
+  const [modalConjugeAberto, setModalConjugeAberto] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -150,6 +151,7 @@ export default function CadastroClienteView({ onBack }) {
         return [res.data, ...outros].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
       });
       show(editando ? 'Cliente atualizado com sucesso.' : 'Cliente cadastrado com sucesso.');
+      onSaved?.(res.data);
     } catch (erro) {
       console.error(erro);
       show('Erro ao conectar com o servidor.', 'err');
@@ -184,6 +186,7 @@ export default function CadastroClienteView({ onBack }) {
       accent={accent}
       subtitle={editing ? 'Editando cliente' : tipoEscolhido ? `Novo cliente — ${isPF ? 'Pessoa Física' : 'Pessoa Jurídica'}` : 'Novo cliente'}
       onBack={onBack}
+      modal={modal}
     >
       {toast && <Toast msg={toast.msg} kind={toast.kind} />}
 
@@ -257,13 +260,12 @@ export default function CadastroClienteView({ onBack }) {
 
           {isPF && (
             <Section icon="doc" title="Documentos & situação" accent={accent}>
-              <Field label="Data de nascimento" icon="doc" type="date" value={form.dataNascimento} onChange={set('dataNascimento')} />
               <Field label="RG" icon="id" value={form.rg} onChange={set('rg')} placeholder="00.000.000-0" />
-              <Field label = "Data de expedição do RG" icon="doc" type="date" value={form.rgDataExpedicao} onChange={set('rgDataExpedicao')} />
               <Field label="Órgão emissor" icon="doc" value={form.orgaoEmissor} onChange={set('orgaoEmissor')} placeholder="SSP/UF" />
+              <Field label = "Data de expedição do RG" icon="doc" type="date" value={form.rgDataExpedicao} onChange={set('rgDataExpedicao')} />
+              <Field label="Data de nascimento" icon="doc" type="date" value={form.dataNascimento} onChange={set('dataNascimento')} />
               <Field label="Nacionalidade" icon="user" value={form.nacionalidade} onChange={set('nacionalidade')} placeholder="Brasileiro(a)" />
               <Field label="Profissão" icon="brief" value={form.profissao} onChange={set('profissao')} placeholder="Ex.: engenheiro(a)" />
-              <Field label="Link da pasta (Drive)" icon="folder" span={2} value={form.pastaLink} onChange={set('pastaLink')} placeholder="https://drive.google.com/…" />
               <SelectField label="Estado civil" icon="ring" value={form.estadoCivil} onChange={set('estadoCivil')}
                 options={[
                   { value: 'solteiro(a)', label: 'Solteiro(a)' },
@@ -273,6 +275,7 @@ export default function CadastroClienteView({ onBack }) {
                   { value: 'em união estável', label: 'Em união estável' },
                 ]} />
               <SelectField label="Situação" icon="user" value={form.situacao} onChange={set('situacao')} options={['Vivo(a)', 'Falecido(a)']} />
+              <Field label="Link da pasta" icon="folder" span={2} value={form.pastaLink} onChange={set('pastaLink')} placeholder="https://drive.google.com/…" />
 
               <div style={{ gridColumn: '1 / -1' }}>
                 <Reveal open={showConjuge}>
@@ -280,21 +283,34 @@ export default function CadastroClienteView({ onBack }) {
                     <SearchableSelect label="Cônjuge" icon="ring" accent={accent}
                       options={clientesSalvos.filter((c) => c.tipo === 'Física' && c.id !== clienteId).map(paraOpcao)}
                       value={form.conjugeId || null} onChange={(v) => set('conjugeId')(v || '')}
-                      placeholder="Buscar pessoa cadastrada…" span={2} />
+                      placeholder="Buscar pessoa cadastrada…" span={2}
+                      onCriarNovo={() => setModalConjugeAberto(true)} criarNovoLabel="Cadastrar nova pessoa" />
                   </div>
                 </Reveal>
               </div>
             </Section>
           )}
 
+          {modalConjugeAberto && (
+            <CadastroClienteView
+              modal
+              onBack={() => setModalConjugeAberto(false)}
+              onSaved={(novaPessoa) => {
+                setClientesSalvos((atuais) => [novaPessoa, ...atuais]);
+                set('conjugeId')(novaPessoa.id);
+                setModalConjugeAberto(false);
+              }}
+            />
+          )}
+
           {!isPF && (
             <Section icon="brief" title="Dados da empresa" accent={accent}>
-              <Field label="Link da pasta (Drive)" icon="folder" span={2} value={form.pastaLink} onChange={set('pastaLink')} placeholder="https://drive.google.com/…" />
-              <div style={{ gridColumn: '1 / -1', height: 1, background: C.borderSoft, margin: '4px 0' }} />
               <Field label="Representante legal" icon="user" value={form.representanteLegalNome} onChange={set('representanteLegalNome')} placeholder="Nome do representante" />
               <Field label="CPF do representante" icon="id" value={form.representanteLegalCpf} onChange={(v) => set('representanteLegalCpf')(formatarCPF(v))} placeholder="000.000.000-00" />
-              <Field label="Data de nascimento do representante" icon="doc" type="date" span={2} value={form.representanteLegalDataNascimento} onChange={set('representanteLegalDataNascimento')} />  
+              <Field label="Data de nascimento do representante" icon="doc" type="date" span={2} value={form.representanteLegalDataNascimento} onChange={set('representanteLegalDataNascimento')} />
               <Field label="Cargo" icon="brief" span={2} value={form.representanteLegalCargo} onChange={set('representanteLegalCargo')} placeholder="Ex.: sócio-administrador" />
+              <div style={{ gridColumn: '1 / -1', height: 1, background: C.borderSoft, margin: '4px 0' }} />
+              <Field label="Link da pasta (Drive)" icon="folder" span={2} value={form.pastaLink} onChange={set('pastaLink')} placeholder="https://drive.google.com/…" />
             </Section>
           )}
 

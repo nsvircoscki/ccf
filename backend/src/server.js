@@ -10,6 +10,7 @@ import imovelRoutes from './routes/imovelRoutes.js';
 import documentoRoutes from './routes/documentoRoutes.js';
 import cartorioRoutes from './routes/cartorioRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import tipoProcessoRoutes from './routes/tipoProcessoRoutes.js';
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use('/imoveis', imovelRoutes);
 app.use('/documentos', documentoRoutes);
 app.use('/cartorios', cartorioRoutes);
 app.use('/auth', authRoutes);
+app.use('/tipos-processo', tipoProcessoRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

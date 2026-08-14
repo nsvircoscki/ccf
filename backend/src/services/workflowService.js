@@ -1,46 +1,21 @@
 // src/services/workflowService.js
 import { prisma } from '../prisma.js';
 
-const MAPEAMENTO_SETORES = {
-    "Aprovação do Orçamento": "Charles",
-    "Emissão Contrato": "Coordenação", "Assinatura Contrato": "Coordenação", "Conferência Dossiê": "Coordenação",
-    "Envio Faturamento": "Coordenação", "Agendamento Levantamento": "Coordenação", "Conferência Pré-Projeto": "Coordenação",
-    "Aprovação do Proprietário": "Coordenação", "Conferência Projeto": "Coordenação", "ART / Assinatura Digital": "Coordenação",
-    "Assinatura do Proprietário": "Coordenação", "Processo Prefeitura": "Coordenação", "Assinaturas dos Confrontantes": "Coordenação",
-    "Reconhecimento de Assinaturas": "Coordenação", "Processo Cartório": "Coordenação", "SIGEF": "Coordenação",
-    "Montagem do Processo para Cartório": "Coordenação", "Processo RI": "Coordenação", "Recebimento Taxas": "Coordenação", "Escritura": "Coordenação",
-    "Nota de Exigências": "Coordenação", "Entrega do Serviço": "Coordenação", "Solicitação de Taxas": "Coordenação",
-    "Solicitação de Documentos": "Coordenação", "Dossiê": "Desenho", "Pré-aprovação no Sigef": "Desenho",
-    "Faturamento": "Desenho", "Preparação do Material de Campo": "Desenho", "Pré-projeto": "Desenho", "Monografia": "Desenho", "Confecção de Escritura": "Desenho",
-    "Execução do Projeto": "Desenho", "Impressão": "Desenho", "Orgãos Governamentais": "Desenho", "Montagem do Processo para Prefeitura": "Desenho", "Atualização IPTU": "Desenho",
-    "Montagem do processo para SIGEF": "Desenho", "CAR": "Desenho",
-    "Levantamento": "Topografia", "Processamento da Base": "Topografia", "Croqui": "Topografia", "Locação": "Topografia",
-    "Revisão Processo": "Charles"
-};
-
-// Exportado para servicoService.js poder saber quais tipos solicitados têm de
-// fato um processo cadastrado, antes de tentar fabricar um projeto no Kanban.
-export const CATALOGO_PROCESSOS = {
-    "Retificação": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura", "Assinaturas dos Confrontantes", "Reconhecimento de Assinaturas", "Montagem do Processo para Cartório", "Processo RI", "Nota de Exigências", "Entrega do Serviço"],
-    "Desmembramento": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Locação", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura", "Reconhecimento de Assinaturas", "Confecção de Escritura", "Montagem do Processo para Cartório", "Processo RI", "Nota de Exigências", "Entrega do Serviço"],
-    "Unificação": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura", "Reconhecimento de Assinaturas", "Montagem do Processo para Cartório", "Processo RI", "Nota de Exigências", "Entrega do Serviço"],
-    "Usucapião": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura", "Reconhecimento de Assinaturas", "Montagem do Processo para Cartório", "Processo RI", "Nota de Exigências", "Entrega do Serviço"],
-    "Alteração de Divisas": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Monografia", "Aprovação do Proprietário", "Locação", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Impressão", "Assinatura do Proprietário", "Orgãos Governamentais", "Montagem do Processo para Prefeitura", "Processo Prefeitura", "Reconhecimento de Assinaturas", "Confecção de Escritura", "Montagem do Processo para Cartório", "Processo RI", "Nota de Exigências", "Entrega do Serviço"],
-    "CAR": ["Aprovação do Orçamento", "Solicitação de Documentos", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Aprovação do Proprietário", "Execução do Projeto", "CAR", "Entrega do Serviço"],
-    "Certificação INCRA": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Dossiê", "Conferência Dossiê", "Faturamento", "Envio Faturamento", "Execução do Projeto", "ART / Assinatura Digital", "Montagem do processo para SIGEF", "SIGEF", "Entrega do Serviço"],
-    "Escritura": ["Aprovação do Orçamento", "Solicitação de Documentos", "Solicitação de Taxas", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Escritura", "Montagem do Processo para Cartório", "Processo RI", "Processo Cartório", "Nota de Exigências", "Entrega do Serviço"],
-    "Conferência": ["Aprovação do Orçamento", "Solicitação de Documentos", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Execução do Projeto", "Conferência Projeto", "Entrega do Serviço"],
-    "Cadastral": ["Aprovação do Orçamento", "Solicitação de Documentos", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Execução do Projeto", "Conferência Projeto", "Entrega do Serviço"],
-    "Locação": ["Aprovação do Orçamento", "Solicitação de Documentos", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Locação", "Execução do Projeto", "Conferência Projeto", "Entrega do Serviço"],
-    "Movimentação de Terra": ["Aprovação do Orçamento", "Solicitação de Documentos", "Emissão Contrato", "Assinatura Contrato", "Recebimento Taxas", "Faturamento", "Envio Faturamento", "Preparação do Material de Campo", "Agendamento Levantamento", "Levantamento", "Processamento da Base", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Entrega do Serviço"],
-    "Danc": ["Aprovação do Orçamento", "Recebimento Taxas", "Faturamento", "Croqui", "Pré-projeto", "Conferência Pré-Projeto", "Execução do Projeto", "Conferência Projeto", "Revisão Processo", "ART / Assinatura Digital", "Orgãos Governamentais", "Entrega do Serviço"],
-};
-
-// "Outros" e "Extremação" seguem exatamente as mesmas etapas de "Cadastral" e
-// "Retificação" — cópias (spread) para um push futuro num catálogo não vazar
-// para o outro, já que os dois compartilham o array original até aqui.
-CATALOGO_PROCESSOS["Outros"] = [...CATALOGO_PROCESSOS["Cadastral"]];
-CATALOGO_PROCESSOS["Extremação"] = [...CATALOGO_PROCESSOS["Retificação"]];
+// Etapas padrão por tipo de processo — vêm da tabela TipoProcessoEtapa
+// (editável pela tela de Configurações > Etapas), não mais fixas no código.
+// catalogo: { [tipoProcesso]: [nomeEtapa, ...] } na ordem cadastrada.
+// setores: { [nomeEtapa]: setorResponsavel } — mesclado entre tipos; quando a
+// mesma etapa aparece em mais de um tipo, a primeira ocorrência decide.
+async function buscarCatalogo(tx = prisma) {
+  const linhas = await tx.tipoProcessoEtapa.findMany({ orderBy: { ordem: 'asc' } });
+  const catalogo = {};
+  const setores = {};
+  for (const linha of linhas) {
+    (catalogo[linha.tipoProcesso] ??= []).push(linha.nome);
+    if (!(linha.nome in setores)) setores[linha.nome] = linha.setor;
+  }
+  return { catalogo, setores };
+}
 
 export const workflowService = {
   async listarTodos() {
@@ -62,9 +37,11 @@ export const workflowService = {
     const projetoExistente = await tx.workflow.findFirst({ where: { name } });
     if (projetoExistente) throw new Error("Já existe um projeto com este nome.");
 
+    const { catalogo, setores } = await buscarCatalogo(tx);
+
     const tarefasUnicas = new Set();
     types.forEach(type => {
-      const lista = CATALOGO_PROCESSOS[type];
+      const lista = catalogo[type];
       if (lista) lista.forEach(tarefa => tarefasUnicas.add(tarefa));
     });
     const listaTarefasMesclada = Array.from(tarefasUnicas);
@@ -106,7 +83,7 @@ export const workflowService = {
     }
 
     const ticketsData = listaTarefasMesclada.map(nomeTarefa => {
-      const setorDaTarefa = MAPEAMENTO_SETORES[nomeTarefa] || "Coordenação"; 
+      const setorDaTarefa = setores[nomeTarefa] || "Coordenação";
       const etapa = etapasCriadas.find(s => s.step_name === 'Iniciar' && s.roleName === setorDaTarefa);
       return { title: nomeTarefa, workflowId: workflow.id, currentStepId: etapa.id };
     });
@@ -117,9 +94,10 @@ export const workflowService = {
 
   async editarProjeto(id, types, terreno) {
     if (!types || types.length === 0) throw new Error("Selecione pelo menos um tipo.");
+    const { catalogo, setores } = await buscarCatalogo();
     const tarefasUnicas = new Set();
     types.forEach(type => {
-      if (CATALOGO_PROCESSOS[type]) CATALOGO_PROCESSOS[type].forEach(t => tarefasUnicas.add(t));
+      if (catalogo[type]) catalogo[type].forEach(t => tarefasUnicas.add(t));
     });
 
     if (terreno === 'Rural') {
@@ -147,7 +125,7 @@ export const workflowService = {
 
       if (nomesParaAdicionar.length > 0) {
         const novosTicketsData = nomesParaAdicionar.map(nomeTarefa => {
-          const setorDaTarefa = MAPEAMENTO_SETORES[nomeTarefa] || "Coordenação";
+          const setorDaTarefa = setores[nomeTarefa] || "Coordenação";
           const etapaInicial = workflow.steps.find(step => step.step_name === 'Iniciar' && step.requiredRole.name === setorDaTarefa);
           return { title: nomeTarefa, workflowId: id, currentStepId: etapaInicial.id };
         });
@@ -180,5 +158,63 @@ export const workflowService = {
       prisma.workflowStep.deleteMany({ where: { workflowId } }),
       prisma.workflow.delete({ where: { id: workflowId } })
     ]);
-  }
+  },
+
+  // Tela de Configurações > Etapas: lista cada tipo de processo com sua lista
+  // ordenada de etapas padrão (nome + setor responsável).
+  async listarTiposProcesso() {
+    const linhas = await prisma.tipoProcessoEtapa.findMany({ orderBy: [{ tipoProcesso: 'asc' }, { ordem: 'asc' }] });
+    const porTipo = {};
+    for (const linha of linhas) {
+      (porTipo[linha.tipoProcesso] ??= []).push({ nome: linha.nome, setor: linha.setor });
+    }
+    return Object.entries(porTipo)
+      .map(([tipoProcesso, etapas]) => ({ tipoProcesso, etapas }))
+      .sort((a, b) => a.tipoProcesso.localeCompare(b.tipoProcesso, 'pt-BR'));
+  },
+
+  // Usado por servicoService.decidirOrcamento para saber quais tipos
+  // solicitados têm de fato um processo cadastrado, antes de fabricar um
+  // projeto no Kanban (substituiu o antigo CATALOGO_PROCESSOS[tipo] fixo).
+  async listarTiposDisponiveis() {
+    const linhas = await prisma.tipoProcessoEtapa.findMany({ distinct: ['tipoProcesso'], select: { tipoProcesso: true } });
+    return linhas.map((l) => l.tipoProcesso);
+  },
+
+  // Substitui a lista de etapas padrão de um tipo de processo e resincroniza
+  // os projetos já em andamento no Kanban que usam esse tipo — mesma lógica
+  // de diff do editarProjeto (remove tarefas que saíram, adiciona as novas,
+  // preserva o progresso das que continuam).
+  async atualizarTipoProcesso(tipoProcesso, etapas) {
+    if (!Array.isArray(etapas) || etapas.length === 0) {
+      throw new Error('Informe ao menos uma etapa.');
+    }
+    const todasValidas = etapas.every((e) => e?.nome?.trim() && e?.setor?.trim());
+    if (!todasValidas) throw new Error('Toda etapa precisa de nome e setor.');
+
+    const roles = await prisma.role.findMany({ select: { name: true } });
+    const nomesDeSetores = roles.map((r) => r.name);
+    const setorInvalido = etapas.find((e) => !nomesDeSetores.includes(e.setor));
+    if (setorInvalido) throw new Error(`Setor "${setorInvalido.setor}" não existe.`);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.tipoProcessoEtapa.deleteMany({ where: { tipoProcesso } });
+      await tx.tipoProcessoEtapa.createMany({
+        data: etapas.map((etapa, indice) => ({
+          tipoProcesso, nome: etapa.nome.trim(), setor: etapa.setor, ordem: indice + 1,
+        })),
+      });
+    });
+
+    // Cada projeto guarda os tipos que o formaram em description (ver
+    // fabricarProjeto) — é a única referência disponível hoje pra achar quem
+    // usa esse tipo.
+    const workflows = await prisma.workflow.findMany({ select: { id: true, description: true, terreno: true } });
+    const afetados = workflows.filter((w) => (w.description || '').split(', ').includes(tipoProcesso));
+    for (const workflow of afetados) {
+      await workflowService.editarProjeto(workflow.id, workflow.description.split(', '), workflow.terreno);
+    }
+
+    return { message: 'Etapas atualizadas.', projetosAtualizados: afetados.length };
+  },
 };

@@ -163,6 +163,7 @@ export function SelectField({ label, icon, value, onChange, options, span = 1 })
 /* ── Select pesquisável ── */
 export function SearchableSelect({
   label, icon, options, value, onChange, placeholder = 'Buscar…', span = 1, accent = C.navy,
+  onCriarNovo, criarNovoLabel = 'Cadastrar novo',
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -246,6 +247,16 @@ export function SearchableSelect({
               </div>
             )}
           </div>
+          {onCriarNovo && (
+            <button type="button" onClick={() => { onCriarNovo(q); setOpen(false); setQ(''); }} style={{
+              width: '100%', textAlign: 'left', padding: '11px 14px', background: `${accent}0a`,
+              border: 'none', borderTop: `1px solid ${C.borderSoft}`, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 8, fontFamily: MONT, fontWeight: 700,
+              fontSize: 12.5, color: accent,
+            }}>
+              <Icon name="plus" size={14} /> {criarNovoLabel}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -291,6 +302,7 @@ export function Switch({ value, onChange }) {
 /* ── Seleção múltipla: busca pra adicionar + chips removíveis ── */
 export function ChipList({
   label, icon, options, values, onChange, placeholder = 'Buscar…', span = 2, accent = C.navy, emptyHint,
+  onCriarNovo, criarNovoLabel,
 }) {
   const disponiveis = options.filter((o) => !values.includes(o.value));
   const selecionados = values.map((v) => options.find((o) => o.value === v)).filter(Boolean);
@@ -301,7 +313,8 @@ export function ChipList({
   return (
     <div style={{ gridColumn: span === 2 ? '1 / -1' : 'auto' }}>
       <SearchableSelect label={label} icon={icon} accent={accent} span={span}
-        options={disponiveis} value={null} onChange={adicionar} placeholder={placeholder} />
+        options={disponiveis} value={null} onChange={adicionar} placeholder={placeholder}
+        onCriarNovo={onCriarNovo} criarNovoLabel={criarNovoLabel} />
       {selecionados.length > 0 ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
           {selecionados.map((o) => (
@@ -398,33 +411,68 @@ export function Toast({ msg, kind }) {
   );
 }
 
-/* ── Casca da tela (cabeçalho + coluna central) ── */
-export function Shell({ user, title, subtitle, onBack, accent, children, wide }) {
-  return (
-    <div style={{ position: 'relative', flex: 1, minHeight: 0, background: C.bg, display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'fadeUp 0.4s ease both' }}>
-      <header style={{
-        background: '#fff', borderBottom: `1px solid ${C.border}`, height: 64, flexShrink: 0,
-        display: 'flex', alignItems: 'center', gap: 16, padding: '0 28px',
+/* ── Casca da tela (cabeçalho + coluna central) ──
+   modal=true: mesma tela, mas como um cartão flutuante por cima da tela atual
+   (usada pro cadastro rápido de pessoa/imóvel a partir de outro cadastro) em
+   vez de ocupar a área inteira — o conteúdo (children) é idêntico nos dois
+   modos, só a moldura muda. */
+export function Shell({ user, title, subtitle, onBack, accent, children, wide, modal }) {
+  const header = (
+    <header style={{
+      background: '#fff', borderBottom: `1px solid ${C.border}`, height: 64, flexShrink: 0,
+      display: 'flex', alignItems: 'center', gap: 16, padding: '0 28px',
+      borderTopLeftRadius: modal ? 18 : 0, borderTopRightRadius: modal ? 18 : 0,
+    }}>
+      <button onClick={onBack} aria-label={modal ? 'Fechar' : 'Voltar'} style={{
+        width: 38, height: 38, borderRadius: 10, border: `1px solid ${C.border}`, background: '#fff',
+        cursor: 'pointer', color: C.label, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
       }}>
-        <button onClick={onBack} aria-label="Voltar" style={{
-          width: 38, height: 38, borderRadius: 10, border: `1px solid ${C.border}`, background: '#fff',
-          cursor: 'pointer', color: C.label, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}>
+        {modal ? (
+          <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15">
+            <path d="M6 6l8 8M14 6l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        ) : (
           <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
             <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
           </svg>
-        </button>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontFamily: MONT, fontWeight: 700, fontSize: 17, color: C.text, margin: 0, letterSpacing: '-0.01em' }}>{title}</h1>
-          <p style={{ fontFamily: SANS, fontSize: 12.5, color: accent, margin: 0, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</p>
-        </div>
-        {user && (
-          <div style={{
-            width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg, ${C.navy}, ${C.green})`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONT, fontWeight: 700, fontSize: 13, color: '#fff', flexShrink: 0,
-          }}>{user.charAt(0).toUpperCase()}</div>
         )}
-      </header>
+      </button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <h1 style={{ fontFamily: MONT, fontWeight: 700, fontSize: 17, color: C.text, margin: 0, letterSpacing: '-0.01em' }}>{title}</h1>
+        <p style={{ fontFamily: SANS, fontSize: 12.5, color: accent, margin: 0, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</p>
+      </div>
+      {user && (
+        <div style={{
+          width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg, ${C.navy}, ${C.green})`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONT, fontWeight: 700, fontSize: 13, color: '#fff', flexShrink: 0,
+        }}>{user.charAt(0).toUpperCase()}</div>
+      )}
+    </header>
+  );
+
+  if (modal) {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, background: 'rgba(14,37,73,0.45)', zIndex: 300,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      }}>
+        <div style={{
+          background: C.bg, borderRadius: 18, width: wide ? 860 : 720, maxWidth: '100%',
+          maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          boxShadow: '0 20px 60px rgba(14,37,73,0.25)', animation: 'fadeUp 0.25s ease both',
+        }}>
+          {header}
+          <main className="scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '22px 24px 26px', boxSizing: 'border-box' }}>
+            {children}
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: 'relative', flex: 1, minHeight: 0, background: C.bg, display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'fadeUp 0.4s ease both' }}>
+      {header}
       <main className="scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', maxWidth: wide ? 820 : 720, width: '100%', margin: '0 auto', padding: '26px 24px 60px', boxSizing: 'border-box' }}>
         {children}
       </main>
