@@ -19,10 +19,10 @@ async function main() {
   await prisma.role.deleteMany();
 
   console.log("Criando os Setores Oficiais (Roles)...");
-  const rCoord = await prisma.role.create({ data: { name: 'Coordenação' } });
-  const rDesenho = await prisma.role.create({ data: { name: 'Desenho' } });
-  const rCharles = await prisma.role.create({ data: { name: 'Charles' } });
-  const rTopo = await prisma.role.create({ data: { name: 'Topografia' } });
+  const rCoord = await prisma.role.create({ data: { name: 'CRD' } });
+  const rDesenho = await prisma.role.create({ data: { name: 'DES' } });
+  const rCharles = await prisma.role.create({ data: { name: 'ENG' } });
+  const rTopo = await prisma.role.create({ data: { name: 'TOPO' } });
 
   console.log("Criando Usuários...");
   await prisma.user.createMany({

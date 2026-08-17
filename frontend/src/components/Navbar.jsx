@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, KeyRound, ListChecks,
+  ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, KeyRound, ListChecks, Bell,
 } from 'lucide-react';
 import { AlterarSenhaModal } from '../modals/AlterarSenhaModal.jsx';
+import { api } from '../services/api';
 
 // Mesmo ícone/cor de cada módulo no ModuleSelectorView.jsx — mantém os dois
 // selecionáveis (a tela de módulos e a navbar) visualmente consistentes.
@@ -20,10 +21,10 @@ const ITENS = [
 
 // Sub-opções do item "Configurações" — clicar nele abre este menu em vez de
 // ir direto pra uma tela, igual ao seletor de módulos. "Etapas" só aparece
-// pro usuário Charles (mesma restrição da tela em si).
+// pro usuário ENG (mesma restrição da tela em si).
 const SUBMENU_CONFIG = [
   { id: 'config-documentos', label: 'Documentos', icon: FileText, color: '#64748b' },
-  { id: 'config-etapas', label: 'Etapas', icon: ListChecks, color: '#9333ea', apenasCharles: true },
+  { id: 'config-etapas', label: 'Etapas', icon: ListChecks, color: '#9333ea', apenasEng: true },
 ];
 
 function NavItem({ ativo, onClick, item }) {
@@ -99,6 +100,7 @@ export function Navbar({
   usuarioLogado,
   setUsuarioLogado,
   onVoltarModulos,
+  kanban,
 }) {
   const [alterarSenhaAberto, setAlterarSenhaAberto] = useState(false);
   const [configMenuAberto, setConfigMenuAberto] = useState(false);
@@ -118,15 +120,87 @@ export function Navbar({
     });
   };
 
+  // Notificações: avisa o setor responsável quando uma etapa fica pronta pra
+  // começar (a anterior, na sequência do projeto, acabou de ser concluída).
+  const [notificacoes, setNotificacoes] = useState([]);
+  const [naoLidas, setNaoLidas] = useState(0);
+  const [notifMenuAberto, setNotifMenuAberto] = useState(false);
+  const [notifMenuPos, setNotifMenuPos] = useState({ top: 0, left: 0 });
+  const notifRef = useRef(null);
+
+  const carregarNotificacoes = async () => {
+    try {
+      const dados = await api.getNotificacoes(usuarioLogado);
+      setNotificacoes(dados?.notificacoes || []);
+      setNaoLidas(dados?.naoLidas || 0);
+    } catch (erro) {
+      console.error('Erro ao carregar notificações:', erro);
+    }
+  };
+
+  useEffect(() => {
+    carregarNotificacoes();
+    // Como não há WebSocket, um polling simples mantém o contador atualizado
+    // mesmo sem o usuário reabrir o menu — cobre notificações geradas por
+    // outra pessoa logada em outra máquina.
+    const intervalo = setInterval(carregarNotificacoes, 20000);
+    return () => clearInterval(intervalo);
+  }, [usuarioLogado]);
+
+  // Atualiza na hora (sem esperar o polling) sempre que algum card se move
+  // nesta mesma sessão — o passo que acabou de ser concluído pode ter gerado
+  // uma notificação nova pro próximo setor.
+  useEffect(() => {
+    if (kanban?.tickets) carregarNotificacoes();
+  }, [kanban?.tickets]);
+
+  const abrirMenuNotificacoes = () => {
+    setNotifMenuAberto((aberto) => {
+      if (!aberto) {
+        if (notifRef.current) {
+          const rect = notifRef.current.getBoundingClientRect();
+          setNotifMenuPos({ top: rect.bottom + 8, left: rect.right });
+        }
+        carregarNotificacoes();
+      }
+      return !aberto;
+    });
+  };
+
+  const clicarNotificacao = async (notificacao) => {
+    setNotifMenuAberto(false);
+    if (!notificacao.lida) {
+      try {
+        await api.marcarNotificacaoComoLida(notificacao.id);
+        setNotificacoes((prev) => prev.map((n) => n.id === notificacao.id ? { ...n, lida: true } : n));
+        setNaoLidas((prev) => Math.max(0, prev - 1));
+      } catch (erro) {
+        console.error('Erro ao marcar notificação como lida:', erro);
+      }
+    }
+    setTelaAtiva('kanban');
+  };
+
+  const marcarTodasComoLidas = async () => {
+    try {
+      await api.marcarTodasNotificacoesComoLidas(usuarioLogado);
+      setNotificacoes((prev) => prev.map((n) => ({ ...n, lida: true })));
+      setNaoLidas(0);
+    } catch (erro) {
+      console.error('Erro ao marcar notificações como lidas:', erro);
+    }
+  };
+
   useEffect(() => {
     const fecharSeForaDoMenu = (evento) => {
       if (configRef.current && !configRef.current.contains(evento.target)) setConfigMenuAberto(false);
+      if (notifRef.current && !notifRef.current.contains(evento.target)) setNotifMenuAberto(false);
     };
     document.addEventListener('mousedown', fecharSeForaDoMenu);
     return () => document.removeEventListener('mousedown', fecharSeForaDoMenu);
   }, []);
 
-  const submenuConfigVisivel = SUBMENU_CONFIG.filter((sub) => !sub.apenasCharles || usuarioLogado === 'Charles');
+  const submenuConfigVisivel = SUBMENU_CONFIG.filter((sub) => !sub.apenasEng || usuarioLogado === 'ENG');
   const emTelaDeConfig = ['config-documentos', 'config-etapas'].includes(telaAtiva);
 
   return (
@@ -272,6 +346,79 @@ export function Navbar({
             </div>
             <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600, whiteSpace: 'nowrap' }}>CCF Consultores</div>
           </div>
+        </div>
+
+        <div ref={notifRef} style={{ position: 'relative' }}>
+          <button
+            type="button"
+            onClick={abrirMenuNotificacoes}
+            title="Notificações"
+            aria-label="Notificações"
+            style={{
+              width: '36px', height: '36px', borderRadius: '999px', flexShrink: 0,
+              border: '1px solid rgba(15, 23, 42, 0.12)', background: notifMenuAberto ? '#EEF4FF' : '#FFFFFF',
+              color: notifMenuAberto ? '#1a3a8a' : '#64748B',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              position: 'relative', transition: 'all 0.18s ease',
+            }}
+          >
+            <Bell size={15} />
+            {naoLidas > 0 && (
+              <span style={{
+                position: 'absolute', top: '-3px', right: '-3px', minWidth: '16px', height: '16px',
+                borderRadius: '999px', background: '#DC2626', color: '#fff', fontSize: '10px', fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px',
+                border: '2px solid #fff',
+              }}>
+                {naoLidas > 9 ? '9+' : naoLidas}
+              </span>
+            )}
+          </button>
+
+          {notifMenuAberto && (
+            <div style={{
+              position: 'fixed', top: notifMenuPos.top, left: notifMenuPos.left, transform: 'translateX(-100%)',
+              background: '#fff', border: '1px solid rgba(15, 23, 42, 0.10)', borderRadius: 12,
+              boxShadow: '0 12px 34px rgba(14,37,73,0.16)', overflow: 'hidden', zIndex: 40,
+              width: '320px', maxHeight: '380px', display: 'flex', flexDirection: 'column',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid rgba(15,23,42,0.08)' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Notificações</span>
+                {naoLidas > 0 && (
+                  <button type="button" onClick={marcarTodasComoLidas} style={{ border: 'none', background: 'none', color: '#1a3a8a', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}>
+                    Marcar todas como lidas
+                  </button>
+                )}
+              </div>
+              <div className="scroll" style={{ overflowY: 'auto' }}>
+                {notificacoes.length === 0 ? (
+                  <div style={{ padding: '24px 14px', textAlign: 'center', color: '#94A3B8', fontSize: '12.5px' }}>
+                    Nenhuma notificação por aqui.
+                  </div>
+                ) : (
+                  notificacoes.map((notificacao) => (
+                    <button
+                      key={notificacao.id}
+                      type="button"
+                      onClick={() => clicarNotificacao(notificacao)}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'flex-start', gap: '8px', textAlign: 'left',
+                        padding: '12px 14px', border: 'none', borderBottom: '1px solid rgba(15,23,42,0.06)',
+                        background: notificacao.lida ? 'transparent' : 'rgba(26, 58, 138, 0.05)', cursor: 'pointer',
+                      }}
+                    >
+                      {!notificacao.lida && (
+                        <span style={{ width: '7px', height: '7px', borderRadius: '999px', background: '#1a3a8a', marginTop: '5px', flexShrink: 0 }} />
+                      )}
+                      <span style={{ fontSize: '12.5px', color: '#334155', fontWeight: notificacao.lida ? 500 : 700, lineHeight: 1.4 }}>
+                        {notificacao.mensagem}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <button

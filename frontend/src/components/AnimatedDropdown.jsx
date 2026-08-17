@@ -3,50 +3,40 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { FiChevronDown } from 'react-icons/fi';
 
+// Sem "when"/"staggerChildren": o painel e os itens animam juntos, em
+// paralelo. Antes o fechar esperava CADA item terminar sua própria saída
+// antes do painel começar a encolher (when: 'afterChildren') — com listas
+// grandes (muitas opções) isso fazia o tempo de fechar crescer junto com a
+// quantidade de itens, chegando a demorar mais de 1s. Agora a duração é
+// sempre a mesma, curta, não importa quantos itens a lista tenha.
 const wrapperVariants = {
   open: {
     opacity: 1,
     scaleY: 1,
-    transition: {
-      duration: 0.18,
-      ease: 'easeOut',
-      when: 'beforeChildren',
-      staggerChildren: 0.03,
-    },
-    transitionEnd: {
-      display: 'block'
-    }
+    transition: { duration: 0.12, ease: 'easeOut' },
   },
   closed: {
     opacity: 0,
     scaleY: 0,
-    transition: {
-      duration: 0.16,
-      ease: 'easeIn',
-      when: 'afterChildren',
-      staggerChildren: 0.02,
-    },
-    transitionEnd: {
-      display: 'none'
-    }
+    transition: { duration: 0.08, ease: 'easeIn' },
   }
 };
 
 const iconVariants = {
-  open: { rotate: 180, transition: { duration: 0.18, ease: 'easeOut' } },
-  closed: { rotate: 0, transition: { duration: 0.18, ease: 'easeOut' } }
+  open: { rotate: 180, transition: { duration: 0.12, ease: 'easeOut' } },
+  closed: { rotate: 0, transition: { duration: 0.12, ease: 'easeOut' } }
 };
 
 const itemVariants = {
   open: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.16, ease: 'easeOut' }
+    transition: { duration: 0.1, ease: 'easeOut' }
   },
   closed: {
     opacity: 0,
-    y: -8,
-    transition: { duration: 0.14, ease: 'easeIn' }
+    y: -4,
+    transition: { duration: 0.06, ease: 'easeIn' }
   }
 };
 

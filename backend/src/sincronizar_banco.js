@@ -7,20 +7,20 @@ const prisma = new PrismaClient({
 });
 
 const MAPEAMENTO_SETORES = {
-    "Aprovação do Orçamento": "Charles", 
-    "Emissão Contrato": "Coordenação", "Assinatura Contrato": "Coordenação", "Conferência Dossiê": "Coordenação", 
-    "Envio Faturamento": "Coordenação", "Agendamento Levantamento": "Coordenação", "Conferência Pré-Projeto": "Coordenação", 
-    "Aprovação do Proprietário": "Coordenação", "Conferência Projeto": "Coordenação", "ART / Assinatura Digital": "Coordenação", 
-    "Assinatura do Proprietário": "Coordenação", "Processo Prefeitura": "Coordenação", "Assinaturas dos Confrontantes": "Coordenação", 
-    "Reconhecimento de Assinaturas": "Coordenação", "Processo Cartório": "Coordenação", "SIGEF": "Coordenação", 
-    "Montagem do Processo para Cartório": "Coordenação", "Processo RI": "Coordenação","Recebimento Taxas": "Coordenação", "Escritura": "Coordenação", 
-    "Nota de Exigências": "Coordenação", "Entrega do Serviço": "Coordenação", "Solicitação de Taxas": "Coordenação",
-    "Solicitação de Documentos": "Coordenação", "Dossiê": "Desenho", "Pré-aprovação no Sigef": "Desenho",
-    "Faturamento": "Desenho", "Preparação do Material de Campo": "Desenho", "Pré-projeto": "Desenho", "Monografia": "Desenho", "Confecção de Escritura": "Desenho",
-    "Execução do Projeto": "Desenho", "Impressão": "Desenho", "Orgãos Governamentais": "Desenho", "Montagem do Processo para Prefeitura": "Desenho", "Atualização IPTU" : "Desenho",
-    "Montagem do processo para SIGEF": "Desenho", "CAR": "Desenho",
-    "Levantamento": "Topografia", "Processamento da Base": "Topografia", "Croqui": "Topografia", "Locação": "Topografia",
-    "Revisão Processo": "Charles" 
+    "Aprovação do Orçamento": "ENG",
+    "Emissão Contrato": "CRD", "Assinatura Contrato": "CRD", "Conferência Dossiê": "CRD",
+    "Envio Faturamento": "CRD", "Agendamento Levantamento": "CRD", "Conferência Pré-Projeto": "CRD",
+    "Aprovação do Proprietário": "CRD", "Conferência Projeto": "CRD", "ART / Assinatura Digital": "CRD",
+    "Assinatura do Proprietário": "CRD", "Processo Prefeitura": "CRD", "Assinaturas dos Confrontantes": "CRD",
+    "Reconhecimento de Assinaturas": "CRD", "Processo Cartório": "CRD", "SIGEF": "CRD",
+    "Montagem do Processo para Cartório": "CRD", "Processo RI": "CRD","Recebimento Taxas": "CRD", "Escritura": "CRD",
+    "Nota de Exigências": "CRD", "Entrega do Serviço": "CRD", "Solicitação de Taxas": "CRD",
+    "Solicitação de Documentos": "CRD", "Dossiê": "DES", "Pré-aprovação no Sigef": "DES",
+    "Faturamento": "DES", "Preparação do Material de Campo": "DES", "Pré-projeto": "DES", "Monografia": "DES", "Confecção de Escritura": "DES",
+    "Execução do Projeto": "DES", "Impressão": "DES", "Orgãos Governamentais": "DES", "Montagem do Processo para Prefeitura": "DES", "Atualização IPTU" : "DES",
+    "Montagem do processo para SIGEF": "DES", "CAR": "DES",
+    "Levantamento": "TOPO", "Processamento da Base": "TOPO", "Croqui": "TOPO", "Locação": "TOPO",
+    "Revisão Processo": "ENG"
 };
 
 
@@ -46,7 +46,7 @@ async function sincronizarProjetosAntigos() {
         if(!isRural && !tarefasEsperadas.includes("Atualização IPTU")) {
             tarefasEsperadas.push("Atualização IPTU");
 
-            const stepIniciarDesenho = wf.steps.find(s => s.step_name === 'Iniciar' && s.requiredRole.name === 'Desenho');
+            const stepIniciarDesenho = wf.steps.find(s => s.step_name === 'Iniciar' && s.requiredRole.name === 'DES');
 
             if (stepIniciarDesenho) {
                 await prisma.ticket.create({

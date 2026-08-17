@@ -1,10 +1,10 @@
 import React from 'react';
 
 const CORES = {
-  'Charles': { bg: '#FFF9C4', borda: '#FBC02D' },      
-  'Topografia': { bg: '#BBDEFB', borda: '#1E88E5' },   
-  'Desenho': { bg: '#C8E6C9', borda: '#43A047' },      
-  'Coordenação': { bg: '#D7CCC8', borda: '#795548' }   
+  'ENG': { bg: '#FFF9C4', borda: '#FBC02D' },
+  'TOPO': { bg: '#BBDEFB', borda: '#1E88E5' },
+  'DES': { bg: '#C8E6C9', borda: '#43A047' },
+  'CRD': { bg: '#D7CCC8', borda: '#795548' }
 };
 
 export function Topbar({ 

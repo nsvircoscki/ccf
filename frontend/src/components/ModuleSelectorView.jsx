@@ -27,10 +27,10 @@ const MODULOS = [
 
 // Sub-módulos dentro de "Configurações" — clicar no tile principal abre esta
 // segunda tela em vez de ir direto pra uma tela específica. "Etapas" só
-// aparece pro usuário Charles (mesma restrição da tela em si).
+// aparece pro usuário ENG (mesma restrição da tela em si).
 const SUBMODULOS_CONFIG = [
   { id: 'config-documentos', label: 'Documentos', desc: 'Quais documentos aparecem para cada tipo de serviço', icon: FileText, color: '#64748b' },
-  { id: 'config-etapas', label: 'Etapas', desc: 'Etapas padrão de cada tipo de processo no Kanban', icon: ListChecks, color: '#9333ea', apenasCharles: true },
+  { id: 'config-etapas', label: 'Etapas', desc: 'Etapas padrão de cada tipo de processo no Kanban', icon: ListChecks, color: '#9333ea', apenasEng: true },
 ];
 
 function ModuleTile({ mod, index, onOpen }) {
@@ -101,7 +101,7 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
     onAbrirModulo(mod.id);
   };
 
-  const submodulosVisiveis = SUBMODULOS_CONFIG.filter((sub) => !sub.apenasCharles || usuarioLogado === 'Charles');
+  const submodulosVisiveis = SUBMODULOS_CONFIG.filter((sub) => !sub.apenasEng || usuarioLogado === 'ENG');
 
   return (
     <div style={{

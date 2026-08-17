@@ -184,11 +184,9 @@ export default function CadastroImovelView({ onBack, modal, onSaved }) {
       </div>
 
       <Section icon="doc" title="Registro" desc="Dados cartorários do imóvel" accent={accent}>
-        <ChipList label="Proprietários" icon="user" accent={accent} span={2}
-          options={clientes.map(paraOpcaoPessoa)} values={form.proprietarioIds}
-          onChange={(v) => set('proprietarioIds')(v)} placeholder="Buscar proprietário cadastrado para adicionar…"
-          emptyHint="Nenhum proprietário adicionado ainda."
-          onCriarNovo={() => setAlvoModalPessoa('proprietario')} criarNovoLabel="Cadastrar nova pessoa" />
+        <Field label="CNS" icon="hash" value={form.cns} onChange={set('cns')}
+          onBlur={() => buscarCartorioPorCns(form.cns)}
+          placeholder="Código Nacional de Serventia" hint="Preenche cartório/comarca se já usamos esse CNS antes" />
         <Field label="Cartório" icon="doc" value={form.cartorio} onChange={set('cartorio')} placeholder="Cartório de registro" />
         <Field label="Comarca" icon="scale" value={form.comarca} onChange={set('comarca')} placeholder="Comarca de São Bento do Sul" />
 
@@ -200,11 +198,13 @@ export default function CadastroImovelView({ onBack, modal, onSaved }) {
         </div>
 
         <Field label={tituloLabel} icon="hash" value={form.matricula} onChange={set('matricula')} placeholder="Nº do registro" />
-        <Field label="CNS" icon="hash" value={form.cns} onChange={set('cns')}
-          onBlur={() => buscarCartorioPorCns(form.cns)}
-          placeholder="Código Nacional de Serventia" hint="Preenche cartório/comarca se já usamos esse CNS antes" />
         <Field label="Código INCRA" icon="hash" value={form.incra} onChange={set('incra')} placeholder="000.000.000.000-0" />
         <Field label="CIB / NIRF" icon="hash" value={form.cib} onChange={set('cib')} placeholder="Cadastro do imóvel" />
+        <ChipList label="Proprietários" icon="user" accent={accent} span={2}
+          options={clientes.map(paraOpcaoPessoa)} values={form.proprietarioIds}
+          onChange={(v) => set('proprietarioIds')(v)} placeholder="Buscar proprietário cadastrado para adicionar…"
+          emptyHint="Nenhum proprietário adicionado ainda."
+          onCriarNovo={() => setAlvoModalPessoa('proprietario')} criarNovoLabel="Cadastrar nova pessoa" />
       </Section>
 
       <Section icon="pin" title="Localização" desc="Endereço e caracterização" accent={accent}>

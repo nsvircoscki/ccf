@@ -11,6 +11,7 @@ import documentoRoutes from './routes/documentoRoutes.js';
 import cartorioRoutes from './routes/cartorioRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import tipoProcessoRoutes from './routes/tipoProcessoRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use('/documentos', documentoRoutes);
 app.use('/cartorios', cartorioRoutes);
 app.use('/auth', authRoutes);
 app.use('/tipos-processo', tipoProcessoRoutes);
+app.use('/notificacoes', notificationRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

@@ -18,10 +18,10 @@ export function AuditoriaModal({ projeto, kanban, onClose }) {
   const timelineProjeto = [];
   cartoesDoProjeto.forEach(cartao => {
     if (cartao.history) {
-      cartao.history.forEach(h => timelineProjeto.push({ type: 'move', date: h.action_timestamp, data: h, cartaoNome: cartao.title, dono: cartao.currentStep?.requiredRole?.name || 'Coordenação' }));
+      cartao.history.forEach(h => timelineProjeto.push({ type: 'move', date: h.action_timestamp, data: h, cartaoNome: cartao.title, dono: cartao.currentStep?.requiredRole?.name || 'CRD' }));
     }
     if (cartao.comments) {
-      cartao.comments.forEach(c => timelineProjeto.push({ type: 'comment', date: c.created_at, data: c, cartaoNome: cartao.title, dono: cartao.currentStep?.requiredRole?.name || 'Coordenação' }));
+      cartao.comments.forEach(c => timelineProjeto.push({ type: 'comment', date: c.created_at, data: c, cartaoNome: cartao.title, dono: cartao.currentStep?.requiredRole?.name || 'CRD' }));
     }
   });
   timelineProjeto.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -94,7 +94,7 @@ export function AuditoriaModal({ projeto, kanban, onClose }) {
                         <div style={{ fontWeight: '800', color: '#222', marginBottom: '6px' }}>{task.title}</div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
                           <span style={{ color: '#555', fontSize: '13px' }}>{task.workflow?.name || ''}</span>
-                          <span style={{ color: '#555', fontSize: '13px', fontWeight: '700' }}>{task.currentStep?.requiredRole?.name || 'Coordenação'}</span>
+                          <span style={{ color: '#555', fontSize: '13px', fontWeight: '700' }}>{task.currentStep?.requiredRole?.name || 'CRD'}</span>
                         </div>
                       </div>
                     ))}

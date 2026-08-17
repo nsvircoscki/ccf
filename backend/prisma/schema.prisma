@@ -131,7 +131,7 @@ model CartorioCns {
 // Etapas padrão de cada tipo de processo (Retificação, Desmembramento...),
 // usadas ao fabricar/editar um projeto no Kanban (ver fabricarProjeto e
 // editarProjeto em workflowService.js). Editável pela tela de Configurações
-// > Etapas, restrita ao usuário Charles — substituiu o antigo
+// > Etapas, restrita ao usuário ENG — substituiu o antigo
 // CATALOGO_PROCESSOS/MAPEAMENTO_SETORES fixo no código.
 model TipoProcessoEtapa {
   id           String @id @default(uuid())
@@ -149,6 +149,7 @@ model Role {
 
   users User[]
   steps WorkflowStep[]
+  notifications Notification[]
 }
 
 model User {
@@ -181,6 +182,7 @@ model Workflow {
   created_at  DateTime @default(now())
   steps       WorkflowStep[]
   tickets     Ticket[]
+  notifications Notification[]
 }
 
 model WorkflowStep {
@@ -204,6 +206,7 @@ model Ticket {
   title         String
   description   String?
   created_at    DateTime @default(now())
+  sequence      Int      @default(0)
 
   workflowId    String
   workflow      Workflow @relation(fields: [workflowId], references: [id])
@@ -213,6 +216,23 @@ model Ticket {
 
   history       TicketHistory[]
   comments      Comment[]
+  notifications Notification[]
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  mensagem   String
+  lida       Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  roleId     String
+  role       Role     @relation(fields: [roleId], references: [id])
+
+  ticketId   String?
+  ticket     Ticket?   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  workflowId String?
+  workflow   Workflow? @relation(fields: [workflowId], references: [id], onDelete: Cascade)
 }
 
 model TicketHistory {

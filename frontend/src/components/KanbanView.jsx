@@ -4,13 +4,13 @@ import { TicketCard } from './TicketCard';
 import { AddCard } from './AddCard';
 import { AnimatedDropdown } from './AnimatedDropdown';
 
-const USUARIOS = ['Desenho', 'Topografia', 'Charles', 'Coordenação'];
-const COLUNAS_VISUAIS = ['Iniciar', 'Em Andamento', 'Concluído']; 
+const USUARIOS = ['DES', 'TOPO', 'ENG', 'CRD'];
+const COLUNAS_VISUAIS = ['Iniciar', 'Em Andamento', 'Concluído'];
 const CORES = {
-  'Charles': { bg: '#FFF9C4', borda: '#FBC02D' },      
-  'Topografia': { bg: '#BBDEFB', borda: '#1E88E5' },   
-  'Desenho': { bg: '#C8E6C9', borda: '#43A047' },      
-  'Coordenação': { bg: '#D7CCC8', borda: '#795548' }   
+  'ENG': { bg: '#FFF9C4', borda: '#FBC02D' },
+  'TOPO': { bg: '#BBDEFB', borda: '#1E88E5' },
+  'DES': { bg: '#C8E6C9', borda: '#43A047' },
+  'CRD': { bg: '#D7CCC8', borda: '#795548' }
 };
 
 const normalize = (text) => String(text || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -53,27 +53,17 @@ export function KanbanView({
         return;
     }
     
-    const setorDoCard = ticketArrastado.currentStep?.requiredRole?.name || 'Coordenação';
+    const setorDoCard = ticketArrastado.currentStep?.requiredRole?.name || 'CRD';
     const proximaEtapa = projeto.steps?.find(s => s.step_name === nomeColunaDestino && s.requiredRole?.name === setorDoCard);
-    
-    if (!proximaEtapa || ticketArrastado.currentStepId === proximaEtapa.id) { 
-        setTicketArrastado(null); 
-        return; 
-    }
-    
-    const pendentesAnteriores = tickets.filter(t => 
-        t.workflowId === ticketArrastado.workflowId && 
-        t.sequence > 0 && ticketArrastado.sequence > 0 && 
-        t.sequence < ticketArrastado.sequence && 
-        (t.currentStep?.step_name || 'Iniciar') !== 'Concluído'
-    );
 
-    if (pendentesAnteriores.length > 0 && proximaEtapa.step_name !== 'Iniciar') {
-        onAvisoDependencia({ ticketArrastado, proximaEtapa, pendentes: pendentesAnteriores });
+    if (!proximaEtapa || ticketArrastado.currentStepId === proximaEtapa.id) {
         setTicketArrastado(null);
         return;
     }
 
+    // Não há mais bloqueio por etapa anterior pendente — o setor responsável
+    // pela próxima etapa é avisado por notificação (ver Navbar) em vez de ter
+    // o card travado até a etapa anterior terminar.
     moverTicketOtimista(ticketArrastado, proximaEtapa, usuarioLogado);
     setTicketArrastado(null);
   };
@@ -177,7 +167,7 @@ export function KanbanView({
               <FiPrinter size={20} />
             </button>
 
-            {usuarioLogado === 'Charles' && (
+            {usuarioLogado === 'ENG' && (
               <>
                 <button title="Editar Processos" onClick={onAbrirEdicao} style={{ padding: '12px', background: '#EAEAEA', color: '#333', border: 'none', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s' }}>
                   <FiEdit size={20} />
@@ -221,7 +211,7 @@ export function KanbanView({
                     return statusNome === colunaNome;
                   })
                   .filter(t => {
-                    const dono = t.currentStep?.requiredRole?.name || 'Coordenação';
+                    const dono = t.currentStep?.requiredRole?.name || 'CRD';
                     return filtroResponsavel === 'Todos' || dono === filtroResponsavel;
                   })
                   .filter(t => {
@@ -229,22 +219,19 @@ export function KanbanView({
                     const etapaTexto = normalize(t.currentStep?.step_name || 'Iniciar');
                     return etapaTexto.includes(etapaTerm) || normalize(t.title).includes(etapaTerm);
                   })
+                  .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
                   .map(t => {
-                    const dono = t.currentStep?.requiredRole?.name || 'Coordenação';
-                    const temPermissao = dono === usuarioLogado || usuarioLogado === 'Charles';
-                    const cor = CORES[dono] || CORES['Charles'];
-
-                    const pendentesAnteriores = tickets.filter(prevT => prevT.workflowId === t.workflowId && prevT.sequence > 0 && t.sequence > 0 && prevT.sequence < t.sequence && (prevT.currentStep?.step_name || 'Iniciar') !== 'Concluído').length > 0;
-                    const estaBloqueado = pendentesAnteriores && (t.currentStep?.step_name || 'Iniciar') === 'Iniciar';
+                    const dono = t.currentStep?.requiredRole?.name || 'CRD';
+                    const temPermissao = dono === usuarioLogado || usuarioLogado === 'ENG';
+                    const cor = CORES[dono] || CORES['ENG'];
 
                     return (
-                      <TicketCard 
+                      <TicketCard
                         key={t.id}
                         t={t}
                         dono={dono}
                         cor={cor}
                         temPermissao={temPermissao}
-                        estaBloqueado={estaBloqueado}
                         onDragStart={() => setTicketArrastado(t)}
                         onDragEnd={() => setTicketArrastado(null)}
                         onClick={() => onAbrirDetalhe(t)}

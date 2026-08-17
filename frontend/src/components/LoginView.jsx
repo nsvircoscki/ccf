@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import LeafIcon from './LeafIcon';
 import { authService } from '../services/authService';
 
-const USUARIOS = ['Desenho', 'Topografia', 'Charles', 'Coordenação'];
+const USUARIOS = ['DES', 'TOPO', 'ENG', 'CRD'];
 
 const fieldStyle = {
   width: '100%',
@@ -33,7 +33,7 @@ export function LoginView({ onLogin, globalCss }) {
   const [senhaInput, setSenhaInput] = useState('');
   const [confirmarSenhaInput, setConfirmarSenhaInput] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
-  const [usuarioSelecionadoLogin, setUsuarioSelecionadoLogin] = useState('Charles');
+  const [usuarioSelecionadoLogin, setUsuarioSelecionadoLogin] = useState('ENG');
   // 'login': tela normal. 'criar-senha': primeiro acesso desse usuário —
   // password_hash ainda é nulo no banco, então pedimos pra ele definir uma.
   const [modo, setModo] = useState('login');

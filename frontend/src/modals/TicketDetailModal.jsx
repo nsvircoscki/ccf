@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 
 const CORES = {
-  'Charles': { bg: '#FFF9C4', borda: '#FBC02D' },      
-  'Topografia': { bg: '#BBDEFB', borda: '#1E88E5' },   
-  'Desenho': { bg: '#C8E6C9', borda: '#43A047' },      
-  'Coordenação': { bg: '#D7CCC8', borda: '#795548' }   
+  'ENG': { bg: '#FFF9C4', borda: '#FBC02D' },
+  'TOPO': { bg: '#BBDEFB', borda: '#1E88E5' },
+  'DES': { bg: '#C8E6C9', borda: '#43A047' },
+  'CRD': { bg: '#D7CCC8', borda: '#795548' }
 };
 
 const getCorStatus = (status) => {
@@ -40,7 +40,7 @@ export function TicketDetailModal({ ticket, kanban, usuarioLogado, onClose }) {
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100 }} onClick={onClose}>
       <div style={{ background: '#FFF', width: '600px', height: '80vh', borderRadius: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
-        <div style={{ padding: '25px 30px', borderBottom: '1px solid #EEE', background: CORES[ticketAtual.currentStep?.requiredRole?.name || 'Coordenação']?.bg || '#FFF9C4' }}>
+        <div style={{ padding: '25px 30px', borderBottom: '1px solid #EEE', background: CORES[ticketAtual.currentStep?.requiredRole?.name || 'CRD']?.bg || '#FFF9C4' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <h2 style={{ margin: 0, color: '#333', fontSize: '24px' }}>{ticketAtual.title}</h2>
             <div style={{ display: 'flex', gap: '15px' }}>

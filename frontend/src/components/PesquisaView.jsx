@@ -97,16 +97,19 @@ export function PesquisaView({
 
   const [query, setQuery] = useState('');
   const [buscaEtapa, setBuscaEtapa] = useState('');
-  const [filtroStatus, setFiltroStatus] = useState('Todas');
-  const [filtroTipo, setFiltroTipo] = useState('Todos');
+  // Filtros abaixo persistem em localStorage — o usuário não quer escolhê-los
+  // de novo toda vez que reabre a tela (só o texto de busca reseta, esse
+  // continua "de sessão").
+  const [filtroStatus, setFiltroStatus] = useState(() => localStorage.getItem('pesquisa:filtroStatus') || 'Todas');
+  const [filtroTipo, setFiltroTipo] = useState(() => localStorage.getItem('pesquisa:filtroTipo') || 'Todos');
   const [selectedId, setSelectedId] = useState(null);
   // Projeto 100% Concluído sai da busca principal e vai pra aba de inativos —
   // fica fora do fluxo de trabalho do dia a dia sem sumir do sistema.
-  const [abaProjetos, setAbaProjetos] = useState('ativos');
+  const [abaProjetos, setAbaProjetos] = useState(() => localStorage.getItem('pesquisa:abaProjetos') || 'ativos');
   // Por padrão todo mundo já vê tudo; esse toggle deixa restringir pra só as
   // etapas do próprio setor de quem estiver logado, sem perder a visão geral
   // (fica só um clique de distância).
-  const [somenteMinhasEtapas, setSomenteMinhasEtapas] = useState(false);
+  const [somenteMinhasEtapas, setSomenteMinhasEtapas] = useState(() => localStorage.getItem('pesquisa:somenteMinhasEtapas') === 'true');
   // Lista completa de Serviço (tabela Servico, não os projetos do Kanban
   // usados no restante desta tela) — guarda a lista, não só o total, porque o
   // contador exibido precisa descontar os serviços já inativados (ver
@@ -124,14 +127,30 @@ export function PesquisaView({
     })();
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem('pesquisa:filtroStatus', filtroStatus);
+  }, [filtroStatus]);
+
+  useEffect(() => {
+    localStorage.setItem('pesquisa:filtroTipo', filtroTipo);
+  }, [filtroTipo]);
+
+  useEffect(() => {
+    localStorage.setItem('pesquisa:abaProjetos', abaProjetos);
+  }, [abaProjetos]);
+
+  useEffect(() => {
+    localStorage.setItem('pesquisa:somenteMinhasEtapas', String(somenteMinhasEtapas));
+  }, [somenteMinhasEtapas]);
+
   const etapaTerm = normalize(buscaEtapa.trim());
 
   // "Minhas Etapas" restringe às tarefas do próprio setor do usuário logado —
-  // mesmo toggle pra todo mundo agora, não só o Charles. Sem o toggle, cada
+  // mesmo toggle pra todo mundo agora, não só o ENG. Sem o toggle, cada
   // usuário via só as próprias etapas sem opção de ver o resto.
   let tarefas = tickets;
   if (somenteMinhasEtapas) {
-    tarefas = tarefas.filter(t => (t.currentStep?.requiredRole?.name || 'Coordenação') === usuarioLogado);
+    tarefas = tarefas.filter(t => (t.currentStep?.requiredRole?.name || 'CRD') === usuarioLogado);
   }
 
   // Agrupamento por projeto ANTES de filtrar por status/tipo/etapa — cada
@@ -247,7 +266,7 @@ export function PesquisaView({
   const totalAtivo = ativo ? ativo.tasks.length : 0;
   const concluidasAtivo = etapasAtivo ? etapasAtivo['Concluído'] : 0;
   const progressoAtivo = totalAtivo === 0 ? 0 : Math.round((concluidasAtivo / totalAtivo) * 100);
-  const setoresAtivo = ativo ? [...new Set(ativo.tasks.map(t => t.currentStep?.requiredRole?.name || 'Coordenação'))] : [];
+  const setoresAtivo = ativo ? [...new Set(ativo.tasks.map(t => t.currentStep?.requiredRole?.name || 'CRD'))] : [];
 
   // Sem "Concluído"/"Pendentes" aqui — quem já concluiu 100% foi pra aba
   // Inativos (abaProjetos), então dentro de Ativos só cabe Iniciar/Andamento.
