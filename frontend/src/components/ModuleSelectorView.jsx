@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, ListChecks, ArrowLeft,
+  BookOpen, Wallet,
 } from 'lucide-react';
 
 const MONT = '"Montserrat", sans-serif';
@@ -8,16 +9,20 @@ const SANS = '"Open Sans", sans-serif';
 const EASE = 'cubic-bezier(0.22, 0.61, 0.36, 1)';
 const POP_EASE = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 
+// wip: ainda não têm tela — o tile aparece pra dar visibilidade do que vem
+// por aí, mas fica desabilitado (ver ModuleTile) até a tela existir.
 const MODULOS = [
   { id: 'cadastro', label: 'Cadastro de Serviço', desc: 'Abrir um novo serviço e escolher os tipos de processo', icon: ClipboardList, color: '#1a3a8a' },
   { id: 'dashboard', label: 'Pesquisa', desc: 'Buscar serviços por cliente, matrícula ou etapa', icon: Search, color: '#2e8b2e' },
   { id: 'kanban', label: 'Kanban', desc: 'Acompanhar o andamento dos projetos por etapa', icon: LayoutGrid, color: '#0e7490' },
   { id: 'orcamento', label: 'Orçamento', desc: 'Montar e aprovar orçamentos de serviço', icon: Calculator, color: '#b45309' },
   { id: 'emissao-documentos', label: 'OS/Contrato', desc: 'Gerar requerimentos e declarações a partir de modelos', icon: FileText, color: '#0f766e' },
+  { id: 'sis-caixa', label: 'SIS CAIXA', desc: 'Controle de caixa do sistema', icon: Wallet, color: '#065f46', wip: true },
   { id: 'clientes', label: 'Pessoas', desc: 'Cadastro de clientes, pessoas físicas e jurídicas', icon: Users, color: '#be185d' },
   { id: 'imoveis', label: 'Imóveis', desc: 'Cadastro de imóveis, proprietários e usufrutuários', icon: Home, color: '#7c3aed' },
   { id: 'vinculacao', label: 'SIS DOC', desc: 'Vincular proprietários, imóvel e confrontantes ao serviço', icon: Link2, color: '#1a3a8a' },
   { id: 'config', label: 'Configurações', desc: 'Documentos, etapas e outros ajustes do sistema', icon: Settings2, color: '#64748b' },
+  { id: 'sis-mon', label: 'SIS MON', desc: 'Sistema de monografia', icon: BookOpen, color: '#92400e', wip: true },
 ];
 
 // Sub-módulos dentro de "Configurações" — clicar no tile principal abre esta
@@ -31,17 +36,20 @@ const SUBMODULOS_CONFIG = [
 function ModuleTile({ mod, index, onOpen }) {
   const Icon = mod.icon;
   const [hover, setHover] = useState(false);
+  const wip = Boolean(mod.wip);
 
   return (
     <button
       type="button"
-      onClick={onOpen}
+      onClick={wip ? undefined : onOpen}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      title={wip ? 'Em desenvolvimento — ainda não disponível' : undefined}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-        background: 'none', border: 'none', padding: 0, cursor: 'pointer', outline: 'none',
+        background: 'none', border: 'none', padding: 0, cursor: wip ? 'default' : 'pointer', outline: 'none',
         animation: `moduloPop 0.5s ${POP_EASE} ${index * 0.045 + 0.05}s both`,
+        opacity: wip ? 0.55 : 1,
       }}
     >
       <div
@@ -49,10 +57,10 @@ function ModuleTile({ mod, index, onOpen }) {
           position: 'relative', width: 84, height: 84, borderRadius: 24,
           background: `linear-gradient(150deg, ${mod.color} 0%, ${mod.color}cc 100%)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff',
-          boxShadow: hover
+          boxShadow: !wip && hover
             ? `0 14px 30px ${mod.color}66`
             : `0 8px 20px ${mod.color}3a, inset 0 1px 0 rgba(255,255,255,0.25)`,
-          transform: hover ? 'translateY(-4px) scale(1.04)' : 'none',
+          transform: !wip && hover ? 'translateY(-4px) scale(1.04)' : 'none',
           transition: `transform 0.28s ${EASE}, box-shadow 0.25s ease`,
         }}
       >
@@ -66,7 +74,7 @@ function ModuleTile({ mod, index, onOpen }) {
       </div>
       <span style={{
         fontFamily: SANS, fontWeight: 600, fontSize: 12.5,
-        color: hover ? mod.color : '#3a4a6b', textAlign: 'center', maxWidth: 100,
+        color: !wip && hover ? mod.color : '#3a4a6b', textAlign: 'center', maxWidth: 100,
         transition: 'color 0.2s ease',
       }}>
         {mod.label}
@@ -75,7 +83,7 @@ function ModuleTile({ mod, index, onOpen }) {
         fontFamily: SANS, fontSize: 11, color: '#9aabcc', textAlign: 'center', maxWidth: 120,
         opacity: hover ? 1 : 0, transition: 'opacity 0.2s ease', minHeight: 14,
       }}>
-        {mod.desc}
+        {wip ? 'Em desenvolvimento' : mod.desc}
       </span>
     </button>
   );
@@ -85,6 +93,7 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
   const [submenuConfig, setSubmenuConfig] = useState(false);
 
   const abrirTilePrincipal = (mod) => {
+    if (mod.wip) return;
     if (mod.id === 'config') {
       setSubmenuConfig(true);
       return;
@@ -128,10 +137,13 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
       </header>
 
       <main style={{
-        flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-        padding: '48px 24px 60px', overflowY: 'auto',
+        flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        padding: '24px 24px', overflowY: 'auto',
       }}>
-        <div style={{ textAlign: 'center', marginBottom: 44, position: 'relative', width: '100%', maxWidth: 640 }}>
+        {/* maxWidth mais largo cabe as 11 caixas em só 2 linhas — com 640px
+            (5 por linha) o SIS MON sobrava sozinho numa 3ª linha e exigia
+            rolar a tela pra aparecer. */}
+        <div style={{ textAlign: 'center', marginBottom: 32, position: 'relative', width: '100%', maxWidth: 780 }}>
           {submenuConfig && (
             <button
               type="button"
@@ -159,7 +171,7 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
 
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
-          gap: '30px 22px', width: '100%', maxWidth: 640, justifyItems: 'center',
+          gap: '26px 22px', width: '100%', maxWidth: 780, justifyItems: 'center',
         }}>
           {(submenuConfig ? submodulosVisiveis : MODULOS).map((mod, i) => (
             <ModuleTile
