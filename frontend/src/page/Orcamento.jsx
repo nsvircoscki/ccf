@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 import ModalPagamento from './ModalPagamento.jsx';
-import PainelMapa from './PainelMapa.jsx';
+import PlaceholderMapa from './PlaceholderMapa.jsx';
 import { AnimatedDropdown } from '../components/AnimatedDropdown';
 import { servicoService } from '../services/servicoService.js';
 import { formatarTelefone, formatarMatricula } from '../utils/mascaras.js';
@@ -379,7 +379,6 @@ function NotesModal({ notas, setNotas, onClose }) {
 
 function Orcamento({ onBack, onOrcamentoDecidido }) {
   const [services, setServices] = useState(initialServices);
-  const [viewMode, setViewMode] = useState('Topografico');
   const [orcamentos, setOrcamentos] = useState([]);
   const [numero, setNumero] = useState('');
   const [orcamentoId, setOrcamentoId] = useState(null);
@@ -856,7 +855,7 @@ function Orcamento({ onBack, onOrcamentoDecidido }) {
         ) : imagensJpg.length > 0 || imagemSalvaUrl ? (
           <VisualizadorImagem arquivo={imagensJpg[0]} url={imagemSalvaUrl} />
         ) : (
-          <PainelMapa viewMode={viewMode} setViewMode={setViewMode} />
+          <PlaceholderMapa />
         )}
 
         <aside

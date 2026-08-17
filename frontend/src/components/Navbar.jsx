@@ -123,12 +123,12 @@ export function Navbar({
         background: '#FFFFFF',
         borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
         display: 'grid',
-        // minmax(0, 1fr), não só "1fr": um track "1fr" puro tem mínimo
-        // implícito "auto" (do tamanho do conteúdo) — com muitos itens de
-        // menu, isso empurrava a coluna da direita (nome do usuário) pra
-        // fora da tela em vez de encolher. minmax(0, 1fr) permite encolher
-        // até 0 de verdade, deixando o ellipsis do nome fazer o trabalho.
-        gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+        // Esquerda e direita ficam "auto" (nunca encolhem — o nome do
+        // usuário e as ações precisam estar sempre visíveis). Quem cede
+        // espaço é o menu central: minmax(0, 1fr) permite encolher de
+        // verdade, e o overflow-x:auto do <nav> deixa ele rolar em vez de
+        // espremer o resto pra fora ou some o nome do usuário.
+        gridTemplateColumns: 'auto minmax(0, 1fr) auto',
         alignItems: 'center',
         gap: '24px',
         padding: '0 28px',
@@ -151,8 +151,9 @@ export function Navbar({
         </span>
       </button>
 
-      {/* Centro: navegação */}
-      <nav style={{ display: 'flex', alignItems: 'flex-start', gap: '18px' }}>
+      {/* Centro: navegação — rola horizontalmente em vez de espremer os
+          lados quando não cabe tudo de uma vez */}
+      <nav className="scroll" style={{ display: 'flex', alignItems: 'flex-start', gap: '18px', overflowX: 'auto', overflowY: 'hidden', minWidth: 0, padding: '2px 2px 6px' }}>
         {ITENS.map((item) => (
           item.id === 'config' ? (
             <div key={item.id} ref={configRef} style={{ position: 'relative' }}>
