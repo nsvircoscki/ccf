@@ -102,7 +102,21 @@ export function Navbar({
 }) {
   const [alterarSenhaAberto, setAlterarSenhaAberto] = useState(false);
   const [configMenuAberto, setConfigMenuAberto] = useState(false);
+  // Posição calculada na hora de abrir (ver abrirMenuConfig) — o dropdown usa
+  // position:fixed pra escapar do overflow-x:auto do <nav> (senão fica
+  // cortado, já que fica fora dos limites verticais do container com scroll).
+  const [configMenuPos, setConfigMenuPos] = useState({ top: 0, left: 0 });
   const configRef = useRef(null);
+
+  const abrirMenuConfig = () => {
+    setConfigMenuAberto((aberto) => {
+      if (!aberto && configRef.current) {
+        const rect = configRef.current.getBoundingClientRect();
+        setConfigMenuPos({ top: rect.bottom + 8, left: rect.left + rect.width / 2 });
+      }
+      return !aberto;
+    });
+  };
 
   useEffect(() => {
     const fecharSeForaDoMenu = (evento) => {
@@ -160,11 +174,11 @@ export function Navbar({
               <NavItem
                 item={item}
                 ativo={emTelaDeConfig || configMenuAberto}
-                onClick={() => setConfigMenuAberto((aberto) => !aberto)}
+                onClick={abrirMenuConfig}
               />
               {configMenuAberto && (
                 <div style={{
-                  position: 'absolute', top: 'calc(100% + 8px)', left: '50%', transform: 'translateX(-50%)',
+                  position: 'fixed', top: configMenuPos.top, left: configMenuPos.left, transform: 'translateX(-50%)',
                   background: '#fff', border: '1px solid rgba(15, 23, 42, 0.10)', borderRadius: 12,
                   boxShadow: '0 12px 34px rgba(14,37,73,0.16)', overflow: 'hidden', zIndex: 40,
                   minWidth: 170,
