@@ -208,7 +208,6 @@ function EmissaoDocumentos() {
                 <div class="signatures">
                   <div class="sig-box">
                     <strong>Assinatura do Cliente</strong>
-                    <div style="height: 28px; margin-top: 8px; border-bottom: 1px solid #000; width: 100%;"></div>
                   </div>
                   <div class="sig-box" style="text-align: right;">
                     <strong>Eng. CHARLES COSTI</strong><br>CCF Consultores Ltda.<br>Eng. Florestal<br>Eng. de Segurança do Trabalho<br>Esp. em Gestão Ambiental<br>Esp. em Licenciamento Ambiental<br>Esp. em Georreferenciamento de Imóveis RL
