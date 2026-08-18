@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Building2, Check, FileText, MessageSquare, Save, MapPin } from 'lucide-react';
-import PainelMapa from '../page/PainelMapa.jsx';
+import PlaceholderMapa from '../page/PlaceholderMapa.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { servicoService } from '../services/servicoService';
 import { formatarTelefone, formatarMatricula } from '../utils/mascaras';
@@ -164,7 +164,6 @@ function OptionButton ({ ativo, onClick, children }) {
 }
 
 export default function CadastroServicoView({ onBack, onServicoCriado }) {
-  const [viewMode, setViewMode] = useState('Topografico');
   const [services, setServices] = useState(initialServices);
   const [contato, setContato] = useState('');
   const [area, setArea] = useState('0,00');
@@ -568,7 +567,7 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
         {imagensJpg.length > 0 || imagemSalvaUrl ? (
           <VisualizadorImagem arquivo={imagensJpg[0]} url={imagemSalvaUrl} />
         ) : (
-          <PainelMapa viewMode={viewMode} setViewMode={setViewMode} />
+          <PlaceholderMapa />
         )}
 
         <aside

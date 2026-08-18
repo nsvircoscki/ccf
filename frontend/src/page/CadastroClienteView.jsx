@@ -242,7 +242,15 @@ export default function CadastroClienteView({ onBack, modal, onSaved }) {
               value={form.nome} onChange={set('nome')} placeholder={isPF ? 'Nome do cliente' : 'Nome da empresa'} />
             <Field label={isPF ? 'CPF' : 'CNPJ'} icon="id"
               value={form.documento} onChange={(v) => set('documento')(isPF ? formatarCPF(v) : formatarCNPJ(v))}
-              placeholder={isPF ? '000.000.000-00' : '00.000.000/0000-00'} />
+              placeholder={isPF ? '000.000.000-00' : '00.000.000/0000-00'}
+              hint={!isPF && (
+                <button type="button"
+                  onClick={() => window.open('https://www.gov.br/pt-br/servicos/consultar-cadastro-nacional-de-pessoas-juridicas', '_blank', 'noopener,noreferrer')}
+                  style={{ background: 'none', border: 'none', padding: 0, color: accent, fontWeight: 700, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  Consultar CNPJ na Receita Federal
+                </button>
+              )} />
             <Field label="Telefone" icon="phone" value={form.telefone} onChange={(v) => set('telefone')(formatarTelefone(v))} placeholder="(00) 00000-0000" />
             <Field label="E-mail" icon="mail" type="email" span={2} value={form.email} onChange={set('email')} placeholder={isPF ? 'cliente@email.com' : 'contato@empresa.com.br'} />
           </Section>

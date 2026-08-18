@@ -1,6 +1,11 @@
 # Backup do banco de dados — não deve ir para o GitHub
 backup_fabrica.dump
 
+# Dumps de curl/scripts de teste avulsos usados durante o desenvolvimento
+resp.txt
+backend/resp.txt
+backend/_tmp_*
+
 # Arquivo compactado redundante — a versão extraída já está em backend/Modelos/
 backend/Modelos.rar
 

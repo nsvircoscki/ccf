@@ -1,5 +1,6 @@
 // src/services/ticketService.js
 import { prisma } from '../prisma.js';
+import { notificationService } from './notificationService.js';
 
 export const ticketService = {
   async listarTodos() {
@@ -50,14 +51,20 @@ export const ticketService = {
     const role = await prisma.role.findUnique({ where: { name: userId } });
     const user = await prisma.user.findFirst({ where: { roleId: role.id } });
     const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    const toStep = await prisma.workflowStep.findUnique({ where: { id: toStepId } });
 
-    const [updatedTicket] = await prisma.$transaction([
-      prisma.ticket.update({ where: { id: ticketId }, data: { currentStepId: toStepId } }),
-      prisma.ticketHistory.create({
+    return prisma.$transaction(async (tx) => {
+      const updatedTicket = await tx.ticket.update({ where: { id: ticketId }, data: { currentStepId: toStepId } });
+      await tx.ticketHistory.create({
         data: { ticketId, fromStepId: ticket.currentStepId, toStepId, userId: user.id }
-      })
-    ]);
-    return updatedTicket;
+      });
+
+      if (toStep.step_name === 'Concluído') {
+        await notificationService.notificarProximaEtapa(ticket, tx);
+      }
+
+      return updatedTicket;
+    });
   },
 
   async excluirTicket(ticketId) {

@@ -18,7 +18,7 @@ export function AvisoDependenciaModal({ aviso, kanban, usuarioLogado, onClose })
         <div style={{ background: '#FFF9C4', padding: '15px', borderRadius: '10px', marginBottom: '25px', border: '1px solid #FBC02D' }}>
           <span style={{ fontWeight: 'bold', fontSize: '11px', color: '#F57F17', display: 'block', marginBottom: '5px' }}>ATIVIDADES EM ATRASO:</span>
           <ul style={{ margin: 0, paddingLeft: '20px', color: '#333', fontSize: '13px' }}>
-            {aviso.pendentes.slice(0, 3).map(p => <li key={p.id}>{p.title} ({p.currentStep?.requiredRole?.name || 'Coordenação'})</li>)}
+            {aviso.pendentes.slice(0, 3).map(p => <li key={p.id}>{p.title} ({p.currentStep?.requiredRole?.name || 'CRD'})</li>)}
             {aviso.pendentes.length > 3 && <li>... e outras {aviso.pendentes.length - 3} tarefas pendentes.</li>}
           </ul>
         </div>

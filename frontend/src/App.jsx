@@ -156,6 +156,7 @@ export default function App() {
           usuarioLogado={usuarioLogado}
           setUsuarioLogado={handleLogout}
           onVoltarModulos={() => setModuloEscolhido(false)}
+          kanban={kanban}
         />
 
         <div className="flex-1 flex flex-col min-h-0" style={{ minHeight: 0, overflow: 'hidden' }}>
@@ -303,7 +304,7 @@ export default function App() {
                     ))}
                   </td>
                   <td style={{ verticalAlign: 'top' }}>
-                    {etapa.tasks.length === 0 ? '-' : [...new Set(etapa.tasks.map(t => t.currentStep?.requiredRole?.name || 'Coordenação'))].join(', ')}
+                    {etapa.tasks.length === 0 ? '-' : [...new Set(etapa.tasks.map(t => t.currentStep?.requiredRole?.name || 'CRD'))].join(', ')}
                   </td>
                   <td style={{ verticalAlign: 'top' }}>{etapa.tasks.length} tarefa(s)</td>
                 </tr>

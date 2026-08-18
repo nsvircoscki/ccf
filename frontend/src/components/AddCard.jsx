@@ -12,7 +12,7 @@ const IconePlus = () => (
 export function AddCard({ column, workflowAtivo, projeto, kanban, usuarioLogado, usuarios }) {
   const [text, setText] = useState('');
   const [adding, setAdding] = useState(false);
-  const [responsavel, setResponsavel] = useState(usuarioLogado || usuarios?.[0] || 'Coordenação');
+  const [responsavel, setResponsavel] = useState(usuarioLogado || usuarios?.[0] || 'CRD');
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -36,7 +36,7 @@ export function AddCard({ column, workflowAtivo, projeto, kanban, usuarioLogado,
         currentStepId: stepMatch.id
       });
       setText('');
-      setResponsavel(usuarioLogado || usuarios?.[0] || 'Coordenação');
+      setResponsavel(usuarioLogado || usuarios?.[0] || 'CRD');
       setAdding(false);
     } catch (error) {
       console.error('Falha ao criar tarefa:', error);

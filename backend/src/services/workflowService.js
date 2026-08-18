@@ -1,5 +1,6 @@
 // src/services/workflowService.js
 import { prisma } from '../prisma.js';
+import { notificationService } from './notificationService.js';
 
 // Etapas padrão por tipo de processo — vêm da tabela TipoProcessoEtapa
 // (editável pela tela de Configurações > Etapas), não mais fixas no código.
@@ -82,13 +83,14 @@ export const workflowService = {
       }
     }
 
-    const ticketsData = listaTarefasMesclada.map(nomeTarefa => {
-      const setorDaTarefa = setores[nomeTarefa] || "Coordenação";
+    const ticketsData = listaTarefasMesclada.map((nomeTarefa, index) => {
+      const setorDaTarefa = setores[nomeTarefa] || "CRD";
       const etapa = etapasCriadas.find(s => s.step_name === 'Iniciar' && s.roleName === setorDaTarefa);
-      return { title: nomeTarefa, workflowId: workflow.id, currentStepId: etapa.id };
+      return { title: nomeTarefa, workflowId: workflow.id, currentStepId: etapa.id, sequence: index };
     });
 
     await tx.ticket.createMany({ data: ticketsData });
+    await notificationService.notificarPrimeiraEtapa(workflow.id, tx);
     return workflow;
   },
 
@@ -105,15 +107,19 @@ export const workflowService = {
     }
 
     const novaListaNomes = Array.from(tarefasUnicas);
+    const sequenceMap = new Map(novaListaNomes.map((nome, index) => [nome, index]));
 
-    const workflow = await prisma.workflow.findUnique({ 
-      where: { id }, include: { steps: { include: { requiredRole: true } } } 
+    const workflow = await prisma.workflow.findUnique({
+      where: { id }, include: { steps: { include: { requiredRole: true } } }
     });
     const ticketsAtuais = await prisma.ticket.findMany({ where: { workflowId: id } });
     const nomesAtuais = ticketsAtuais.map(t => t.title);
 
     const tarefasParaDeletar = ticketsAtuais.filter(t => !novaListaNomes.includes(t.title));
     const nomesParaAdicionar = novaListaNomes.filter(nome => !nomesAtuais.includes(nome));
+    // Tickets que continuam existindo também precisam da sequência recalculada —
+    // a edição pode trocar o(s) tipo(s) de processo e mudar a ordem das etapas.
+    const ticketsParaResequenciar = ticketsAtuais.filter(t => novaListaNomes.includes(t.title));
 
     await prisma.$transaction(async (tx) => {
       if (tarefasParaDeletar.length > 0) {
@@ -125,11 +131,18 @@ export const workflowService = {
 
       if (nomesParaAdicionar.length > 0) {
         const novosTicketsData = nomesParaAdicionar.map(nomeTarefa => {
-          const setorDaTarefa = setores[nomeTarefa] || "Coordenação";
+          const setorDaTarefa = setores[nomeTarefa] || "CRD";
           const etapaInicial = workflow.steps.find(step => step.step_name === 'Iniciar' && step.requiredRole.name === setorDaTarefa);
-          return { title: nomeTarefa, workflowId: id, currentStepId: etapaInicial.id };
+          return { title: nomeTarefa, workflowId: id, currentStepId: etapaInicial.id, sequence: sequenceMap.get(nomeTarefa) };
         });
         await tx.ticket.createMany({ data: novosTicketsData });
+      }
+
+      for (const ticket of ticketsParaResequenciar) {
+        const novaSequence = sequenceMap.get(ticket.title);
+        if (ticket.sequence !== novaSequence) {
+          await tx.ticket.update({ where: { id: ticket.id }, data: { sequence: novaSequence } });
+        }
       }
 
       await tx.workflow.update({

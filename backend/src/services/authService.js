@@ -5,8 +5,8 @@ import { prisma } from '../prisma.js';
 const SENHA_MIN = 4;
 
 // "nomeUsuario" aqui é o mesmo valor usado no seletor de usuário do login
-// (o nome do Role: "Charles", "Desenho", "Topografia", "Coordenação") — o
-// resto do sistema já trata esse nome como identidade do usuário logado.
+// (o nome do Role: "ENG", "DES", "TOPO", "CRD") — o resto do sistema já
+// trata esse nome como identidade do usuário logado.
 async function buscarUsuarioPorRole(nomeUsuario) {
   const role = await prisma.role.findUnique({ where: { name: nomeUsuario } });
   if (!role) throw new Error('Usuário não encontrado.');

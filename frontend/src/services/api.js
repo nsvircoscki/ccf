@@ -294,7 +294,7 @@ export const api = {
         return res.json();
     },
 
-    // x-usuario: o backend só aceita a escrita vinda de "Charles" (ver
+    // x-usuario: o backend só aceita a escrita vinda de "ENG" (ver
     // tipoProcessoRoutes.js) — mesmo nível de checagem informal do resto do
     // sistema, que ainda não tem sessão/token.
     atualizarTipoProcesso: async (tipoProcesso, etapas, usuarioLogado) => {
@@ -304,5 +304,26 @@ export const api = {
             body: JSON.stringify({ etapas }),
         });
         return { data: await res.json(), ok: res.ok };
+    },
+
+    // ---- NOTIFICAÇÕES (setor responsável pela próxima etapa) ----
+    getNotificacoes: async (usuarioLogado) => {
+        const res = await fetch(`${BASE_URL}/notificacoes`, {
+            headers: { 'x-usuario': usuarioLogado || '' },
+        });
+        return res.json();
+    },
+
+    marcarNotificacaoComoLida: async (id) => {
+        const res = await fetch(`${BASE_URL}/notificacoes/${id}/lida`, { method: 'PUT' });
+        return res.json();
+    },
+
+    marcarTodasNotificacoesComoLidas: async (usuarioLogado) => {
+        const res = await fetch(`${BASE_URL}/notificacoes/marcar-todas-lidas`, {
+            method: 'PUT',
+            headers: { 'x-usuario': usuarioLogado || '' },
+        });
+        return res.json();
     },
 };

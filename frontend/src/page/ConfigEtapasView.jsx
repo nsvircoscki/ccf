@@ -4,7 +4,7 @@ import {
   Actions, SearchableSelect, Section, Shell, Toast, useToast, C, MONT, SANS,
 } from '../components/cadastros/CadastroKit.jsx';
 
-const SETORES = ['Charles', 'Coordenação', 'Desenho', 'Topografia'];
+const SETORES = ['ENG', 'CRD', 'DES', 'TOPO'];
 
 const botaoIconeStyle = (desabilitado) => ({
   width: 28, height: 28, borderRadius: 7, border: `1px solid ${C.border}`, background: '#fff',
@@ -15,7 +15,7 @@ const botaoIconeStyle = (desabilitado) => ({
 // Tela de administração das etapas padrão de cada tipo de processo — o que
 // antes era o CATALOGO_PROCESSOS/MAPEAMENTO_SETORES fixo em workflowService.js
 // agora vive na tabela TipoProcessoEtapa e é editável por aqui. Restrita ao
-// usuário Charles (checagem espelhada no backend em tipoProcessoRoutes.js).
+// usuário ENG (checagem espelhada no backend em tipoProcessoRoutes.js).
 export default function ConfigEtapasView({ onBack, usuarioLogado }) {
   const accent = C.accent;
   const { toast, show } = useToast();
@@ -70,7 +70,7 @@ export default function ConfigEtapasView({ onBack, usuarioLogado }) {
   };
 
   const removerEtapa = (indice) => setEtapas((atuais) => atuais.filter((_, i) => i !== indice));
-  const adicionarEtapa = () => setEtapas((atuais) => [...atuais, { nome: '', setor: 'Coordenação' }]);
+  const adicionarEtapa = () => setEtapas((atuais) => [...atuais, { nome: '', setor: 'CRD' }]);
 
   const handleSalvar = async () => {
     if (etapas.length === 0) {
@@ -99,11 +99,11 @@ export default function ConfigEtapasView({ onBack, usuarioLogado }) {
     }
   };
 
-  if (usuarioLogado !== 'Charles') {
+  if (usuarioLogado !== 'ENG') {
     return (
       <Shell title="Configurar Etapas" accent={accent} subtitle="Acesso restrito" onBack={onBack}>
         <p style={{ fontFamily: SANS, fontSize: 14, color: C.muted }}>
-          Só o usuário Charles pode configurar as etapas padrão dos processos.
+          Só o usuário ENG pode configurar as etapas padrão dos processos.
         </p>
       </Shell>
     );
