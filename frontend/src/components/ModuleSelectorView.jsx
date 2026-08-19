@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, ListChecks, ArrowLeft,
-  BookOpen, Wallet,
+  BookOpen, Wallet, FileSpreadsheet,
 } from 'lucide-react';
 
 const MONT = '"Montserrat", sans-serif';
@@ -23,6 +23,7 @@ const MODULOS = [
   { id: 'vinculacao', label: 'SIS DOC', desc: 'Vincular proprietários, imóvel e confrontantes ao serviço', icon: Link2, color: '#1a3a8a' },
   { id: 'config', label: 'Configurações', desc: 'Documentos, etapas e outros ajustes do sistema', icon: Settings2, color: '#64748b' },
   { id: 'sis-mon', label: 'SIS MON', desc: 'Sistema de monografia', icon: BookOpen, color: '#92400e', wip: true },
+  { id: 'importar-pontos', label: 'Importar Pontos', desc: 'Converte exportação de levantamento (GNSS/RTK) em tabela/Excel', icon: FileSpreadsheet, color: '#0369a1' },
 ];
 
 // Sub-módulos dentro de "Configurações" — clicar no tile principal abre esta

@@ -14,6 +14,7 @@ import CadastroImovelView from './page/CadastroImovelView';
 import VinculacaoView from './page/VinculacaoView';
 import ConfigDocumentosView from './page/ConfigDocumentosView';
 import ConfigEtapasView from './page/ConfigEtapasView';
+import ImportarPontosView from './page/ImportarPontosView';
 
 import { EditarProjetoModal } from './modals/EditarProjetoModal';
 import { TicketDetailModal } from './modals/TicketDetailModal';
@@ -218,6 +219,10 @@ export default function App() {
 
           {telaAtiva === 'config-etapas' && (
             <ConfigEtapasView onBack={() => setTelaAtiva('dashboard')} usuarioLogado={usuarioLogado} />
+          )}
+
+          {telaAtiva === 'importar-pontos' && (
+            <ImportarPontosView onBack={() => setModuloEscolhido(false)} />
           )}
         </div>
 
