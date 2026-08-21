@@ -25,4 +25,14 @@ export const imovelService = {
   async buscarCartorioPorCns(cns) {
     return api.buscarCartorioPorCns(cns);
   },
+
+  async extrairDescricaoDaMatricula(arquivo) {
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(arquivo);
+    });
+    return api.extrairDescricaoImovel({ base64, mimeType: arquivo.type });
+  },
 };

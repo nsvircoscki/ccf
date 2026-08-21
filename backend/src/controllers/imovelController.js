@@ -1,5 +1,6 @@
 // src/controllers/imovelController.js
 import { imovelService } from '../services/imovelService.js';
+import { matriculaExtractorService } from '../services/matriculaExtractorService.js';
 
 export const imovelController = {
   async listar(req, res) {
@@ -45,6 +46,15 @@ export const imovelController = {
       res.status(204).send();
     } catch (error) {
       res.status(400).json({ error: error.message });
+    }
+  },
+
+  async extrairDescricao(req, res) {
+    try {
+      const descricao = await matriculaExtractorService.extrairDescricao(req.body);
+      res.json({ descricao });
+    } catch (error) {
+      res.status(400).json({ error: error.message || 'Erro ao ler a matrícula enviada.' });
     }
   },
 };

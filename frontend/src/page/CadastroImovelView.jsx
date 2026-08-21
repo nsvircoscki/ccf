@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { imovelService } from '../services/imovelService';
 import { clienteService } from '../services/clienteService';
 import { formatarArea } from '../utils/mascaras';
 import {
-  Actions, ChipList, Field, Reveal, SearchableSelect, Section, Segmented, Shell, Switch, Toast, useToast, C,
+  Actions, ChipList, Field, FieldActionButton, Reveal, SearchableSelect, Section, Segmented, Shell, Switch, Toast, useToast, C,
 } from '../components/cadastros/CadastroKit.jsx';
 import CadastroClienteView from './CadastroClienteView.jsx';
 
@@ -45,6 +45,9 @@ export default function CadastroImovelView({ onBack, modal, onSaved }) {
   // null | 'proprietario' | 'usufrutuario' — qual ChipList disparou o modal
   // de cadastro rápido, pra saber em qual campo entrar a pessoa criada.
   const [alvoModalPessoa, setAlvoModalPessoa] = useState(null);
+  const [lendoMatricula, setLendoMatricula] = useState(false);
+  const [matriculaCarregada, setMatriculaCarregada] = useState(false);
+  const inputMatriculaRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -80,9 +83,47 @@ export default function CadastroImovelView({ onBack, modal, onSaved }) {
     }
   };
 
+  const handleArquivoMatricula = async (evento) => {
+    const arquivo = evento.target.files?.[0];
+    evento.target.value = '';
+    if (!arquivo) return;
+
+    const tipoValido = arquivo.type === 'application/pdf' || arquivo.type.startsWith('image/');
+    if (!tipoValido) {
+      show('Envie um arquivo PDF ou uma imagem da matrícula.', 'err');
+      return;
+    }
+    if (arquivo.size > 15 * 1024 * 1024) {
+      show('Arquivo muito grande. Envie um arquivo de até 15MB.', 'err');
+      return;
+    }
+
+    setLendoMatricula(true);
+    try {
+      const res = await imovelService.extrairDescricaoDaMatricula(arquivo);
+      if (!res.ok) {
+        show(res.data?.error || 'Não foi possível ler a matrícula enviada.', 'err');
+        return;
+      }
+      if (!res.data.descricao) {
+        show('Não encontramos a descrição do imóvel nesse documento.', 'err');
+        return;
+      }
+      set('descricao')(res.data.descricao);
+      setMatriculaCarregada(true);
+      show('Descrição do imóvel preenchida a partir da matrícula.');
+    } catch (erro) {
+      console.error('Erro ao ler matrícula:', erro);
+      show('Erro ao conectar com o servidor para ler a matrícula.', 'err');
+    } finally {
+      setLendoMatricula(false);
+    }
+  };
+
   const limparFormulario = () => {
     setImovelId(null);
     setForm(imovelVazio);
+    setMatriculaCarregada(false);
   };
 
   const carregarImovel = (id) => {
@@ -95,6 +136,7 @@ export default function CadastroImovelView({ onBack, modal, onSaved }) {
     if (!imovel) return;
 
     setImovelId(imovel.id);
+    setMatriculaCarregada(false);
     setForm({
       proprietarioIds: (imovel.proprietarios || []).map((p) => p.id),
       cartorio: imovel.cartorio || '',
@@ -176,6 +218,9 @@ export default function CadastroImovelView({ onBack, modal, onSaved }) {
     >
       {toast && <Toast msg={toast.msg} kind={toast.kind} />}
 
+      <input ref={inputMatriculaRef} type="file" accept="application/pdf,image/*"
+        onChange={handleArquivoMatricula} style={{ display: 'none' }} />
+
       <div style={{ marginBottom: 18 }}>
         <SearchableSelect label="Selecionar imóvel existente" icon="home" accent={accent}
           options={imoveisSalvos.map(paraOpcaoImovel)} value={imovelId}
@@ -213,7 +258,13 @@ export default function CadastroImovelView({ onBack, modal, onSaved }) {
         <Field label="Estado" icon="map" value={form.estado} onChange={set('estado')} placeholder="UF" />
         <Field label="Área registrada (m²)" icon="ruler" value={form.area} onChange={(v) => set('area')(formatarArea(v))} placeholder="0,00 m²" />
         <Field label="Zoneamento" icon="layers" value={form.zoneamento} onChange={set('zoneamento')} placeholder="Ex.: Zona Residencial 2" />
-        <Field label="Descrição do imóvel" icon="doc" span={2} textarea rows={4} value={form.descricao} onChange={set('descricao')} placeholder="Características, benfeitorias, observações…" />
+        <Field label="Descrição do imóvel" icon="doc" span={2} textarea rows={4} value={form.descricao} onChange={set('descricao')} placeholder="Características, benfeitorias, observações…"
+          labelAction={(
+            <FieldActionButton
+              label={matriculaCarregada ? `Matrícula ${form.matricula || 'carregada'}` : 'Carregar matrícula'}
+              icon="doc" accent={accent} success={matriculaCarregada}
+              loading={lendoMatricula} onClick={() => inputMatriculaRef.current?.click()} />
+          )} />
       </Section>
 
       <Section icon="user" title="Usufruto" desc="Há usufrutuário(s) sobre o imóvel?" accent={accent}>
