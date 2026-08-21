@@ -217,6 +217,15 @@ export const api = {
         await fetch(`${BASE_URL}/imoveis/${id}`, { method: 'DELETE' });
     },
 
+    extrairDescricaoImovel: async ({ base64, mimeType }) => {
+        const res = await fetch(`${BASE_URL}/imoveis/extrair-descricao`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ base64, mimeType })
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
     buscarCartorioPorCns: async (cns) => {
         const res = await fetch(`${BASE_URL}/cartorios/${encodeURIComponent(cns)}`);
         if (!res.ok) return null;

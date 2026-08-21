@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-
+import { motion } from 'framer-motion';
 /* ────────────────────────────────────────────────────────────
    Kit de UI compartilhado pelas telas de Cadastro (Cliente,
    Imóvel, Vinculação) — portado do design feito no Figma Make.
@@ -48,6 +48,7 @@ export function Icon({ name, size = 15 }) {
     calendar: <><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></>,
     plus: <path d="M12 5v14M5 12h14"/>,
     download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></>,
+    check: <path d="M20 6 9 17l-5-5"/>,
   };
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor"
@@ -86,7 +87,7 @@ export function Reveal({ open, children }) {
 /* ── Campo de texto ── */
 export function Field({
   label, icon, value, onChange, placeholder, type = 'text', span = 1,
-  textarea, rows = 3, disabled, onBlur, hint, list,
+  textarea, rows = 3, disabled, onBlur, hint, list, labelAction,
 }) {
   const [focus, setFocus] = useState(false);
   const base = {
@@ -101,14 +102,17 @@ export function Field({
   };
   return (
     <div style={{ gridColumn: span === 2 ? '1 / -1' : 'auto' }}>
-      <label style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        fontFamily: MONT, fontWeight: 600, fontSize: 10.5, color: C.label,
-        letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 6,
-      }}>
-        {icon && <span style={{ color: C.muted, display: 'inline-flex' }}><Icon name={icon} size={13} /></span>}
-        {label}
-      </label>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          fontFamily: MONT, fontWeight: 600, fontSize: 10.5, color: C.label,
+          letterSpacing: '0.07em', textTransform: 'uppercase',
+        }}>
+          {icon && <span style={{ color: C.muted, display: 'inline-flex' }}><Icon name={icon} size={13} /></span>}
+          {label}
+        </label>
+        {labelAction}
+      </div>
       <div style={{ position: 'relative' }}>
         {icon && !textarea && (
           <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? C.navy : C.muted, pointerEvents: 'none', display: 'inline-flex', transition: 'color 0.18s' }}>
@@ -127,6 +131,39 @@ export function Field({
       </div>
       {hint && <p style={{ fontFamily: SANS, fontSize: 11, color: C.muted, margin: '5px 2px 0' }}>{hint}</p>}
     </div>
+  );
+}
+
+function LoadingDots({ color = 'currentColor', size = 4, gap = 4 }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap }}>
+      {[0, 1, 2].map((i) => (
+        <motion.span key={i} style={{ width: size, height: size, borderRadius: '50%', background: color }}
+          animate={{ y: [0, -4, 0] }}
+          transition={{ duration: 0.6, repeat: Infinity, ease: 'easeInOut', delay: i * 0.15 }} />
+      ))}
+    </span>
+  );
+}
+
+/* ── Botão secundário discreto pra ações dentro do label de um Field
+   (ex.: "Carregar matrícula" acima da Descrição do Imóvel) ── */
+export function FieldActionButton({ label, icon = 'doc', onClick, loading, success, accent = C.navy }) {
+  const color = success ? C.green : accent;
+  return (
+    <button type="button" onClick={onClick} disabled={loading} title={success ? 'Clique para carregar outra matrícula' : undefined} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+      borderRadius: 999, border: 'none', background: `${color}12`, color,
+      fontFamily: MONT, fontWeight: 700, fontSize: 11.5, letterSpacing: '0.01em',
+      cursor: loading ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+      opacity: loading ? 0.75 : 1, transition: 'background 0.15s, color 0.15s',
+    }}
+      onMouseEnter={e => { if (!loading) e.currentTarget.style.background = `${color}1f`; }}
+      onMouseLeave={e => { e.currentTarget.style.background = `${color}12`; }}>
+      {loading ? 'Lendo documento' : label}
+      {loading ? <LoadingDots color={color} /> : <Icon name={success ? 'check' : icon} size={13} />}
+
+    </button>
   );
 }
 

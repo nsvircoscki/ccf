@@ -112,7 +112,7 @@ export function ContractModal({ onClose }) {
           <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
             <span style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#FFF7ED', color: '#C2410C', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><AlertTriangle size={22} /></span>
             <div>
-              <h2 style={{ margin: 0, fontSize: '18px', lineHeight: 1.35, color: '#061733', fontWeight: 900 }}>Informacoes Juridicas Pendentes</h2>
+              <h2 style={{ margin: 0, fontSize: '18px', lineHeight: 1.35, color: '#061733', fontWeight: 900 }}>Informações Jurídicas Pendentes</h2>
               <p style={{ margin: '5px 0 0', color: '#64748B', fontSize: '13px', lineHeight: 1.5, fontWeight: 600 }}>Para emitir o contrato formal, preencha os dados complementares abaixo:</p>
             </div>
           </div>
@@ -122,8 +122,8 @@ export function ContractModal({ onClose }) {
         <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.85fr 1fr', gap: '14px' }}>
             <label style={labelStyle}>Nacionalidade<input placeholder="Brasileiro(a)" style={fieldBase} /></label>
-            <label style={labelStyle}>Estado Civil<select defaultValue="" style={fieldBase}><option value="" disabled>Selecione</option><option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viuvo(a)</option></select></label>
-            <label style={labelStyle}>Profissao<input placeholder="Ex.: Produtor rural" style={fieldBase} /></label>
+            <label style={labelStyle}>Estado Civil<select defaultValue="" style={fieldBase}><option value="" disabled>Selecione</option><option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option></select></label>
+            <label style={labelStyle}>Profissão<input placeholder="Ex.: Produtor rural" style={fieldBase} /></label>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.55fr', gap: '14px' }}>
             <label style={labelStyle}>CPF/CNPJ<input placeholder="000.000.000-00" style={fieldBase} /></label>
@@ -131,7 +131,7 @@ export function ContractModal({ onClose }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 0.45fr 0.9fr', gap: '14px' }}>
             <label style={labelStyle}>Rua/Logradouro<input placeholder="Rua, avenida ou estrada" style={fieldBase} /></label>
-            <label style={labelStyle}>Numero<input placeholder="S/N" style={fieldBase} /></label>
+            <label style={labelStyle}>Número<input placeholder="S/N" style={fieldBase} /></label>
             <label style={labelStyle}>Bairro<input placeholder="Bairro" style={fieldBase} /></label>
           </div>
         </div>

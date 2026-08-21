@@ -1,3 +1,4 @@
+require('dotenv/config');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const { PrismaClient } = require('@prisma/client');
@@ -27,10 +28,10 @@ async function main() {
   console.log("Criando Usuários...");
   await prisma.user.createMany({
     data: [
-      { name: 'Equipe Coordenação', email: 'coord@teste.com', password_hash: '123', roleId: rCoord.id },
-      { name: 'Equipe Desenho', email: 'desenho@teste.com', password_hash: '123', roleId: rDesenho.id },
-      { name: 'Charles', email: 'charles@teste.com', password_hash: '123', roleId: rCharles.id },
-      { name: 'Equipe Topografia', email: 'topo@teste.com', password_hash: '123', roleId: rTopo.id },
+      { name: 'Equipe Coordenação', email: 'coord@teste.com', password_hash: null, roleId: rCoord.id },
+      { name: 'Equipe Desenho', email: 'desenho@teste.com', password_hash: null, roleId: rDesenho.id },
+      { name: 'Charles', email: 'charles@teste.com', password_hash: null, roleId: rCharles.id },
+      { name: 'Equipe Topografia', email: 'topo@teste.com', password_hash: null, roleId: rTopo.id },
     ]
   });
 
