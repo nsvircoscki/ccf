@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, ListChecks, ArrowLeft,
-  BookOpen, Wallet, FileSpreadsheet,
+  BookOpen, Wallet, FileSpreadsheet, Table,
 } from 'lucide-react';
 
 const MONT = '"Montserrat", sans-serif';
@@ -24,6 +24,7 @@ const MODULOS = [
   { id: 'config', label: 'Configurações', desc: 'Documentos, etapas e outros ajustes do sistema', icon: Settings2, color: '#64748b' },
   { id: 'sis-mon', label: 'SIS MON', desc: 'Sistema de monografia', icon: BookOpen, color: '#92400e', wip: true },
   { id: 'importar-pontos', label: 'Importar Pontos', desc: 'Converte exportação de levantamento (GNSS/RTK) em tabela/Excel', icon: FileSpreadsheet, color: '#0369a1' },
+  { id: 'tabela-servicos', label: 'Tabela de Serviços', desc: 'Todos os projetos, etapa atual e o que falta em cada um', icon: Table, color: '#4d7c0f' },
 ];
 
 // Sub-módulos dentro de "Configurações" — clicar no tile principal abre esta
@@ -141,10 +142,10 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
         flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: '24px 24px', overflowY: 'auto',
       }}>
-        {/* maxWidth mais largo cabe as 11 caixas em só 2 linhas — com 640px
-            (5 por linha) o SIS MON sobrava sozinho numa 3ª linha e exigia
+        {/* maxWidth mais largo cabe os 13 tiles em só 2 linhas (7 por linha) —
+            estreito demais e o último sobra sozinho numa 3ª linha, exigindo
             rolar a tela pra aparecer. */}
-        <div style={{ textAlign: 'center', marginBottom: 32, position: 'relative', width: '100%', maxWidth: 780 }}>
+        <div style={{ textAlign: 'center', marginBottom: 32, position: 'relative', width: '100%', maxWidth: 900 }}>
           {submenuConfig && (
             <button
               type="button"
@@ -172,7 +173,7 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
 
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
-          gap: '26px 22px', width: '100%', maxWidth: 780, justifyItems: 'center',
+          gap: '26px 22px', width: '100%', maxWidth: 900, justifyItems: 'center',
         }}>
           {(submenuConfig ? submodulosVisiveis : MODULOS).map((mod, i) => (
             <ModuleTile

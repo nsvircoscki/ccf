@@ -15,6 +15,7 @@ import VinculacaoView from './page/VinculacaoView';
 import ConfigDocumentosView from './page/ConfigDocumentosView';
 import ConfigEtapasView from './page/ConfigEtapasView';
 import ImportarPontosView from './page/ImportarPontosView';
+import TabelaServicosView from './page/TabelaServicosView';
 
 import { EditarProjetoModal } from './modals/EditarProjetoModal';
 import { TicketDetailModal } from './modals/TicketDetailModal';
@@ -223,6 +224,10 @@ export default function App() {
 
           {telaAtiva === 'importar-pontos' && (
             <ImportarPontosView onBack={() => setModuloEscolhido(false)} />
+          )}
+
+          {telaAtiva === 'tabela-servicos' && (
+            <TabelaServicosView onBack={() => setModuloEscolhido(false)} kanban={kanban} />
           )}
         </div>
 
