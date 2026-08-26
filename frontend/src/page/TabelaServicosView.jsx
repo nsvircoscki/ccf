@@ -13,6 +13,12 @@ const CORES_SETOR = {
   ENG: '#FBC02D', TOPO: '#1E88E5', DES: '#43A047', CRD: '#795548',
 };
 
+const corStatus = (status) => {
+  if (status === 'Concluído') return '#2e8b2e';
+  if (status === 'Em Andamento') return '#1E88E5';
+  return '#B45309';
+};
+
 // Status do projeto como um todo — mesma regra usada na Pesquisa: só
 // "Concluído" se todas as etapas terminaram.
 const statusDoProjeto = (tarefas) => {
@@ -22,6 +28,84 @@ const statusDoProjeto = (tarefas) => {
   if (etapas.every((e) => e === 'Iniciar')) return 'Iniciar';
   return 'Em Andamento';
 };
+
+// Uma única definição de tabela usada tanto na tela quanto na impressão —
+// senão as duas divergem toda vez que uma é ajustada e a outra não (foi
+// exatamente o que aconteceu: a versão impressa tinha sido simplificada à
+// parte e perdeu as cores/badges/chips da tela). Cores em elementos com
+// background (badge de status, chips de setor) precisam do print-color-
+// adjust:exact — sem isso o navegador some com elas na hora de imprimir
+// pra economizar tinta.
+function TabelaServicos({ linhas }) {
+  return (
+    <table style={{ borderCollapse: 'collapse', fontFamily: SANS, fontSize: 12.5, width: '100%' }}>
+      <thead>
+        <tr>
+          {['Cliente', 'Matrícula', 'Projeto', 'Status', 'Etapa atual', 'Etapas faltando'].map((coluna) => (
+            <th key={coluna} style={{
+              position: 'sticky', top: 0, background: '#F4F6FA', textAlign: 'left',
+              padding: '8px 12px', borderBottom: `1.5px solid ${C.border}`,
+              fontFamily: MONT, fontWeight: 700, fontSize: 10.5, color: C.label,
+              letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+            }}>
+              {coluna}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {linhas.map((linha, indice) => (
+          <tr key={linha.id} style={{ background: indice % 2 === 0 ? '#fff' : '#FAFBFD' }}>
+            <td style={{ padding: '5px 12px', borderBottom: `1px solid ${C.borderSoft}`, color: C.text, whiteSpace: 'nowrap' }}>{linha.cliente}</td>
+            <td style={{ padding: '5px 12px', borderBottom: `1px solid ${C.borderSoft}`, color: C.text, whiteSpace: 'nowrap' }}>{linha.matricula}</td>
+            <td style={{ padding: '5px 12px', borderBottom: `1px solid ${C.borderSoft}`, color: C.text, whiteSpace: 'nowrap' }}>{linha.projeto}</td>
+            <td style={{ padding: '5px 12px', borderBottom: `1px solid ${C.borderSoft}`, whiteSpace: 'nowrap' }}>
+              <span style={{
+                display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontWeight: 700, fontSize: 10.5,
+                color: '#fff', background: corStatus(linha.status),
+                WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact',
+              }}>
+                {linha.status}
+              </span>
+            </td>
+            <td style={{ padding: '5px 12px', borderBottom: `1px solid ${C.borderSoft}`, color: C.text, whiteSpace: 'nowrap', fontWeight: 600 }}>{linha.etapaAtual}</td>
+            <td style={{ padding: '6px 12px', borderBottom: `1px solid ${C.borderSoft}`, minWidth: 280 }}>
+              {linha.etapasFaltando.length === 0 ? (
+                <span style={{ color: C.muted }}>—</span>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {linha.etapasFaltando.map((etapa, i) => {
+                    const cor = CORES_SETOR[etapa.setor] || CORES_SETOR.CRD;
+                    return (
+                      <span key={i} title={etapa.setor} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        padding: '2px 9px 2px 7px', borderRadius: 999,
+                        background: `${cor}1a`, color: cor, fontSize: 11, fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                        WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact',
+                      }}>
+                        <span style={{
+                          width: 6, height: 6, borderRadius: 999, background: cor, flexShrink: 0,
+                          WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact',
+                        }} />
+                        {etapa.titulo}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </td>
+          </tr>
+        ))}
+        {linhas.length === 0 && (
+          <tr>
+            <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: C.muted }}>Nenhum projeto encontrado.</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  );
+}
 
 export default function TabelaServicosView({ onBack, kanban }) {
   const { tickets, workflows } = kanban;
@@ -69,12 +153,6 @@ export default function TabelaServicosView({ onBack, kanban }) {
     const livro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(livro, planilha, 'Serviços');
     XLSX.writeFile(livro, 'servicos.xlsx');
-  };
-
-  const corStatus = (status) => {
-    if (status === 'Concluído') return '#2e8b2e';
-    if (status === 'Em Andamento') return '#1E88E5';
-    return '#B45309';
   };
 
   const imprimir = () => window.print();
@@ -139,67 +217,7 @@ export default function TabelaServicosView({ onBack, kanban }) {
         </div>
 
         <div style={{ overflowX: 'auto', border: `1px solid ${C.border}`, borderRadius: 12, background: C.card }}>
-          <table style={{ borderCollapse: 'collapse', fontFamily: SANS, fontSize: 12.5, width: '100%' }}>
-            <thead>
-              <tr>
-                {['Cliente', 'Matrícula', 'Projeto', 'Status', 'Etapa atual', 'Etapas faltando'].map((coluna) => (
-                  <th key={coluna} style={{
-                    position: 'sticky', top: 0, background: '#F4F6FA', textAlign: 'left',
-                    padding: '8px 12px', borderBottom: `1.5px solid ${C.border}`,
-                    fontFamily: MONT, fontWeight: 700, fontSize: 10.5, color: C.label,
-                    letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap',
-                  }}>
-                    {coluna}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {linhasFiltradas.map((linha, indice) => (
-                <tr key={linha.id} style={{ background: indice % 2 === 0 ? '#fff' : '#FAFBFD' }}>
-                  <td style={{ padding: '5px 12px', borderBottom: `1px solid ${C.borderSoft}`, color: C.text, whiteSpace: 'nowrap' }}>{linha.cliente}</td>
-                  <td style={{ padding: '5px 12px', borderBottom: `1px solid ${C.borderSoft}`, color: C.text, whiteSpace: 'nowrap' }}>{linha.matricula}</td>
-                  <td style={{ padding: '5px 12px', borderBottom: `1px solid ${C.borderSoft}`, color: C.text, whiteSpace: 'nowrap' }}>{linha.projeto}</td>
-                  <td style={{ padding: '5px 12px', borderBottom: `1px solid ${C.borderSoft}`, whiteSpace: 'nowrap' }}>
-                    <span style={{
-                      display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontWeight: 700, fontSize: 10.5,
-                      color: '#fff', background: corStatus(linha.status),
-                    }}>
-                      {linha.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '5px 12px', borderBottom: `1px solid ${C.borderSoft}`, color: C.text, whiteSpace: 'nowrap', fontWeight: 600 }}>{linha.etapaAtual}</td>
-                  <td style={{ padding: '6px 12px', borderBottom: `1px solid ${C.borderSoft}`, minWidth: 280 }}>
-                    {linha.etapasFaltando.length === 0 ? (
-                      <span style={{ color: C.muted }}>—</span>
-                    ) : (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                        {linha.etapasFaltando.map((etapa, i) => {
-                          const cor = CORES_SETOR[etapa.setor] || CORES_SETOR.CRD;
-                          return (
-                            <span key={i} title={etapa.setor} style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 5,
-                              padding: '2px 9px 2px 7px', borderRadius: 999,
-                              background: `${cor}1a`, color: cor, fontSize: 11, fontWeight: 600,
-                              whiteSpace: 'nowrap',
-                            }}>
-                              <span style={{ width: 6, height: 6, borderRadius: 999, background: cor, flexShrink: 0 }} />
-                              {etapa.titulo}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {linhasFiltradas.length === 0 && (
-                <tr>
-                  <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: C.muted }}>Nenhum projeto encontrado.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <TabelaServicos linhas={linhasFiltradas} />
         </div>
       </main>
 
@@ -207,39 +225,26 @@ export default function TabelaServicosView({ onBack, kanban }) {
           App.jsx) que fica display:none na impressão — então isso NÃO
           pode ser um filho normal daqui, senão some junto. O portal
           coloca esse bloco direto no <body>, fora daquele contêiner,
-          igual o relatório de impressão do Kanban já faz. Sem largura
-          fixa/nowrap: a tabela flui pro tamanho real do papel, não da
-          tela, então funciona pra qualquer quantidade de linhas/colunas
-          e qualquer tamanho de papel. */}
+          igual o relatório de impressão do Kanban já faz. Reaproveita o
+          MESMO componente TabelaServicos da tela (mesmas cores, badges e
+          chips) em vez de uma versão simplificada à parte — assim a
+          impressão sai idêntica ao que está na tela, sem achatar nada. */}
       {createPortal(
-        <div className="print-only" style={{ padding: 20, color: '#000', fontSize: 12 }}>
-          <div style={{ marginBottom: 16, borderBottom: '2px solid #000', paddingBottom: 10 }}>
-            <h1 style={{ margin: 0, fontSize: 22 }}>Tabela de Serviços</h1>
-            <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+        <div className="print-only" style={{ padding: 20 }}>
+          <style>{`
+            .print-only, .print-only * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
+          `}</style>
+          <div style={{ marginBottom: 16 }}>
+            <h1 style={{ fontFamily: MONT, fontWeight: 700, fontSize: 20, color: C.text, margin: 0 }}>Tabela de Serviços</h1>
+            <p style={{ fontFamily: SANS, fontSize: 12.5, color: C.muted, margin: '4px 0 0' }}>
               {new Date().toLocaleDateString('pt-BR')} — {linhasFiltradas.length} projeto(s)
             </p>
           </div>
-          <table className="print-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                {['Cliente', 'Matrícula', 'Projeto', 'Status', 'Etapa atual', 'Etapas faltando'].map((coluna) => (
-                  <th key={coluna}>{coluna}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {linhasFiltradas.map((linha) => (
-                <tr key={linha.id}>
-                  <td>{linha.cliente}</td>
-                  <td>{linha.matricula}</td>
-                  <td>{linha.projeto}</td>
-                  <td>{linha.status}</td>
-                  <td>{linha.etapaAtual}</td>
-                  <td>{linha.etapasFaltando.map((e) => e.titulo).join(', ') || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <TabelaServicos linhas={linhasFiltradas} />
         </div>,
         document.body
       )}
