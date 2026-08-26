@@ -161,20 +161,28 @@ export default function TabelaServicosView({ onBack, kanban }) {
     const idsFiltrados = new Set(linhasFiltradas.map((l) => l.id));
     const workflowsFiltrados = workflows.filter((w) => idsFiltrados.has(w.id));
 
-    // Ordem das colunas de etapa: pela menor sequência já vista pra cada
-    // título, então a ordem das colunas segue a ordem real do processo em
-    // vez da ordem em que os workflows aparecem.
-    const menorSequenciaPorEtapa = new Map();
+    // Ordem das colunas de etapa: "sequence" é o índice da etapa DENTRO da
+    // lista mesclada daquele workflow específico (ver workflowService.js),
+    // não uma numeração global — o mesmo título pode ter sequence bem
+    // diferente em projetos com tipos de processo diferentes (confirmado
+    // nos dados reais: 35 de 45 títulos tinham sequence inconsistente entre
+    // workflows). Comparar os valores brutos embaralhava a ordem. A correção
+    // é normalizar pra uma posição relativa (0 a 1) dentro do próprio
+    // workflow antes de comparar, e usar a média dessa posição quando o
+    // título aparece em vários projetos.
+    const posicoesRelativasPorEtapa = new Map();
     workflowsFiltrados.forEach((workflow) => {
-      tickets
-        .filter((t) => t.workflowId === workflow.id)
-        .forEach((t) => {
-          const sequencia = t.sequence || 0;
-          const atual = menorSequenciaPorEtapa.get(t.title);
-          if (atual === undefined || sequencia < atual) menorSequenciaPorEtapa.set(t.title, sequencia);
-        });
+      const tarefas = tickets.filter((t) => t.workflowId === workflow.id);
+      const totalTarefas = tarefas.length;
+      tarefas.forEach((t) => {
+        const posicao = totalTarefas > 1 ? (t.sequence || 0) / (totalTarefas - 1) : 0;
+        const lista = posicoesRelativasPorEtapa.get(t.title) || [];
+        lista.push(posicao);
+        posicoesRelativasPorEtapa.set(t.title, lista);
+      });
     });
-    const colunasEtapas = [...menorSequenciaPorEtapa.entries()]
+    const colunasEtapas = [...posicoesRelativasPorEtapa.entries()]
+      .map(([titulo, posicoes]) => [titulo, posicoes.reduce((soma, p) => soma + p, 0) / posicoes.length])
       .sort((a, b) => a[1] - b[1])
       .map(([titulo]) => titulo);
 
