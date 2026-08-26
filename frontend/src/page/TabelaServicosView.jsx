@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import * as XLSX from 'xlsx';
 import { ArrowLeft, Download, Printer, Search } from 'lucide-react';
 import { C, MONT, SANS } from '../components/cadastros/CadastroKit.jsx';
 
@@ -144,15 +143,99 @@ export default function TabelaServicosView({ onBack, kanban }) {
       normalize(l.matricula).includes(termo));
   }, [linhas, busca]);
 
-  const baixarExcel = () => {
-    const aoa = [
-      ['Cliente', 'Matrícula', 'Projeto', 'Status', 'Etapa atual', 'Etapas faltando'],
-      ...linhasFiltradas.map((l) => [l.cliente, l.matricula, l.projeto, l.status, l.etapaAtual, l.etapasFaltando.map((e) => e.titulo).join(', ')]),
+  // O Excel é um formato à parte da tela: aqui vira uma matriz (uma coluna
+  // por etapa, "X" quando concluída) porque é assim que fica bom pra
+  // imprimir/visualizar numa planilha — a tabela do sistema continua com
+  // "Etapa atual"/"Etapas faltando" resumidos, sem mexer em nada.
+  const baixarExcel = async () => {
+    // Import dinâmico: ExcelJS é pesado (quase dobra o tamanho do bundle) e
+    // só essa tela usa — carregando aqui em vez de no topo do arquivo, o
+    // resto do sistema não paga esse custo no carregamento inicial.
+    // ExcelJS (não o "xlsx" usado em outras telas) porque é a única lib
+    // gratuita das duas que realmente escreve cor de célula no arquivo — o
+    // "xlsx" tem a propriedade de estilo documentada, mas essa parte da API
+    // é exclusiva da versão paga (testado gerando um arquivo real: o fill
+    // não aparece no XML interno).
+    const { default: ExcelJS } = await import('exceljs');
+
+    const idsFiltrados = new Set(linhasFiltradas.map((l) => l.id));
+    const workflowsFiltrados = workflows.filter((w) => idsFiltrados.has(w.id));
+
+    // Ordem das colunas de etapa: pela menor sequência já vista pra cada
+    // título, então a ordem das colunas segue a ordem real do processo em
+    // vez da ordem em que os workflows aparecem.
+    const menorSequenciaPorEtapa = new Map();
+    workflowsFiltrados.forEach((workflow) => {
+      tickets
+        .filter((t) => t.workflowId === workflow.id)
+        .forEach((t) => {
+          const sequencia = t.sequence || 0;
+          const atual = menorSequenciaPorEtapa.get(t.title);
+          if (atual === undefined || sequencia < atual) menorSequenciaPorEtapa.set(t.title, sequencia);
+        });
+    });
+    const colunasEtapas = [...menorSequenciaPorEtapa.entries()]
+      .sort((a, b) => a[1] - b[1])
+      .map(([titulo]) => titulo);
+
+    const workbook = new ExcelJS.Workbook();
+    // "frozen" na 1ª linha: com muitas colunas de etapa, rolar a planilha
+    // sem o cabeçalho fixo faz perder a referência de qual coluna é qual.
+    const planilha = workbook.addWorksheet('Serviços', { views: [{ state: 'frozen', ySplit: 1 }] });
+
+    planilha.columns = [
+      { header: 'Cliente', key: 'cliente', width: 24 },
+      { header: 'Matrícula', key: 'matricula', width: 16 },
+      { header: 'Projeto', key: 'projeto', width: 26 },
+      { header: 'Status', key: 'status', width: 14 },
+      // Colunas de etapa estreitas — só levam "X" ou nada.
+      ...colunasEtapas.map((titulo, indice) => ({ header: titulo, key: `etapa_${indice}`, width: 14 })),
     ];
-    const planilha = XLSX.utils.aoa_to_sheet(aoa);
-    const livro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(livro, planilha, 'Serviços');
-    XLSX.writeFile(livro, 'servicos.xlsx');
+    planilha.getRow(1).font = { bold: true };
+    planilha.getRow(1).alignment = { wrapText: true, vertical: 'middle' };
+
+    const PREENCHIMENTO_CONCLUIDA = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBBF7D0' } };
+    const FONTE_CONCLUIDA = { color: { argb: 'FF166534' }, bold: true };
+
+    workflowsFiltrados.forEach((workflow) => {
+      const tarefas = tickets.filter((t) => t.workflowId === workflow.id);
+      const concluidaPorTitulo = new Map(tarefas.map((t) => [t.title, (t.currentStep?.step_name || 'Iniciar') === 'Concluído']));
+
+      const dadosEtapas = {};
+      colunasEtapas.forEach((titulo, indice) => {
+        dadosEtapas[`etapa_${indice}`] = concluidaPorTitulo.get(titulo) ? 'X' : '';
+      });
+
+      const linha = planilha.addRow({
+        cliente: workflow.servico?.nomeCliente || '-',
+        matricula: workflow.matricula || '-',
+        projeto: workflow.name,
+        status: statusDoProjeto(tarefas),
+        ...dadosEtapas,
+      });
+
+      colunasEtapas.forEach((titulo, indice) => {
+        if (!concluidaPorTitulo.get(titulo)) return;
+        const celula = linha.getCell(5 + indice); // 1-indexado; 4 colunas fixas antes das etapas
+        celula.fill = PREENCHIMENTO_CONCLUIDA;
+        celula.font = FONTE_CONCLUIDA;
+        celula.alignment = { horizontal: 'center' };
+      });
+    });
+
+    // O ExcelJS gera um ArrayBuffer em memória — precisa virar um link de
+    // download manualmente (mesmo padrão já usado em VinculacaoView.jsx
+    // pra baixar documentos gerados no backend).
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'servicos.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const imprimir = () => window.print();
