@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import LeafIcon from './LeafIcon';
 import { authService } from '../services/authService';
 
-const USUARIOS = ['DES', 'TOPO', 'ENG', 'CRD'];
+const USUARIOS = ['DES', 'TOPO', 'ENG', 'CRD', 'DEV'];
 
 const fieldStyle = {
   width: '100%',

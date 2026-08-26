@@ -12,6 +12,8 @@ import cartorioRoutes from './routes/cartorioRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import tipoProcessoRoutes from './routes/tipoProcessoRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import cobrancaRoutes from './routes/cobrancaRoutes.js';
+import notaFiscalRoutes from './routes/notaFiscalRoutes.js';
 
 const app = express();
 
@@ -31,6 +33,8 @@ app.use('/cartorios', cartorioRoutes);
 app.use('/auth', authRoutes);
 app.use('/tipos-processo', tipoProcessoRoutes);
 app.use('/notificacoes', notificationRoutes);
+app.use('/cobrancas', cobrancaRoutes);
+app.use('/notas-fiscais', notaFiscalRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

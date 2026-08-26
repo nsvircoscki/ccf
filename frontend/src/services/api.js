@@ -335,4 +335,50 @@ export const api = {
         });
         return res.json();
     },
+
+    // ---- FATURAMENTO: COBRANÇAS (boletos) ----
+    getCobrancas: async () => {
+        const res = await fetch(`${BASE_URL}/cobrancas`);
+        return res.json();
+    },
+
+    criarCobranca: async (dados) => {
+        const res = await fetch(`${BASE_URL}/cobrancas`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    // Cada parcela é um boleto emitido individualmente.
+    emitirParcelaCobranca: async (cobrancaId, numeroParcela) => {
+        const res = await fetch(`${BASE_URL}/cobrancas/${cobrancaId}/parcelas/${numeroParcela}/emitir`, { method: 'POST' });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    // URL direta: o PDF é aberto numa aba pelo navegador, não consumida aqui.
+    urlPdfParcelaCobranca: (cobrancaId, numeroParcela) => `${BASE_URL}/cobrancas/${cobrancaId}/parcelas/${numeroParcela}/pdf`,
+
+    // ---- FATURAMENTO: NOTAS FISCAIS ----
+    getNotasFiscais: async () => {
+        const res = await fetch(`${BASE_URL}/notas-fiscais`);
+        return res.json();
+    },
+
+    criarNotaFiscal: async (dados) => {
+        const res = await fetch(`${BASE_URL}/notas-fiscais`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    emitirNotaFiscal: async (id) => {
+        const res = await fetch(`${BASE_URL}/notas-fiscais/${id}/emitir`, { method: 'POST' });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    urlPdfNotaFiscal: (id) => `${BASE_URL}/notas-fiscais/${id}/pdf`,
 };

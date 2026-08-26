@@ -167,7 +167,7 @@ export function KanbanView({
               <FiPrinter size={20} />
             </button>
 
-            {usuarioLogado === 'ENG' && (
+            {['ENG', 'DEV'].includes(usuarioLogado) && (
               <>
                 <button title="Editar Processos" onClick={onAbrirEdicao} style={{ padding: '12px', background: '#EAEAEA', color: '#333', border: 'none', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s' }}>
                   <FiEdit size={20} />
@@ -222,7 +222,7 @@ export function KanbanView({
                   .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
                   .map(t => {
                     const dono = t.currentStep?.requiredRole?.name || 'CRD';
-                    const temPermissao = dono === usuarioLogado || usuarioLogado === 'ENG';
+                    const temPermissao = dono === usuarioLogado || ['ENG', 'DEV'].includes(usuarioLogado);
                     const cor = CORES[dono] || CORES['ENG'];
 
                     return (

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
-import { ArrowLeft, Download, Search } from 'lucide-react';
+import { ArrowLeft, Download, Printer, Search } from 'lucide-react';
 import { C, MONT, SANS } from '../components/cadastros/CadastroKit.jsx';
 
 const normalize = (texto) => String(texto || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -76,6 +77,8 @@ export default function TabelaServicosView({ onBack, kanban }) {
     return '#B45309';
   };
 
+  const imprimir = () => window.print();
+
   return (
     <div style={{ position: 'relative', flex: 1, minHeight: 0, background: C.bg, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <header style={{
@@ -121,6 +124,17 @@ export default function TabelaServicosView({ onBack, kanban }) {
           >
             <Download size={15} />
             Baixar como Excel
+          </button>
+          <button
+            type="button" onClick={imprimir}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10,
+              border: `1.5px solid ${C.border}`, background: '#fff', color: C.label,
+              fontFamily: MONT, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            <Printer size={15} />
+            Imprimir
           </button>
         </div>
 
@@ -188,6 +202,47 @@ export default function TabelaServicosView({ onBack, kanban }) {
           </table>
         </div>
       </main>
+
+      {/* A tela inteira roda dentro de um contêiner ".no-print" (ver
+          App.jsx) que fica display:none na impressão — então isso NÃO
+          pode ser um filho normal daqui, senão some junto. O portal
+          coloca esse bloco direto no <body>, fora daquele contêiner,
+          igual o relatório de impressão do Kanban já faz. Sem largura
+          fixa/nowrap: a tabela flui pro tamanho real do papel, não da
+          tela, então funciona pra qualquer quantidade de linhas/colunas
+          e qualquer tamanho de papel. */}
+      {createPortal(
+        <div className="print-only" style={{ padding: 20, color: '#000', fontSize: 12 }}>
+          <div style={{ marginBottom: 16, borderBottom: '2px solid #000', paddingBottom: 10 }}>
+            <h1 style={{ margin: 0, fontSize: 22 }}>Tabela de Serviços</h1>
+            <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+              {new Date().toLocaleDateString('pt-BR')} — {linhasFiltradas.length} projeto(s)
+            </p>
+          </div>
+          <table className="print-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['Cliente', 'Matrícula', 'Projeto', 'Status', 'Etapa atual', 'Etapas faltando'].map((coluna) => (
+                  <th key={coluna}>{coluna}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {linhasFiltradas.map((linha) => (
+                <tr key={linha.id}>
+                  <td>{linha.cliente}</td>
+                  <td>{linha.matricula}</td>
+                  <td>{linha.projeto}</td>
+                  <td>{linha.status}</td>
+                  <td>{linha.etapaAtual}</td>
+                  <td>{linha.etapasFaltando.map((e) => e.titulo).join(', ') || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

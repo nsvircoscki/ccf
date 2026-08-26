@@ -99,7 +99,7 @@ export default function ConfigEtapasView({ onBack, usuarioLogado }) {
     }
   };
 
-  if (usuarioLogado !== 'ENG') {
+  if (!['ENG', 'DEV'].includes(usuarioLogado)) {
     return (
       <Shell title="Configurar Etapas" accent={accent} subtitle="Acesso restrito" onBack={onBack}>
         <p style={{ fontFamily: SANS, fontSize: 14, color: C.muted }}>

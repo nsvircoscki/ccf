@@ -8,11 +8,12 @@ const router = Router();
 // (mesmo nível de confiança do resto do sistema hoje, que não tem
 // sessão/token; o front manda o usuário logado em x-usuario).
 function exigirEng(req, res, next) {
-  if (req.headers['x-usuario'] !== 'ENG') {
-    return res.status(403).json({ error: 'Só o usuário ENG pode configurar etapas padrão.' });
+  if (!['ENG', 'DEV'].includes(req.headers['x-usuario'])) {
+    return res.status(403).json({ error: 'Só ENG ou DEV podem configurar etapas padrão.' });
   }
   next();
 }
+
 
 router.get('/', tipoProcessoController.listar);
 router.put('/:tipo', exigirEng, tipoProcessoController.atualizar);

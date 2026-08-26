@@ -16,6 +16,7 @@ import ConfigDocumentosView from './page/ConfigDocumentosView';
 import ConfigEtapasView from './page/ConfigEtapasView';
 import ImportarPontosView from './page/ImportarPontosView';
 import TabelaServicosView from './page/TabelaServicosView';
+import FaturamentoView from './page/FaturamentoView';
 
 import { EditarProjetoModal } from './modals/EditarProjetoModal';
 import { TicketDetailModal } from './modals/TicketDetailModal';
@@ -228,6 +229,10 @@ export default function App() {
 
           {telaAtiva === 'tabela-servicos' && (
             <TabelaServicosView onBack={() => setModuloEscolhido(false)} kanban={kanban} />
+          )}
+
+          {telaAtiva === 'faturamento' && (
+            <FaturamentoView onBack={() => setModuloEscolhido(false)} usuarioLogado={usuarioLogado} />
           )}
         </div>
 

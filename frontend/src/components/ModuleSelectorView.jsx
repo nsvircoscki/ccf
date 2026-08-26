@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import {
   ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, ListChecks, ArrowLeft,
-  BookOpen, Wallet, FileSpreadsheet, Table,
+  BookOpen, Wallet, FileSpreadsheet, Table, Receipt,
 } from 'lucide-react';
+import { temAcessoAoModulo } from '../utils/permissoes';
 
 const MONT = '"Montserrat", sans-serif';
 const SANS = '"Open Sans", sans-serif';
@@ -23,8 +24,9 @@ const MODULOS = [
   { id: 'vinculacao', label: 'SIS DOC', desc: 'Vincular proprietários, imóvel e confrontantes ao serviço', icon: Link2, color: '#1a3a8a' },
   { id: 'config', label: 'Configurações', desc: 'Documentos, etapas e outros ajustes do sistema', icon: Settings2, color: '#64748b' },
   { id: 'sis-mon', label: 'SIS MON', desc: 'Sistema de monografia', icon: BookOpen, color: '#92400e', wip: true },
-  { id: 'importar-pontos', label: 'Importar Pontos', desc: 'Converte exportação de levantamento (GNSS/RTK) em tabela/Excel', icon: FileSpreadsheet, color: '#0369a1' },
+  { id: 'importar-pontos', label: 'Pontos', desc: 'Converte exportação de levantamento (GNSS/RTK) em tabela/Excel', icon: FileSpreadsheet, color: '#0369a1' },
   { id: 'tabela-servicos', label: 'Tabela de Serviços', desc: 'Todos os projetos, etapa atual e o que falta em cada um', icon: Table, color: '#4d7c0f' },
+  { id: 'faturamento', label: 'Faturamento', desc: 'Emitir boletos e notas fiscais', icon: Receipt, color: '#b91c1c' },
 ];
 
 // Sub-módulos dentro de "Configurações" — clicar no tile principal abre esta
@@ -35,34 +37,38 @@ const SUBMODULOS_CONFIG = [
   { id: 'config-etapas', label: 'Etapas', desc: 'Etapas padrão de cada tipo de processo no Kanban', icon: ListChecks, color: '#9333ea', apenasEng: true },
 ];
 
-function ModuleTile({ mod, index, onOpen }) {
+function ModuleTile({ mod, index, onOpen, semPermissao }) {
   const Icon = mod.icon;
   const [hover, setHover] = useState(false);
   const wip = Boolean(mod.wip);
+  // Bloqueado tanto pra quem ainda não tem tela (wip) quanto pra quem não tem
+  // permissão de acesso — visualmente idêntico (cinza, sem clique), só muda
+  // a mensagem que explica o motivo.
+  const bloqueado = wip || semPermissao;
 
   return (
     <button
       type="button"
-      onClick={wip ? undefined : onOpen}
+      onClick={bloqueado ? undefined : onOpen}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title={wip ? 'Em desenvolvimento — ainda não disponível' : undefined}
+      title={wip ? 'Em desenvolvimento — ainda não disponível' : semPermissao ? 'Sem permissão de acesso' : undefined}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-        background: 'none', border: 'none', padding: 0, cursor: wip ? 'default' : 'pointer', outline: 'none',
+        background: 'none', border: 'none', padding: 0, cursor: bloqueado ? 'default' : 'pointer', outline: 'none',
         animation: `moduloPop 0.5s ${POP_EASE} ${index * 0.045 + 0.05}s both`,
-        opacity: wip ? 0.55 : 1,
+        opacity: bloqueado ? 0.55 : 1,
       }}
     >
       <div
         style={{
           position: 'relative', width: 84, height: 84, borderRadius: 24,
-          background: `linear-gradient(150deg, ${mod.color} 0%, ${mod.color}cc 100%)`,
+          background: bloqueado ? 'linear-gradient(150deg, #94a3b8 0%, #94a3b8cc 100%)' : `linear-gradient(150deg, ${mod.color} 0%, ${mod.color}cc 100%)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff',
-          boxShadow: !wip && hover
+          boxShadow: !bloqueado && hover
             ? `0 14px 30px ${mod.color}66`
-            : `0 8px 20px ${mod.color}3a, inset 0 1px 0 rgba(255,255,255,0.25)`,
-          transform: !wip && hover ? 'translateY(-4px) scale(1.04)' : 'none',
+            : `0 8px 20px rgba(148,163,184,0.3), inset 0 1px 0 rgba(255,255,255,0.25)`,
+          transform: !bloqueado && hover ? 'translateY(-4px) scale(1.04)' : 'none',
           transition: `transform 0.28s ${EASE}, box-shadow 0.25s ease`,
         }}
       >
@@ -76,7 +82,7 @@ function ModuleTile({ mod, index, onOpen }) {
       </div>
       <span style={{
         fontFamily: SANS, fontWeight: 600, fontSize: 12.5,
-        color: !wip && hover ? mod.color : '#3a4a6b', textAlign: 'center', maxWidth: 100,
+        color: !bloqueado && hover ? mod.color : '#3a4a6b', textAlign: 'center', maxWidth: 100,
         transition: 'color 0.2s ease',
       }}>
         {mod.label}
@@ -85,7 +91,7 @@ function ModuleTile({ mod, index, onOpen }) {
         fontFamily: SANS, fontSize: 11, color: '#9aabcc', textAlign: 'center', maxWidth: 120,
         opacity: hover ? 1 : 0, transition: 'opacity 0.2s ease', minHeight: 14,
       }}>
-        {wip ? 'Em desenvolvimento' : mod.desc}
+        {wip ? 'Em desenvolvimento' : semPermissao ? 'Sem permissão de acesso' : mod.desc}
       </span>
     </button>
   );
@@ -95,7 +101,7 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
   const [submenuConfig, setSubmenuConfig] = useState(false);
 
   const abrirTilePrincipal = (mod) => {
-    if (mod.wip) return;
+    if (mod.wip || !temAcessoAoModulo(usuarioLogado, mod.id)) return;
     if (mod.id === 'config') {
       setSubmenuConfig(true);
       return;
@@ -103,7 +109,7 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
     onAbrirModulo(mod.id);
   };
 
-  const submodulosVisiveis = SUBMODULOS_CONFIG.filter((sub) => !sub.apenasEng || usuarioLogado === 'ENG');
+  const submodulosVisiveis = SUBMODULOS_CONFIG.filter((sub) => !sub.apenasEng || ['ENG', 'DEV'].includes(usuarioLogado));
 
   return (
     <div style={{
@@ -180,6 +186,7 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
               key={mod.id}
               mod={mod}
               index={i}
+              semPermissao={!submenuConfig && !temAcessoAoModulo(usuarioLogado, mod.id)}
               onOpen={() => (submenuConfig ? onAbrirModulo(mod.id) : abrirTilePrincipal(mod))}
             />
           ))}

@@ -77,6 +77,10 @@ model Cliente {
   servicos          Servico[] @relation("ProprietarioServico")
   servicosProcurador Servico[] @relation("ProcuradorServico")
 
+  // Faturamento
+  cobrancas         Cobranca[]
+  notasFiscais      NotaFiscal[]
+
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 }
@@ -344,6 +348,10 @@ model Servico {
   parcelas         ParcelaOrcamento[]
   workflows        Workflow[]
 
+  // Faturamento
+  cobrancas        Cobranca[]
+  notasFiscais     NotaFiscal[]
+
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 }
@@ -376,6 +384,86 @@ model ParcelaOrcamento {
   servico    Servico   @relation(fields: [servicoId], references: [id], onDelete: Cascade)
 
   @@unique([servicoId, numero])
+}
+
+// O boleto é sempre por parcela (a API do Inter emite um título por vez) —
+// Cobranca é só o "guarda-chuva" com os dados do cliente e a descrição,
+// compartilhados por todas as parcelas; cada ParcelaCobranca é emitida (e
+// tem seu próprio status/PDF) individualmente.
+model Cobranca {
+  id         String   @id @default(uuid())
+  servicoId  String?
+  servico    Servico? @relation(fields: [servicoId], references: [id])
+  clienteId  String?
+  cliente    Cliente? @relation(fields: [clienteId], references: [id])
+
+  // Snapshot do momento do lançamento
+  nomeCliente        String
+  documentoCliente   String
+  logradouro         String?
+  numero             String?
+  bairro             String?
+  cidade             String?
+  estado             String?
+  cep                String?
+  telefone           String?
+  email              String?
+
+  descricao          String?
+  instrucoes         String?
+
+  parcelas           ParcelaCobranca[]
+
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+}
+
+model ParcelaCobranca {
+  id                 String   @id @default(uuid())
+  cobrancaId         String
+  cobranca           Cobranca @relation(fields: [cobrancaId], references: [id], onDelete: Cascade)
+
+  numero             Int
+  valor              Float
+  vencimento         DateTime
+
+  status             String   @default("PENDENTE") // PENDENTE | EMITIDO | ERRO
+  seuNumero          String?
+  codigoSolicitacao  String?
+  caminhoPdf         String?
+  erroMensagem       String?
+
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  @@unique([cobrancaId, numero])
+}
+
+model NotaFiscal {
+ id                  String   @id @default(uuid()) 
+ servicoId           String?
+ servico             Servico? @relation(fields: [servicoId], references: [id])
+ clienteId           String?
+ cliente             Cliente? @relation(fields: [clienteId], references: [id])
+
+ empresa             String
+ nomeCliente         String
+ documentoCliente    String
+ logradouro          String?
+ cep                 String?
+ cidade              String?
+
+ valor               Float
+ descricao           String
+
+ status              String @default("PENDENTE")
+ numeroNfse          String?
+ linkPrefeitura      String?
+ caminhoPdf          String?
+ erroMensagem        String?
+
+ created_at          DateTime @default(now())
+ updated_at          DateTime @updatedAt
 }
 
 

@@ -12,3 +12,7 @@ backend/Modelos.rar
 # Dump real do banco de produção e listagem de pastas do servidor — dados
 # reais de clientes, usado só localmente para planejar a migração.
 backend/backup_antigo/
+
+*.crt
+*.key
+*.pem

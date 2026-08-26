@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, KeyRound, ListChecks, Bell,
+  Wallet, BookOpen, FileSpreadsheet, Table, Receipt,
 } from 'lucide-react';
 import { AlterarSenhaModal } from '../modals/AlterarSenhaModal.jsx';
 import { api } from '../services/api';
+import { temAcessoAoModulo } from '../utils/permissoes';
 
 // Mesmo ícone/cor de cada módulo no ModuleSelectorView.jsx — mantém os dois
 // selecionáveis (a tela de módulos e a navbar) visualmente consistentes.
@@ -13,9 +15,14 @@ const ITENS = [
   { id: 'kanban', label: 'SIS SOS', icon: LayoutGrid, color: '#0e7490' },
   { id: 'orcamento', label: 'Orçamento', icon: Calculator, color: '#b45309' },
   { id: 'emissao-documentos', label: 'OS/Contrato', icon: FileText, color: '#0f766e' },
+  { id: 'sis-caixa', label: 'SIS CAIXA', icon: Wallet, color: '#065f46', wip: true },
   { id: 'clientes', label: 'Pessoas', icon: Users, color: '#be185d' },
   { id: 'imoveis', label: 'Imóveis', icon: Home, color: '#7c3aed' },
   { id: 'vinculacao', label: 'SIS DOC', icon: Link2, color: '#1a3a8a' },
+  { id: 'sis-mon', label: 'SIS MON', icon: BookOpen, color: '#92400e', wip: true },
+  { id: 'importar-pontos', label: 'Pontos', icon: FileSpreadsheet, color: '#0369a1' },
+  { id: 'tabela-servicos', label: 'Tabela de Serviços', icon: Table, color: '#4d7c0f' },
+  { id: 'faturamento', label: 'Faturamento', icon: Receipt, color: '#b91c1c' },
   { id: 'config', label: 'Configurações', icon: Settings2, color: '#64748b' },
 ];
 
@@ -27,17 +34,18 @@ const SUBMENU_CONFIG = [
   { id: 'config-etapas', label: 'Etapas', icon: ListChecks, color: '#9333ea', apenasEng: true },
 ];
 
-function NavItem({ ativo, onClick, item }) {
+function NavItem({ ativo, onClick, item, bloqueado }) {
   const [hover, setHover] = useState(false);
   const Icon = item.icon;
-  const destacado = ativo || hover;
+  const destacado = !bloqueado && (ativo || hover);
 
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={bloqueado ? undefined : onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      title={bloqueado ? (item.wip ? 'Em desenvolvimento — ainda não disponível' : 'Sem permissão de acesso') : undefined}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -46,9 +54,10 @@ function NavItem({ ativo, onClick, item }) {
         border: 'none',
         background: 'transparent',
         padding: '6px 2px 4px',
-        cursor: 'pointer',
+        cursor: bloqueado ? 'default' : 'pointer',
         outline: 'none',
         whiteSpace: 'nowrap',
+        opacity: bloqueado ? 0.45 : 1,
       }}
     >
       <div
@@ -56,12 +65,12 @@ function NavItem({ ativo, onClick, item }) {
           width: '32px',
           height: '32px',
           borderRadius: '10px',
-          background: `linear-gradient(150deg, ${item.color} 0%, ${item.color}cc 100%)`,
+          background: bloqueado ? 'linear-gradient(150deg, #94a3b8 0%, #94a3b8cc 100%)' : `linear-gradient(150deg, ${item.color} 0%, ${item.color}cc 100%)`,
           color: '#fff',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: destacado ? `0 8px 16px ${item.color}55` : `0 3px 8px ${item.color}30`,
+          boxShadow: destacado ? `0 8px 16px ${item.color}55` : `0 3px 8px rgba(148,163,184,0.3)`,
           transform: destacado ? 'translateY(-2px) scale(1.05)' : 'none',
           transition: 'transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 0.22s ease',
         }}
@@ -200,7 +209,7 @@ export function Navbar({
     return () => document.removeEventListener('mousedown', fecharSeForaDoMenu);
   }, []);
 
-  const submenuConfigVisivel = SUBMENU_CONFIG.filter((sub) => !sub.apenasEng || usuarioLogado === 'ENG');
+  const submenuConfigVisivel = SUBMENU_CONFIG.filter((sub) => !sub.apenasEng ||['ENG', 'DEV'].includes(usuarioLogado));
   const emTelaDeConfig = ['config-documentos', 'config-etapas'].includes(telaAtiva);
 
   return (
@@ -242,12 +251,13 @@ export function Navbar({
       {/* Centro: navegação — rola horizontalmente em vez de espremer os
           lados quando não cabe tudo de uma vez */}
       <nav className="scroll" style={{ display: 'flex', alignItems: 'flex-start', gap: '18px', overflowX: 'auto', overflowY: 'hidden', minWidth: 0, padding: '2px 2px 6px' }}>
-        {ITENS.map((item) => (
-          item.id === 'config' ? (
+        {ITENS.filter((item) => !item.wip && temAcessoAoModulo(usuarioLogado, item.id)).map((item) => {
+          return item.id === 'config' ? (
             <div key={item.id} ref={configRef} style={{ position: 'relative' }}>
               <NavItem
                 item={item}
                 ativo={emTelaDeConfig || configMenuAberto}
+                bloqueado={false}
                 onClick={abrirMenuConfig}
               />
               {configMenuAberto && (
@@ -286,38 +296,41 @@ export function Navbar({
               key={item.id}
               item={item}
               ativo={telaAtiva === item.id}
+              bloqueado={false}
               onClick={() => setTelaAtiva(item.id)}
             />
-          )
-        ))}
+          );
+        })}
       </nav>
 
       {/* Direita: ação principal e sessão */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', minWidth: 0 }}>
-        <motion.button
-          type="button"
-          onClick={() => setTelaAtiva('cadastro')}
-          whileHover={{ y: -1 }}
-          whileTap={{ scale: 0.98 }}
-          style={{
-            height: '36px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '0 14px',
-            borderRadius: '999px',
-            border: '1px solid rgba(26, 58, 138, 0.22)',
-            background: 'rgba(26, 58, 138, 0.06)',
-            color: '#1a3a8a',
-            fontSize: '12.5px',
-            fontWeight: 700,
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}
-        >
-          <ClipboardList size={15} strokeWidth={2.1} /> Cadastrar Serviço
-        </motion.button>
+        {temAcessoAoModulo(usuarioLogado, 'cadastro') && (
+          <motion.button
+            type="button"
+            onClick={() => setTelaAtiva('cadastro')}
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.98 }}
+            style={{
+              height: '36px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '0 14px',
+              borderRadius: '999px',
+              border: '1px solid rgba(26, 58, 138, 0.22)',
+              background: 'rgba(26, 58, 138, 0.06)',
+              color: '#1a3a8a',
+              fontSize: '12.5px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            <ClipboardList size={15} strokeWidth={2.1} /> Cadastrar Serviço
+          </motion.button>
+        )}
 
         <div style={{ width: '1px', height: '24px', background: 'rgba(15, 23, 42, 0.10)', flexShrink: 0 }} />
 
