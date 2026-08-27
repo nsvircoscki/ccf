@@ -31,6 +31,15 @@ export const notaFiscalController = {
     }
   },
 
+  async tentarBaixarPdf(req, res) {
+    try {
+      const notaFiscal = await notaFiscalService.tentarBaixarPdf(req.params.id);
+      res.status(200).json(notaFiscal);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+
   async pdf(req, res) {
     try {
       const { caminho, nome } = await notaFiscalService.caminhoArquivoPdf(req.params.id);

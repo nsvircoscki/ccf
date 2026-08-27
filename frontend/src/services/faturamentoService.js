@@ -29,6 +29,9 @@ export const faturamentoService = {
   async emitirNotaFiscal(id) {
     return api.emitirNotaFiscal(id);
   },
+  async tentarBaixarPdfNotaFiscal(id) {
+    return api.tentarBaixarPdfNotaFiscal(id);
+  },
   urlPdfNotaFiscal(id) {
     return api.urlPdfNotaFiscal(id);
   },

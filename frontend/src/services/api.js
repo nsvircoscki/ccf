@@ -387,5 +387,12 @@ export const api = {
         return { data: await res.json(), ok: res.ok };
     },
 
+    // Nota já emitida na prefeitura, só o PDF que não veio — tenta de novo
+    // sem re-emitir (evita duplicar a NFS-e).
+    tentarBaixarPdfNotaFiscal: async (id) => {
+        const res = await fetch(`${BASE_URL}/notas-fiscais/${id}/baixar-pdf`, { method: 'POST' });
+        return { data: await res.json(), ok: res.ok };
+    },
+
     urlPdfNotaFiscal: (id) => `${BASE_URL}/notas-fiscais/${id}/pdf`,
 };

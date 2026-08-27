@@ -328,6 +328,22 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
     }
   };
 
+  // Só pra nota que já está EMITIDO na prefeitura mas ainda sem o PDF salvo —
+  // nunca chama a emissão de novo (evitaria duplicar a NFS-e).
+  const tentarBaixarPdfNota = async (id) => {
+    setEmitindo(id);
+    try {
+      const { data, ok } = await faturamentoService.tentarBaixarPdfNotaFiscal(id);
+      show(ok && data?.caminhoPdf ? 'PDF baixado com sucesso!' : (data?.error || 'O PDF ainda não ficou pronto na prefeitura. Tente de novo em instantes.'), ok && data?.caminhoPdf ? 'ok' : 'err');
+      carregarHistorico();
+    } catch (erro) {
+      console.error(erro);
+      show('Erro ao conectar com o servidor.', 'err');
+    } finally {
+      setEmitindo(null);
+    }
+  };
+
   const camposClienteComuns = (form, setForm, setter) => (
     <>
       <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
@@ -583,12 +599,27 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
                   <td style={{ padding: '10px' }}>{moeda(n.valor)}</td>
                   <td style={{ padding: '10px' }}>
                     <BadgeStatus status={n.status} />
-                    {n.status === 'ERRO' && n.erroMensagem && (
-                      <div style={{ color: C.danger, fontSize: 11, marginTop: 4, maxWidth: 260 }}>{n.erroMensagem}</div>
+                    {n.erroMensagem && (
+                      <div style={{ color: n.status === 'ERRO' ? C.danger : '#b45309', fontSize: 11, marginTop: 4, maxWidth: 260 }}>{n.erroMensagem}</div>
                     )}
                   </td>
                   <td style={{ padding: '10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {n.status !== 'EMITIDO' ? (
+                    {n.status === 'EMITIDO' && n.caminhoPdf && (
+                      <a href={faturamentoService.urlPdfNotaFiscal(n.id)} target="_blank" rel="noreferrer"
+                        style={{ color: accent, fontWeight: 700, fontSize: 12.5, textDecoration: 'none' }}>
+                        Baixar PDF
+                      </a>
+                    )}
+                    {n.status === 'EMITIDO' && !n.caminhoPdf && (
+                      <button onClick={() => tentarBaixarPdfNota(n.id)} disabled={emitindo === n.id} style={{
+                        padding: '7px 14px', borderRadius: 9, border: `1.5px solid ${accent}`, cursor: 'pointer',
+                        background: '#fff', color: accent, fontFamily: '"Montserrat", sans-serif',
+                        fontWeight: 700, fontSize: 12, opacity: emitindo === n.id ? 0.6 : 1,
+                      }}>
+                        {emitindo === n.id ? 'Buscando…' : 'Tentar baixar PDF'}
+                      </button>
+                    )}
+                    {n.status !== 'EMITIDO' && (
                       <button onClick={() => emitirNota(n.id)} disabled={emitindo === n.id} style={{
                         padding: '7px 14px', borderRadius: 9, border: 'none', cursor: 'pointer',
                         background: accent, color: '#fff', fontFamily: '"Montserrat", sans-serif',
@@ -596,11 +627,6 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
                       }}>
                         {emitindo === n.id ? 'Emitindo…' : 'Emitir'}
                       </button>
-                    ) : (
-                      <a href={faturamentoService.urlPdfNotaFiscal(n.id)} target="_blank" rel="noreferrer"
-                        style={{ color: accent, fontWeight: 700, fontSize: 12.5, textDecoration: 'none' }}>
-                        Baixar PDF
-                      </a>
                     )}
                   </td>
                 </tr>
