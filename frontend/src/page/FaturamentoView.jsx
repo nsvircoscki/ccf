@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { faturamentoService } from '../services/faturamentoService';
 import { clienteService } from '../services/clienteService';
 import { servicoService } from '../services/servicoService';
-import { formatarCEP, formatarTelefone } from '../utils/mascaras';
+import { formatarCEP, formatarTelefone, formatarMoeda, desformatarMoeda, numeroParaMoeda } from '../utils/mascaras';
 import {
   Actions, Field, Icon, SearchableSelect, SelectField, Section, Switch, Shell, Toast, useToast, C,
 } from '../components/cadastros/CadastroKit.jsx';
@@ -63,7 +63,7 @@ const somarDias = (dataBase, dias) => {
 // arredondamento) espaçadas por "intervaloDias", a partir do primeiro
 // vencimento — mas respeita qualquer edição manual feita na parcela.
 function gerarParcelas({ valorTotal, numeroParcelas, primeiroVencimento, intervaloDias, edicoes }) {
-  const total = parseDecimal(valorTotal);
+  const total = desformatarMoeda(valorTotal);
   const quantidade = Math.max(1, Math.floor(parseDecimal(numeroParcelas)) || 1);
   const intervalo = Math.max(0, Math.floor(parseDecimal(intervaloDias)) || 0);
 
@@ -81,7 +81,8 @@ function gerarParcelas({ valorTotal, numeroParcelas, primeiroVencimento, interva
     const edicao = edicoes[numero];
     return {
       numero,
-      valor: edicao?.valor !== undefined ? parseDecimal(edicao.valor) : valorGerado,
+      valor: edicao?.valor !== undefined ? desformatarMoeda(edicao.valor) : valorGerado,
+      valorTexto: edicao?.valor ?? numeroParaMoeda(valorGerado),
       vencimento: edicao?.vencimento || vencimentoGerado,
       manual: Boolean(edicao),
     };
@@ -268,6 +269,7 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
         ...formNota,
         documentoCliente: (formNota.documentoCliente || '').replace(/\D/g, ''),
         cep: (formNota.cep || '').replace(/\D/g, ''),
+        valor: desformatarMoeda(formNota.valor),
       });
       if (!ok) { show(data?.error || 'Erro ao salvar nota fiscal.', 'err'); return; }
       show('Nota fiscal lançada. Abra o histórico pra emitir.', 'ok');
@@ -440,7 +442,7 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
               </Section>
 
               <Section icon="calendar" title="Parcelamento" desc="O valor é dividido automaticamente, mas cada parcela pode ser ajustada depois" accent={accent}>
-                <Field label="Valor total (R$)" icon="scale" type="number" value={formCobranca.valorTotal} onChange={setCobranca('valorTotal')} />
+                <Field label="Valor total (R$)" icon="scale" value={formCobranca.valorTotal} onChange={(v) => setCobranca('valorTotal')(formatarMoeda(v))} />
                 <Field label="Número de parcelas" type="number" value={formCobranca.numeroParcelas} onChange={setCobranca('numeroParcelas')} />
                 <Field label="Vencimento da 1ª parcela" icon="calendar" type="date" value={formCobranca.primeiroVencimento} onChange={setCobranca('primeiroVencimento')} />
                 <Field label="Intervalo entre parcelas (dias)" type="number" value={formCobranca.intervaloDias} onChange={setCobranca('intervaloDias')} />
@@ -461,8 +463,8 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
                             <td style={{ padding: '8px 10px', fontWeight: 700 }}>{p.numero}/{parcelas.length}</td>
                             <td style={{ padding: '8px 10px' }}>
                               <input
-                                value={p.valor.toFixed(2).replace('.', ',')}
-                                onChange={(e) => editarParcela(p.numero, 'valor', e.target.value)}
+                                value={p.valorTexto}
+                                onChange={(e) => editarParcela(p.numero, 'valor', formatarMoeda(e.target.value))}
                                 style={{ width: 120, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${C.border}`, fontFamily: 'inherit', fontSize: 13 }}
                               />
                             </td>
@@ -499,7 +501,7 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
                 {camposClienteComuns(formNota, setFormNota, setNota)}
                 <Field label="Logradouro" icon="map" value={formNota.logradouro} onChange={setNota('logradouro')} disabled={!avulso} />
                 <Field label="CEP" value={formatarCEP(formNota.cep)} onChange={setNota('cep')} disabled={!avulso} />
-                <Field label="Valor (R$)" icon="scale" type="number" value={formNota.valor} onChange={setNota('valor')} />
+                <Field label="Valor (R$)" icon="scale" value={formNota.valor} onChange={(v) => setNota('valor')(formatarMoeda(v))} />
                 <Field label="Descrição do serviço" span={2} textarea value={formNota.descricao} onChange={setNota('descricao')} />
               </Section>
 

@@ -82,6 +82,7 @@ export function KanbanView({
                 ...workflows.map(w => ({
                   value: w.id,
                   label: w.name,
+                  sub: w.servico?.nomeCliente || '',
                   keywords: `${w.servico?.nomeCliente || ''} ${w.matricula || ''}`,
                 })),
               ]}

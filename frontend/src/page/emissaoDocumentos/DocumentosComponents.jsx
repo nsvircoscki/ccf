@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, ChevronDown, UserRound, X } from 'lucide-react';
 
-import { currency, fieldBase, labelStyle, parseCurrency } from './documentosUtils.js';
+import { currency, fieldBase, labelStyle } from './documentosUtils.js';
+import { formatarMoeda, desformatarMoeda, numeroParaMoeda } from '../../utils/mascaras.js';
 
 const dropdownWrapperVariants = {
   open: { opacity: 1, scaleY: 1, transition: { duration: 0.18, ease: 'easeOut' } },
@@ -156,7 +157,8 @@ export function OrcamentoDocumentoModal({ cliente, servicosSelecionados, onClose
       selecionado: servicosSelecionados.includes(item.nome),
     })),
   );
-  const [valorReferencia, setValorReferencia] = useState(cliente.valorReferencia || 0);
+  const [valorReferenciaTexto, setValorReferenciaTexto] = useState(numeroParaMoeda(cliente.valorReferencia || 0));
+  const valorReferencia = desformatarMoeda(valorReferenciaTexto);
 
   const servicosAtivos = useMemo(() => servicosModal.filter((service) => service.selecionado && service.ativo), [servicosModal]);
   const totalValor = useMemo(() => servicosAtivos.reduce((acc, service) => acc + service.indice * valorReferencia, 0), [servicosAtivos, valorReferencia]);
@@ -197,7 +199,7 @@ export function OrcamentoDocumentoModal({ cliente, servicosSelecionados, onClose
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.6fr', gap: '14px', padding: '16px', borderRadius: '16px', border: '1px solid #E5EBF5', background: '#FFFFFF' }}>
-            <label style={labelStyle}>Valor de Referência<input value={valorReferencia.toFixed(2).replace('.', ',')} onChange={(event) => setValorReferencia(parseCurrency(event.target.value))} style={fieldBase} /></label>
+            <label style={labelStyle}>Valor de Referência<input value={valorReferenciaTexto} onChange={(event) => setValorReferenciaTexto(formatarMoeda(event.target.value))} style={fieldBase} /></label>
             <label style={labelStyle}>Área<input value={cliente.area} onChange={(event) => onClienteChange('area', event.target.value)} style={fieldBase} /></label>
           </div>
 

@@ -70,3 +70,32 @@ export function desformatarArea(valor) {
     .replace(/\./g, '')
     .replace(',', '.');
 }
+
+// Máscara de dinheiro estilo "caixa eletrônico": os dígitos digitados
+// preenchem da direita pra esquerda (os 2 últimos são sempre os centavos) —
+// o usuário nunca digita a vírgula, e o campo nunca trava, porque o valor
+// exibido é sempre recalculado a partir dos dígitos brutos que já estão na
+// tela, nunca de um número já arredondado guardado à parte.
+export function formatarMoeda(valor) {
+  const digitos = String(valor ?? '').replace(/\D/g, '');
+  if (!digitos) return '';
+
+  const centavos = parseInt(digitos, 10);
+  const [inteiro, decimal] = (centavos / 100).toFixed(2).split('.');
+  const inteiroComPontos = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${inteiroComPontos},${decimal}`;
+}
+
+// Reverte formatarMoeda() para um número puro, pronto pra virar Float no
+// backend.
+export function desformatarMoeda(valorFormatado) {
+  const digitos = String(valorFormatado ?? '').replace(/\D/g, '');
+  if (!digitos) return 0;
+  return parseInt(digitos, 10) / 100;
+}
+
+// Converte um número (ex.: vindo do banco) direto pro texto já mascarado,
+// pra inicializar um campo desses com um valor existente.
+export function numeroParaMoeda(numero) {
+  return formatarMoeda(String(Math.round(Number(numero || 0) * 100)));
+}

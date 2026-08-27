@@ -44,7 +44,8 @@ export function AnimatedDropdown({ label, value, onChange, options, width, searc
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef(null);
-  const selectedLabel = options.find(option => option.value === value)?.label || 'Selecionar...';
+  const selectedOption = options.find(option => option.value === value);
+  const selectedLabel = selectedOption?.label || 'Selecionar...';
 
   // Fecha limpando a busca no próprio handler: limpar dentro do efeito
   // dispara uma renderização em cascata a cada abre/fecha.
@@ -84,7 +85,12 @@ export function AnimatedDropdown({ label, value, onChange, options, width, searc
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
           <span style={{ fontSize: '14px', fontWeight: '700' }}>{label}</span>
-          <span style={{ color: '#777', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedLabel}</span>
+          <span style={{ color: '#777', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {selectedLabel}
+            {selectedOption?.sub && (
+              <span style={{ opacity: 0.45, marginLeft: '8px' }}>{selectedOption.sub}</span>
+            )}
+          </span>
         </div>
         <motion.span animate={open ? 'open' : 'closed'} variants={iconVariants} style={{ display: 'flex' }}>
           <FiChevronDown />
@@ -128,6 +134,9 @@ export function AnimatedDropdown({ label, value, onChange, options, width, searc
               className="dropdown-option"
             >
               {option.label}
+              {option.sub && (
+                <span style={{ opacity: 0.45, marginLeft: '8px' }}>{option.sub}</span>
+              )}
             </motion.button>
           ))}
         </div>

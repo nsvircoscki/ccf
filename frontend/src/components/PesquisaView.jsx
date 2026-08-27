@@ -95,14 +95,14 @@ export function PesquisaView({
 }) {
   const { tickets, workflows, setWorkflowAtivo } = kanban;
 
-  const [query, setQuery] = useState('');
-  const [buscaEtapa, setBuscaEtapa] = useState('');
-  // Filtros abaixo persistem em localStorage — o usuário não quer escolhê-los
-  // de novo toda vez que reabre a tela (só o texto de busca reseta, esse
-  // continua "de sessão").
+  // Tudo abaixo persiste em localStorage — a tela é desmontada toda vez que
+  // o usuário troca de aba (App.jsx só renderiza com `telaAtiva === 'dashboard'`),
+  // então sem isso a busca/seleção voltava do zero ao sair e voltar do Kanban.
+  const [query, setQuery] = useState(() => localStorage.getItem('pesquisa:query') || '');
+  const [buscaEtapa, setBuscaEtapa] = useState(() => localStorage.getItem('pesquisa:buscaEtapa') || '');
   const [filtroStatus, setFiltroStatus] = useState(() => localStorage.getItem('pesquisa:filtroStatus') || 'Todas');
   const [filtroTipo, setFiltroTipo] = useState(() => localStorage.getItem('pesquisa:filtroTipo') || 'Todos');
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(() => localStorage.getItem('pesquisa:selectedId') || null);
   // Projeto 100% Concluído sai da busca principal e vai pra aba de inativos —
   // fica fora do fluxo de trabalho do dia a dia sem sumir do sistema.
   const [abaProjetos, setAbaProjetos] = useState(() => localStorage.getItem('pesquisa:abaProjetos') || 'ativos');
@@ -126,6 +126,19 @@ export function PesquisaView({
       }
     })();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('pesquisa:query', query);
+  }, [query]);
+
+  useEffect(() => {
+    localStorage.setItem('pesquisa:buscaEtapa', buscaEtapa);
+  }, [buscaEtapa]);
+
+  useEffect(() => {
+    if (selectedId) localStorage.setItem('pesquisa:selectedId', selectedId);
+    else localStorage.removeItem('pesquisa:selectedId');
+  }, [selectedId]);
 
   useEffect(() => {
     localStorage.setItem('pesquisa:filtroStatus', filtroStatus);

@@ -16,7 +16,7 @@ import ModalPagamento from './ModalPagamento.jsx';
 import PlaceholderMapa from './PlaceholderMapa.jsx';
 import { AnimatedDropdown } from '../components/AnimatedDropdown';
 import { servicoService } from '../services/servicoService.js';
-import { formatarTelefone, formatarMatricula } from '../utils/mascaras.js';
+import { formatarTelefone, formatarMatricula, formatarMoeda, desformatarMoeda, numeroParaMoeda } from '../utils/mascaras.js';
 import VisualizadorImagem from './VisualizadorImagem.jsx';
 import VisualizadorFicha from './VisualizadorFicha.jsx';
 
@@ -395,7 +395,8 @@ function Orcamento({ onBack, onOrcamentoDecidido }) {
   const [contato, setContato] = useState('');
   const [matricula, setMatricula] = useState('');
   const [area, setArea] = useState('0,00');
-  const [salarioMinimo, setSalarioMinimo] = useState(1621.0);
+  const [salarioMinimoTexto, setSalarioMinimoTexto] = useState('1.621,00');
+  const salarioMinimo = desformatarMoeda(salarioMinimoTexto);
   const [pagamentoAberto, setPagamentoAberto] = useState(false);
   const [notasAberta, setNotasAberta] = useState(false);
   const [notas, setNotas] = useState('');
@@ -452,7 +453,7 @@ function Orcamento({ onBack, onOrcamentoDecidido }) {
       setCodRespTecn(servico.codRespTecn || '');
       setRespTecn(servico.respTecn || '');
       setNotas(servico.notas || '');
-      if (servico.valorReferencia) setSalarioMinimo(servico.valorReferencia);
+      if (servico.valorReferencia) setSalarioMinimoTexto(numeroParaMoeda(servico.valorReferencia));
       setDecisaoOrcamento(
         servico.statusOrcamento === 'APROVADO' || servico.statusOrcamento === 'REPROVADO'
           ? servico.statusOrcamento
@@ -1073,8 +1074,8 @@ function Orcamento({ onBack, onOrcamentoDecidido }) {
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1' }}>
                 <span style={labelTextStyle}>Valor Referencia</span>
                 <input
-                  value={salarioMinimo.toFixed(2).replace('.', ',')}
-                  onChange={(event) => setSalarioMinimo(parseNumberInput(event.target.value) || 0)}
+                  value={salarioMinimoTexto}
+                  onChange={(event) => setSalarioMinimoTexto(formatarMoeda(event.target.value))}
                   onFocus={() => setCampoAtivo('salarioMinimo')}
                   onBlur={() => setCampoAtivo(null)}
                   style={fieldStyle('salarioMinimo')}

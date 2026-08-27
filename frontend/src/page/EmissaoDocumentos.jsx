@@ -21,6 +21,7 @@ import {
 import { municipiosSugeridos } from './emissaoDocumentos/documentosData.js';
 import { servicoService } from '../services/servicoService';
 import { cardStyle, escapeHtml, fieldBase, labelStyle } from './emissaoDocumentos/documentosUtils.js';
+import { formatarMoeda, numeroParaMoeda } from '../utils/mascaras.js';
 import logoCcf from './emissaoDocumentos/assets/logo-ccf.jpg';
 import marcaDagua from './emissaoDocumentos/assets/marca-dagua.jpg';
 
@@ -47,7 +48,7 @@ function servicoParaFormulario(servico) {
       indice: Number(item.indice ?? 0),
       valor: Number(item.valor ?? (Number(item.indice ?? 0) * valorReferencia) ?? 0),
     })),
-    valorGlobal: valor != null ? valor.toFixed(2).replace('.', ',') : '',
+    valorGlobal: valor != null ? numeroParaMoeda(valor) : '',
     itensOrcamento,
     valorReferencia,
   };
@@ -284,7 +285,7 @@ function EmissaoDocumentos() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '20px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>2</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Configurações Técnicas da OS</h2></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <label style={labelStyle}>Colaborador Técnico Responsável<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><FieldIcon icon={UserRound} /><select value={responsavel} onChange={(event) => setResponsavel(event.target.value)} style={fieldBase}><option>Eng. Charles Costi</option></select></div></label>
-              <label style={labelStyle}>Valor Global da Obra (R$)<input value={valorGlobal} onChange={(event) => setValorGlobal(event.target.value)} inputMode="decimal" style={fieldBase} /></label>
+              <label style={labelStyle}>Valor Global da Obra (R$)<input value={valorGlobal} onChange={(event) => setValorGlobal(formatarMoeda(event.target.value))} inputMode="decimal" style={fieldBase} /></label>
               <label style={labelStyle}>Observações Adicionais do Rodapé<textarea value={observacoes} onChange={(event) => setObservacoes(event.target.value)} placeholder="Digite observações internas ou restrições de campo..." style={{ ...fieldBase, minHeight: '104px', resize: 'vertical', padding: '13px', lineHeight: 1.45, fontWeight: 600 }} /></label>
             </div>
           </section>
