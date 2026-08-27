@@ -357,6 +357,13 @@ export const api = {
         return { data: await res.json(), ok: res.ok };
     },
 
+    // Boleto já emitido no banco, só o PDF que não veio — tenta de novo sem
+    // re-emitir (evita duplicar o boleto no Inter).
+    tentarBaixarPdfParcela: async (cobrancaId, numeroParcela) => {
+        const res = await fetch(`${BASE_URL}/cobrancas/${cobrancaId}/parcelas/${numeroParcela}/baixar-pdf`, { method: 'POST' });
+        return { data: await res.json(), ok: res.ok };
+    },
+
     // URL direta: o PDF é aberto numa aba pelo navegador, não consumida aqui.
     urlPdfParcelaCobranca: (cobrancaId, numeroParcela) => `${BASE_URL}/cobrancas/${cobrancaId}/parcelas/${numeroParcela}/pdf`,
 

@@ -297,6 +297,23 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
     }
   };
 
+  // Só pra parcela que já está EMITIDO no banco mas ainda sem o PDF salvo —
+  // nunca chama a emissão de novo (evitaria duplicar o boleto no Inter).
+  const tentarBaixarPdfParcela = async (cobrancaId, numeroParcela) => {
+    const chave = `${cobrancaId}-${numeroParcela}`;
+    setEmitindo(chave);
+    try {
+      const { data, ok } = await faturamentoService.tentarBaixarPdfParcela(cobrancaId, numeroParcela);
+      show(ok && data?.caminhoPdf ? 'PDF baixado com sucesso!' : (data?.error || 'O PDF ainda não ficou pronto no banco. Tente de novo em instantes.'), ok && data?.caminhoPdf ? 'ok' : 'err');
+      carregarHistorico();
+    } catch (erro) {
+      console.error(erro);
+      show('Erro ao conectar com o servidor.', 'err');
+    } finally {
+      setEmitindo(null);
+    }
+  };
+
   const emitirNota = async (id) => {
     setEmitindo(id);
     try {
@@ -505,12 +522,28 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
                         <td style={{ padding: '8px' }}>{new Date(p.vencimento).toLocaleDateString('pt-BR')}</td>
                         <td style={{ padding: '8px' }}>
                           <BadgeStatus status={p.status} />
-                          {p.status === 'ERRO' && p.erroMensagem && (
-                            <div style={{ color: C.danger, fontSize: 11, marginTop: 4, maxWidth: 260 }}>{p.erroMensagem}</div>
+                          {p.erroMensagem && (
+                            <div style={{ color: p.status === 'ERRO' ? C.danger : '#b45309', fontSize: 11, marginTop: 4, maxWidth: 260 }}>{p.erroMensagem}</div>
                           )}
                         </td>
                         <td style={{ padding: '8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          {p.status !== 'EMITIDO' ? (
+                          {p.status === 'EMITIDO' && p.caminhoPdf && (
+                            <a href={faturamentoService.urlPdfParcelaCobranca(c.id, p.numero)} target="_blank" rel="noreferrer"
+                              style={{ color: accent, fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>
+                              Baixar PDF
+                            </a>
+                          )}
+                          {p.status === 'EMITIDO' && !p.caminhoPdf && (
+                            // Boleto já existe no banco (não reemite) — só o PDF que não veio ainda.
+                            <button onClick={() => tentarBaixarPdfParcela(c.id, p.numero)} disabled={emitindo === chave} style={{
+                              padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${accent}`, cursor: 'pointer',
+                              background: '#fff', color: accent, fontFamily: '"Montserrat", sans-serif',
+                              fontWeight: 700, fontSize: 11.5, opacity: emitindo === chave ? 0.6 : 1,
+                            }}>
+                              {emitindo === chave ? 'Buscando…' : 'Tentar baixar PDF'}
+                            </button>
+                          )}
+                          {p.status !== 'EMITIDO' && (
                             <button onClick={() => emitirParcela(c.id, p.numero)} disabled={emitindo === chave} style={{
                               padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
                               background: accent, color: '#fff', fontFamily: '"Montserrat", sans-serif',
@@ -518,11 +551,6 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
                             }}>
                               {emitindo === chave ? 'Emitindo…' : 'Emitir'}
                             </button>
-                          ) : (
-                            <a href={faturamentoService.urlPdfParcelaCobranca(c.id, p.numero)} target="_blank" rel="noreferrer"
-                              style={{ color: accent, fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>
-                              Baixar PDF
-                            </a>
                           )}
                         </td>
                       </tr>

@@ -90,4 +90,22 @@ async function baixarPdf(codigoSolicitacao) {
   return Buffer.from(resposta.data.pdf, 'base64');
 }
 
-export const interBoletoService = { emitirBoleto, baixarPdf };
+// Consulta (só leitura, não cria nada) as cobranças já registradas no banco
+// num intervalo de datas — usado pra checar se uma emissão que "sumiu" no
+// nosso sistema (ex: emitiu com sucesso mas o download do PDF falhou antes
+// de salvarmos o código) já existe de verdade no Inter, sem precisar
+// re-emitir e arriscar duplicar o boleto.
+async function listarCobrancas({ dataInicial, dataFinal }) {
+  const token = await obterToken();
+  const resposta = await axios.get(
+    'https://cdpj.partners.bancointer.com.br/cobranca/v3/cobrancas',
+    {
+      params: { dataInicial, dataFinal },
+      headers: { Authorization: `Bearer ${token}` },
+      httpsAgent: agenteHttps(),
+    }
+  );
+  return resposta.data;
+}
+
+export const interBoletoService = { emitirBoleto, baixarPdf, listarCobrancas };

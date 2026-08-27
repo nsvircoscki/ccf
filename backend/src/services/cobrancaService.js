@@ -65,6 +65,30 @@ async function criar(dados) {
   });
 }
 
+// O Inter às vezes ainda está processando a cobrança no momento em que
+// tentamos baixar o PDF logo em seguida, e devolve erro nesse passo mesmo
+// com o boleto já criado de verdade no banco. Por isso o download vive
+// isolado num try/catch próprio: se falhar, a parcela continua EMITIDO
+// (o boleto existe) — só falta o arquivo, e dá pra tentar de novo depois
+// via tentarBaixarPdf, sem nunca chamar emitirBoleto outra vez pra ela.
+async function baixarESalvarPdf(parcela) {
+  try {
+    const pdfBuffer = await interBoletoService.baixarPdf(parcela.codigoSolicitacao);
+    const caminhoPdf = path.join(pastaCobrancas(), `${parcela.id}.pdf`);
+    fs.writeFileSync(caminhoPdf, pdfBuffer);
+    return prisma.parcelaCobranca.update({
+      where: { id: parcela.id },
+      data: { caminhoPdf, erroMensagem: null },
+    });
+  } catch (erro) {
+    const mensagem = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
+    return prisma.parcelaCobranca.update({
+      where: { id: parcela.id },
+      data: { erroMensagem: `Boleto emitido, mas o PDF ainda não ficou pronto: ${mensagem}`.slice(0, 1000) },
+    });
+  }
+}
+
 async function emitirParcela(cobrancaId, numeroParcela) {
   const cobranca = await prisma.cobranca.findUnique({
     where: { id: cobrancaId },
@@ -76,20 +100,20 @@ async function emitirParcela(cobrancaId, numeroParcela) {
   if (!parcela) throw new Error('Parcela não encontrada.');
   if (parcela.status === 'EMITIDO') throw new Error('Essa parcela já foi emitida.');
 
+  // Se já existe um código de solicitação salvo, o boleto já foi criado de
+  // verdade no banco numa tentativa anterior (só o PDF não tinha vindo) —
+  // NUNCA chama emitirBoleto de novo nesse caso, ou duplicaria o boleto no
+  // Inter. Só tenta buscar o PDF de novo.
+  if (parcela.codigoSolicitacao) {
+    return baixarESalvarPdf(parcela);
+  }
+
   const seuNumero = parcela.seuNumero || `${cobranca.id.slice(0, 8)}-P${parcela.numero}`;
 
+  let codigoSolicitacao;
   try {
     const resultado = await interBoletoService.emitirBoleto(cobranca, { ...parcela, seuNumero });
-    const codigoSolicitacao = resultado.codigoSolicitacao;
-
-    const pdfBuffer = await interBoletoService.baixarPdf(codigoSolicitacao);
-    const caminhoPdf = path.join(pastaCobrancas(), `${parcela.id}.pdf`);
-    fs.writeFileSync(caminhoPdf, pdfBuffer);
-
-    return prisma.parcelaCobranca.update({
-      where: { id: parcela.id },
-      data: { status: 'EMITIDO', seuNumero, codigoSolicitacao, caminhoPdf, erroMensagem: null },
-    });
+    codigoSolicitacao = resultado.codigoSolicitacao;
   } catch (erro) {
     const mensagem = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
     await prisma.parcelaCobranca.update({
@@ -98,6 +122,28 @@ async function emitirParcela(cobrancaId, numeroParcela) {
     });
     throw new Error(`Falha ao emitir boleto: ${mensagem}`);
   }
+
+  // A partir daqui o boleto JÁ EXISTE de verdade no Inter — salva isso
+  // imediatamente, antes de tentar o PDF, pra nunca perder essa referência.
+  const parcelaEmitida = await prisma.parcelaCobranca.update({
+    where: { id: parcela.id },
+    data: { status: 'EMITIDO', seuNumero, codigoSolicitacao, erroMensagem: null },
+  });
+
+  return baixarESalvarPdf(parcelaEmitida);
+}
+
+// Reemitir o PDF de uma parcela que já está EMITIDO (boleto real já existe
+// no banco) mas ficou sem o arquivo — nunca chama a emissão de novo.
+async function tentarBaixarPdf(cobrancaId, numeroParcela) {
+  const parcela = await prisma.parcelaCobranca.findFirst({
+    where: { cobrancaId, numero: Number(numeroParcela) },
+  });
+  if (!parcela) throw new Error('Parcela não encontrada.');
+  if (parcela.status !== 'EMITIDO' || !parcela.codigoSolicitacao) {
+    throw new Error('Essa parcela ainda não foi emitida no banco.');
+  }
+  return baixarESalvarPdf(parcela);
 }
 
 async function caminhoArquivoPdf(cobrancaId, numeroParcela) {
@@ -110,4 +156,4 @@ async function caminhoArquivoPdf(cobrancaId, numeroParcela) {
   return { caminho: parcela.caminhoPdf, nome: `boleto-${cobrancaId}-parcela-${numeroParcela}.pdf` };
 }
 
-export const cobrancaService = { listar, criar, emitirParcela, caminhoArquivoPdf };
+export const cobrancaService = { listar, criar, emitirParcela, tentarBaixarPdf, caminhoArquivoPdf };

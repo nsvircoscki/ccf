@@ -12,6 +12,9 @@ export const faturamentoService = {
   async emitirParcelaCobranca(cobrancaId, numeroParcela) {
     return api.emitirParcelaCobranca(cobrancaId, numeroParcela);
   },
+  async tentarBaixarPdfParcela(cobrancaId, numeroParcela) {
+    return api.tentarBaixarPdfParcela(cobrancaId, numeroParcela);
+  },
   urlPdfParcelaCobranca(cobrancaId, numeroParcela) {
     return api.urlPdfParcelaCobranca(cobrancaId, numeroParcela);
   },

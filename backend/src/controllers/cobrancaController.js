@@ -28,6 +28,17 @@ export const cobrancaController = {
     }
   },
 
+  // Boleto já emitido no banco, só o PDF que ainda não veio — tenta buscar
+  // de novo sem re-emitir.
+  async tentarBaixarPdf(req, res) {
+    try {
+      const parcela = await cobrancaService.tentarBaixarPdf(req.params.id, req.params.numero);
+      res.status(200).json(parcela);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+
   async pdfParcela(req, res) {
     try {
       const { caminho, nome } = await cobrancaService.caminhoArquivoPdf(req.params.id, req.params.numero);
