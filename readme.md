@@ -1,46 +1,113 @@
 # Sistema CCF
 
-##  O Projeto
-Sistema usado para auxiliar os processos de cadastro de orçamento, cadastro de clientes, documentação, notas fiscais, boletos e monografia.
+## Sobre o projeto
 
-##  Stack Tecnológica
-* **Frontend:** React + Vite
-* **Animações e Física:** Framer Motion
-* **Estilização:** Inline CSS focado em performance e fidelidade ao design
-* **Backend:** Node.js + Prisma ORM (PostgreSQL)
+Sistema web para apoio aos processos de cadastro, orçamento, documentação, emissão de boletos, notas fiscais, faturamento e acompanhamento de projetos em Kanban.
 
-##  Como rodar o projeto localmente
+O projeto é dividido em frontend e backend, com persistência em PostgreSQL via Prisma ORM.
 
-1. Clone o repositório:
-\`\`\`bash
-git clone [COLE_AQUI_O_SEU_LINK_DO_GITHUB]
-\`\`\`
+## Funcionalidades principais
 
-2. Entre na pasta do frontend:
-\`\`\`bash
-cd frontend
-\`\`\`
+- Login e navegação por módulos
+- Dashboard de projetos
+- Kanban com workflow, etapas, tickets, comentários e auditoria
+- Cadastro de serviços e orçamento
+- Cadastro de clientes
+- Cadastro de imóveis
+- Vinculação de dados cadastrais
+- Configuração de etapas de processo
+- Emissão e gestão de documentos
+- Emissão de boletos
+- Emissão de notas fiscais
+- Faturamento
+- Importação de pontos e apoio a mapas
+- Impressão de relatórios do Kanban
 
-3. Instale as dependências essenciais:
-\`\`\`bash
+## Arquitetura
+
+### Frontend
+- React
+- Vite
+- Framer Motion
+- Leaflet / React Leaflet
+- ExcelJS
+- PDFKit
+
+### Backend
+- Node.js
+- Express
+- Prisma ORM
+- PostgreSQL
+
+## Estrutura do repositório
+
+```text
+backend/
+  prisma/        schema e migrations do banco
+  src/           server, controllers, services e rotas
+  scripts/       utilitários e scripts administrativos
+frontend/
+  src/
+    components/  telas e componentes principais
+    hooks/       estado e regras do Kanban
+    modals/      modais de edição, detalhe e exclusão
+    page/        páginas do sistema
+    services/    integração com a API
+cadastro-ccf/
+  Cadastros.tsx  tela autocontida de cadastros
+  cadastros.css  estilos de apoio
+```
+
+## Como rodar localmente
+
+### Banco de dados
+
+Inicie o PostgreSQL com Docker a partir da pasta `backend/`:
+
+```bash
+docker-compose up -d
+```
+
+### Backend
+
+Na pasta `backend/`:
+
+```bash
 npm install
-\`\`\`
-
-4. Inicie o servidor:
-\`\`\`bash
+npx prisma generate
 npm run dev
-\`\`\`
+```
 
-##  (Sprint 1)
- Layout alinhado 100% com o Figma.
- Lógica de estado local (`useState`) e adição de novos projetos via botão `+` operantes.
- Física de drag-and-drop finalizada com troca de status baseada em coordenadas de tela.
+Se necessário, aplique as migrations do Prisma:
 
-##  (Sprint 2)
- Layout com alterações de usabilidade, novas cores inseridas no quadro kanban, dashboard incluído e relatórios em PDF.
- Física de drag-and-drop finalizada com troca de status baseada em coordenadas de tela.
+```bash
+npx prisma migrate dev
+```
 
-##  Foco Atual
-O frontend opera com dados *mockados* na memória. O próximo grande passo técnico é a criação do banco de dados e a substituição do estado local pelo consumo real de uma API.
+### Frontend
 
-https://gemini.google.com/share/8fe2e3a965a6
+Na pasta `frontend/`:
+
+```bash
+npm install
+npm run dev
+```
+
+## Variáveis de ambiente
+
+O backend depende de variáveis como:
+
+- `DATABASE_URL`
+- `PORT`
+- `GEMINI_API_KEY`
+- `GEMINI_MATRICULA_MODEL`
+- `INTER_CLIENT_ID`
+- `INTER_CLIENT_SECRET`
+
+Crie um arquivo `.env` apenas para uso local e nunca o comite no repositório.
+
+## Observações
+
+- O sistema usa Prisma com PostgreSQL no backend.
+- O frontend consome a API do backend para operar o Kanban, cadastros e módulos administrativos.
+- Existe uma tela autocontida em `cadastro-ccf/` com documentação própria.
