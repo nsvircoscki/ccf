@@ -188,6 +188,9 @@ export function Navbar({
         console.error('Erro ao marcar notificação como lida:', erro);
       }
     }
+    if (notificacao.workflowId && kanban?.setWorkflowAtivo) {
+      kanban.setWorkflowAtivo(notificacao.workflowId);
+    }
     setTelaAtiva('kanban');
   };
 
