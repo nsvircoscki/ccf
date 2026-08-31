@@ -17,6 +17,7 @@ import ConfigEtapasView from './page/ConfigEtapasView';
 import ImportarPontosView from './page/ImportarPontosView';
 import TabelaServicosView from './page/TabelaServicosView';
 import FaturamentoView from './page/FaturamentoView';
+import TarefasView from './page/TarefasView';
 
 import { EditarProjetoModal } from './modals/EditarProjetoModal';
 import { TicketDetailModal } from './modals/TicketDetailModal';
@@ -233,6 +234,10 @@ export default function App() {
 
           {telaAtiva === 'faturamento' && (
             <FaturamentoView onBack={() => setModuloEscolhido(false)} usuarioLogado={usuarioLogado} />
+          )}
+
+          {telaAtiva === 'tarefas' && (
+            <TarefasView onBack={() => setModuloEscolhido(false)} usuarioLogado={usuarioLogado} />
           )}
         </div>
 

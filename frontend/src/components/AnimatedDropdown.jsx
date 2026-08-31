@@ -40,6 +40,65 @@ const itemVariants = {
   }
 };
 
+// Versão "crua" do mesmo padrão de animação acima, sem rótulo nem chip de
+// botão — só o botão + painel animado, pra substituir um <select> nativo
+// mantendo o `style` que cada tela já usa pro próprio campo (label continua
+// por fora, do jeito que cada formulário já faz). Usa as mesmas
+// wrapperVariants/itemVariants/iconVariants acima — é o mesmo "padrão de
+// animação" em todos os dropdowns do sistema, não uma cópia à parte.
+export function AnimatedSelect({ value, onChange, options, style, placeholder = 'Selecione…', disabled = false }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const normalizadas = options.map(o => (typeof o === 'string' ? { value: o, label: o } : o));
+  const selecionada = normalizadas.find(o => o.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const fechar = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', fechar);
+    return () => document.removeEventListener('mousedown', fechar);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative', width: '100%' }}>
+      <button type="button" disabled={disabled} onClick={() => setOpen(o => !o)} style={{
+        ...style, cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+      }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {selecionada ? selecionada.label : placeholder}
+        </span>
+        <motion.span animate={open ? 'open' : 'closed'} variants={iconVariants} style={{ display: 'flex', flexShrink: 0 }}>
+          <FiChevronDown size={14} />
+        </motion.span>
+      </button>
+
+      <motion.div initial="closed" animate={open ? 'open' : 'closed'} variants={wrapperVariants} style={{
+        position: 'absolute', zIndex: 40, top: 'calc(100% + 6px)', left: 0, right: 0,
+        background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12,
+        boxShadow: '0 12px 34px rgba(14,37,73,0.14)', overflow: 'hidden', transformOrigin: 'top center',
+        pointerEvents: open ? 'auto' : 'none',
+      }}>
+        <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+          {normalizadas.map(o => (
+            <motion.button key={o.value} type="button" variants={itemVariants}
+              onClick={() => { onChange(o.value); setOpen(false); }}
+              style={{
+                width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', cursor: 'pointer',
+                background: value === o.value ? '#EEF2FF' : 'transparent', fontFamily: 'inherit', fontSize: 14, color: '#111827',
+                fontWeight: value === o.value ? 700 : 400,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#EEF2FF'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = value === o.value ? '#EEF2FF' : 'transparent'; }}>
+              {o.label}
+            </motion.button>
+          ))}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 export function AnimatedDropdown({ label, value, onChange, options, width, searchable = false, searchPlaceholder = 'Buscar...' }) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');

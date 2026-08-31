@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, KeyRound, ListChecks, Bell,
-  Wallet, BookOpen, FileSpreadsheet, Table, Receipt,
+  Wallet, BookOpen, FileSpreadsheet, Table, Receipt, ClipboardCheck,
 } from 'lucide-react';
 import { AlterarSenhaModal } from '../modals/AlterarSenhaModal.jsx';
 import { api } from '../services/api';
@@ -23,6 +23,7 @@ const ITENS = [
   { id: 'importar-pontos', label: 'Pontos', icon: FileSpreadsheet, color: '#0369a1' },
   { id: 'tabela-servicos', label: 'Tabela de Serviços', icon: Table, color: '#4d7c0f' },
   { id: 'faturamento', label: 'Faturamento', icon: Receipt, color: '#b91c1c' },
+  { id: 'tarefas', label: 'Tarefas', icon: ClipboardCheck, color: '#ea580c' },
   { id: 'config', label: 'Configurações', icon: Settings2, color: '#64748b' },
 ];
 

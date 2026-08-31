@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import LeafIcon from './LeafIcon';
 import { authService } from '../services/authService';
+import { AnimatedSelect } from './AnimatedDropdown';
 
 const USUARIOS = ['DES', 'TOPO', 'ENG', 'CRD', 'DEV'];
 
@@ -207,15 +208,12 @@ export function LoginView({ onLogin, globalCss }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div>
               <label style={labelStyle}>Usuário</label>
-              <select
+              <AnimatedSelect
                 value={usuarioSelecionadoLogin}
-                onChange={(e) => trocarUsuario(e.target.value)}
-                style={{ ...fieldStyle, cursor: 'pointer' }}
-              >
-                {USUARIOS.map((u) => (
-                  <option key={u} value={u}>{u}</option>
-                ))}
-              </select>
+                onChange={trocarUsuario}
+                options={USUARIOS}
+                style={fieldStyle}
+              />
             </div>
 
             <div>

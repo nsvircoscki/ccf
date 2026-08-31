@@ -352,6 +352,8 @@ model Servico {
   cobrancas        Cobranca[]
   notasFiscais     NotaFiscal[]
 
+  tarefas          Tarefa[]
+
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 }
@@ -466,5 +468,25 @@ model NotaFiscal {
  updated_at          DateTime @updatedAt
 }
 
+model Tarefa {
+  id          String    @id @default(uuid())
+  titulo      String
+  descricao   String?
+  setor       String    // DES | TOPO | ENG | CRD — mesmo valor de usuarioLogado
+  prioridade  String    @default("MEDIA") // BAIXA | MEDIA | ALTA
 
+  servicoId   String?
+  servico     Servico?  @relation(fields: [servicoId], references: [id])
+
+  prazo       DateTime?
+  linkPasta   String?   // caminho de rede/local da pasta do serviço (ex.: \\SERVIDOR\Pasta)
+
+  status       String    @default("PENDENTE") // PENDENTE | CONCLUIDA
+  criadoPor    String?   // setor de quem lançou (usuarioLogado no momento da criação)
+  concluidoPor String?
+  concluido_em DateTime?
+
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+}
 

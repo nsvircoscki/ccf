@@ -99,3 +99,25 @@ export function desformatarMoeda(valorFormatado) {
 export function numeroParaMoeda(numero) {
   return formatarMoeda(String(Math.round(Number(numero || 0) * 100)));
 }
+
+// Mesma lógica "caixa eletrônico" de formatarMoeda(), mas pra índice
+// (multiplicador com 1 casa decimal, sem separador de milhar — os valores
+// são sempre pequenos, tipo 1,5).
+export function formatarIndice(valor) {
+  const digitos = String(valor ?? '').replace(/\D/g, '');
+  if (!digitos) return '';
+  const decimo = parseInt(digitos, 10);
+  return (decimo / 10).toFixed(1).replace('.', ',');
+}
+
+// Reverte formatarIndice() para um número puro.
+export function desformatarIndice(valorFormatado) {
+  const digitos = String(valorFormatado ?? '').replace(/\D/g, '');
+  if (!digitos) return 0;
+  return parseInt(digitos, 10) / 10;
+}
+
+// Converte um número (ex.: vindo do banco) direto pro texto já mascarado.
+export function numeroParaIndice(numero) {
+  return formatarIndice(String(Math.round(Number(numero || 0) * 10)));
+}

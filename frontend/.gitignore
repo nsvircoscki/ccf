@@ -23,4 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 
+# Dependências de pacotes (Node.js)
 node_modules/
+**/node_modules/
+
+# Variáveis de ambiente e builds
+.env
+dist/
+build/

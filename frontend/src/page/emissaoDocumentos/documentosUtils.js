@@ -37,6 +37,32 @@ export const parseCurrency = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+// O Orçamento (e o Cadastro de Serviço) guardam os itens pela sigla curta
+// (Ret, Uni, Desm...), a mesma usada internamente pra casar com o que foi
+// pedido no cadastro — mas na Ordem de Serviço e no Contrato o cliente
+// precisa ver o nome completo do tipo de processo, não a abreviação.
+const NOME_COMPLETO_POR_SIGLA = {
+  'Ret': 'Retificação',
+  'Desm': 'Desmembramento',
+  'Uni': 'Unificação',
+  'Usu': 'Usucapião',
+  'At': 'Alteração de Divisas',
+  'CAR': 'CAR',
+  'Cert': 'Certificação INCRA',
+  'Escritura': 'Escritura',
+  'Conf': 'Conferência',
+  'Cad': 'Cadastral',
+  'Loc': 'Locação',
+  'Mov de Terra': 'Movimentação de Terra',
+  'Outros': 'Outros',
+  'Ext': 'Extremação',
+  'Lev Topo': 'Levantamento Topográfico',
+};
+
+// Nomes que não estão no mapa (ex.: um serviço avulso digitado à mão) saem
+// como vieram — só traduz o que reconhece.
+export const nomeCompletoServico = (nome) => NOME_COMPLETO_POR_SIGLA[nome] || nome;
+
 export const escapeHtml = (value) =>
   String(value)
     .replace(/&/g, '&amp;')

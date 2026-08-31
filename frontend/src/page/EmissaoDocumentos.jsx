@@ -20,8 +20,9 @@ import {
 } from './emissaoDocumentos/DocumentosComponents.jsx';
 import { municipiosSugeridos } from './emissaoDocumentos/documentosData.js';
 import { servicoService } from '../services/servicoService';
-import { cardStyle, escapeHtml, fieldBase, labelStyle } from './emissaoDocumentos/documentosUtils.js';
+import { cardStyle, escapeHtml, fieldBase, labelStyle, nomeCompletoServico } from './emissaoDocumentos/documentosUtils.js';
 import { formatarMoeda, numeroParaMoeda } from '../utils/mascaras.js';
+import { AnimatedSelect } from '../components/AnimatedDropdown';
 import logoCcf from './emissaoDocumentos/assets/logo-ccf.jpg';
 import marcaDagua from './emissaoDocumentos/assets/marca-dagua.jpg';
 
@@ -113,7 +114,7 @@ function EmissaoDocumentos() {
     const linhasServicos = servicosSelecionados
       .map((servico, index) => {
         const item = normalizeServico(servico);
-        const nomeServico = item.nome;
+        const nomeServico = nomeCompletoServico(item.nome);
         const valorServico = Number(item.valor ?? 0);
         const valorFormatado = valorServico.toLocaleString('pt-BR', {
           minimumFractionDigits: 2,
@@ -163,6 +164,7 @@ function EmissaoDocumentos() {
             .item-number { color: #b05030; font-weight: bold; }
             .total-row td { border-top: 2px solid #000; border-bottom: 3px solid #000; padding: 2px 0; font-weight: bold; }
             .observations, .closing { font-size: 10.5pt; line-height: 1.2; margin-bottom: 8mm; }
+            .observations { white-space: pre-line; }
             .doc-footer { margin-top: auto; }
             .signatures { display: flex; justify-content: space-between; margin-bottom: 10mm; }
             .sig-box { width: 45%; font-size: 10pt; line-height: 1.15; border-top: 2px solid #000; padding-top: 3px; }
@@ -272,7 +274,7 @@ function EmissaoDocumentos() {
                   const item = normalizeServico(servico);
                   return (
                     <span key={`${item.nome}-${item.indice}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', borderRadius: '12px', background: '#2D7AFD', color: '#FFFFFF', padding: '10px 13px', fontSize: '13px', fontWeight: 900 }}>
-                      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22C55E' }} />{item.nome}
+                      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22C55E' }} />{nomeCompletoServico(item.nome)}
                     </span>
                   );
                 })}
@@ -284,7 +286,7 @@ function EmissaoDocumentos() {
           <section style={{ ...cardStyle, padding: '22px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '20px' }}><span style={{ width: '30px', height: '30px', borderRadius: '10px', background: '#2D7AFD', color: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>2</span><h2 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: 0, fontWeight: 900 }}>Configurações Técnicas da OS</h2></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <label style={labelStyle}>Colaborador Técnico Responsável<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><FieldIcon icon={UserRound} /><select value={responsavel} onChange={(event) => setResponsavel(event.target.value)} style={fieldBase}><option>Eng. Charles Costi</option></select></div></label>
+              <label style={labelStyle}>Colaborador Técnico Responsável<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><FieldIcon icon={UserRound} /><div style={{ flex: 1, minWidth: 0 }}><AnimatedSelect value={responsavel} onChange={setResponsavel} options={['Eng. Charles Costi']} style={fieldBase} /></div></div></label>
               <label style={labelStyle}>Valor Global da Obra (R$)<input value={valorGlobal} onChange={(event) => setValorGlobal(formatarMoeda(event.target.value))} inputMode="decimal" style={fieldBase} /></label>
               <label style={labelStyle}>Observações Adicionais do Rodapé<textarea value={observacoes} onChange={(event) => setObservacoes(event.target.value)} placeholder="Digite observações internas ou restrições de campo..." style={{ ...fieldBase, minHeight: '104px', resize: 'vertical', padding: '13px', lineHeight: 1.45, fontWeight: 600 }} /></label>
             </div>

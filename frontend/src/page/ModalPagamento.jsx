@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatedSelect } from '../components/AnimatedDropdown';
 
 const currency = (value) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 });
@@ -234,7 +235,14 @@ function ModalPagamento({ totalValor, onClose, valoresIniciais, onChange }) {
             <div style={{ fontSize: '12px', color: '#8E8A97', fontWeight: 800, textTransform: 'uppercase' }}>Condições de Pagamento</div>
             <h2 style={{ margin: '4px 0 0', fontSize: '22px', color: '#2D2A35', fontWeight: 800 }}>Valor Total do Trabalho: {currency(totalTrabalho)}</h2>
           </div>
-          <button type="button" onClick={onClose} style={{ width: '42px', height: '42px', borderRadius: '12px', border: '1px solid rgba(45, 42, 53, 0.12)', background: '#FFFFFF', cursor: 'pointer', fontSize: '20px', color: '#5F6370' }}>×</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* As condições já são sincronizadas com o Orçamento a cada mudança
+                (ver o useEffect abaixo) — esse botão não faz nada tecnicamente
+                diferente do ×, mas deixa claro pro usuário que ele terminou de
+                ajustar as condições e pode fechar tranquilo. */}
+            <button type="button" onClick={onClose} style={{ height: '42px', padding: '0 20px', borderRadius: '12px', border: 'none', background: '#2D7AFD', color: '#FFFFFF', cursor: 'pointer', fontSize: '13px', fontWeight: 800, boxShadow: '0 8px 18px rgba(45, 122, 253, 0.28)' }}>Salvar Condições</button>
+            <button type="button" onClick={onClose} style={{ width: '42px', height: '42px', borderRadius: '12px', border: '1px solid rgba(45, 42, 53, 0.12)', background: '#FFFFFF', cursor: 'pointer', fontSize: '20px', color: '#5F6370' }}>×</button>
+          </div>
         </div>
 
         <div style={{ overflowY: 'auto', padding: '18px 24px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -308,16 +316,12 @@ function ModalPagamento({ totalValor, onClose, valoresIniciais, onChange }) {
                     <input value={taxaJuros} disabled={!parcelamentoAtivo} onChange={(event) => setTaxaJuros(event.target.value)} style={fieldStyle(!parcelamentoAtivo)} />
                   </label>
                   <label style={labelStyle}>Tipo de Juros
-                    <select value={tipoJuros} disabled={!parcelamentoAtivo} onChange={(event) => setTipoJuros(event.target.value)} style={fieldStyle(!parcelamentoAtivo)}>
-                      <option value="simples">Simples</option>
-                      <option value="composto">Composto</option>
-                    </select>
+                    <AnimatedSelect value={tipoJuros} disabled={!parcelamentoAtivo} onChange={setTipoJuros} style={fieldStyle(!parcelamentoAtivo)}
+                      options={[{ value: 'simples', label: 'Simples' }, { value: 'composto', label: 'Composto' }]} />
                   </label>
                   <label style={labelStyle}>Base de Cálculo
-                    <select value={baseJuros} disabled={!parcelamentoAtivo} onChange={(event) => setBaseJuros(event.target.value)} style={fieldStyle(!parcelamentoAtivo)}>
-                      <option value="parcelas">Aplicar sobre as Parcelas</option>
-                      <option value="saldo">Aplicar sobre o Saldo Total</option>
-                    </select>
+                    <AnimatedSelect value={baseJuros} disabled={!parcelamentoAtivo} onChange={setBaseJuros} style={fieldStyle(!parcelamentoAtivo)}
+                      options={[{ value: 'parcelas', label: 'Aplicar sobre as Parcelas' }, { value: 'saldo', label: 'Aplicar sobre o Saldo Total' }]} />
                   </label>
                 </>
               ) : null}
@@ -365,10 +369,8 @@ function ModalPagamento({ totalValor, onClose, valoresIniciais, onChange }) {
                 <div style={{ fontWeight: 800, color: '#2D2A35' }}>Editar Parcela Selecionada</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '0.9fr repeat(3, 1fr)', gap: '12px' }}>
                   <label style={labelStyle}>Parcela
-                    <select value={parcelaSelecionada} onChange={(event) => setParcelaSelecionada(event.target.value)} style={fieldStyle(false)}>
-                      <option value="">Selecione</option>
-                      {parcelas.map((parcela) => <option key={parcela.numero} value={parcela.numero}>{ordinal(parcela.numero)} parcela</option>)}
-                    </select>
+                    <AnimatedSelect value={parcelaSelecionada} onChange={setParcelaSelecionada} style={fieldStyle(false)} placeholder="Selecione"
+                      options={parcelas.map((parcela) => ({ value: String(parcela.numero), label: `${ordinal(parcela.numero)} parcela` }))} />
                   </label>
                   <label style={labelStyle}>Valor Manual
                     <input disabled={!parcelaEditavel} value={edicoesParcelas[parcelaSelecionada]?.base ?? (parcelaEditavel ? formatInput(parcelaEditavel.base) : '')} onChange={(event) => updateParcelaManual('base', event.target.value)} style={fieldStyle(!parcelaEditavel)} />

@@ -49,6 +49,8 @@ export function Icon({ name, size = 15 }) {
     plus: <path d="M12 5v14M5 12h14"/>,
     download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></>,
     check: <path d="M20 6 9 17l-5-5"/>,
+    alert: <><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></>,
+    trash: <><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/><path d="M10 11v6M14 11v6"/></>,
   };
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor"
@@ -167,11 +169,39 @@ export function FieldActionButton({ label, icon = 'doc', onClick, loading, succe
   );
 }
 
-/* ── Select simples (nativo) ── */
+// Mesma animação de abrir/fechar do AnimatedDropdown.jsx (painel + itens com
+// leve stagger) — reaproveitada aqui pra todo SelectField ter o mesmo padrão,
+// só que com o visual "rótulo em cima + caixa" que os formulários de
+// cadastro já usam, em vez do botão-chip do Kanban/Pesquisa.
+const selectWrapperVariants = {
+  open: { opacity: 1, scaleY: 1, transition: { duration: 0.12, ease: 'easeOut' } },
+  closed: { opacity: 0, scaleY: 0, transition: { duration: 0.08, ease: 'easeIn' } },
+};
+const selectItemVariants = {
+  open: { opacity: 1, y: 0, transition: { duration: 0.1, ease: 'easeOut' } },
+  closed: { opacity: 0, y: -4, transition: { duration: 0.06, ease: 'easeIn' } },
+};
+const selectIconVariants = {
+  open: { rotate: 180, transition: { duration: 0.12, ease: 'easeOut' } },
+  closed: { rotate: 0, transition: { duration: 0.12, ease: 'easeOut' } },
+};
+
+/* ── Select animado (mesmo padrão de animação do AnimatedDropdown.jsx) ── */
 export function SelectField({ label, icon, value, onChange, options, span = 1 }) {
-  const [focus, setFocus] = useState(false);
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const normalizadas = options.map(o => (typeof o === 'string' ? { value: o, label: o } : o));
+  const selecionada = normalizadas.find(o => o.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const fechar = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', fechar);
+    return () => document.removeEventListener('mousedown', fechar);
+  }, [open]);
+
   return (
-    <div style={{ gridColumn: span === 2 ? '1 / -1' : 'auto' }}>
+    <div style={{ gridColumn: span === 2 ? '1 / -1' : 'auto', position: 'relative' }} ref={ref}>
       <label style={{
         display: 'flex', alignItems: 'center', gap: 6, fontFamily: MONT, fontWeight: 600,
         fontSize: 10.5, color: C.label, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 6,
@@ -179,20 +209,41 @@ export function SelectField({ label, icon, value, onChange, options, span = 1 })
         {icon && <span style={{ color: C.muted, display: 'inline-flex' }}><Icon name={icon} size={13} /></span>}
         {label}
       </label>
-      <select value={value} onChange={e => onChange(e.target.value)}
-        onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-        style={{
-          width: '100%', boxSizing: 'border-box', padding: '11px 14px',
-          border: `1.5px solid ${focus ? C.navy : C.border}`, borderRadius: 10,
-          background: '#fff', fontFamily: SANS, fontSize: 14, color: value ? C.text : C.muted,
-          outline: 'none', cursor: 'pointer', appearance: 'none',
-          boxShadow: focus ? `0 0 0 3px ${C.navy}1f` : 'none', transition: 'border-color 0.18s, box-shadow 0.18s',
-          backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%238899bb' stroke-width='2' stroke-linecap='round'><path d='M4 6l4 4 4-4'/></svg>")`,
-          backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center',
-        }}>
-        <option value="" disabled>Selecione…</option>
-        {options.map(o => (typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.value} value={o.value}>{o.label}</option>))}
-      </select>
+      <button type="button" onClick={() => setOpen(o => !o)} style={{
+        width: '100%', boxSizing: 'border-box', padding: '11px 14px', textAlign: 'left',
+        border: `1.5px solid ${open ? C.navy : C.border}`, borderRadius: 10,
+        background: '#fff', fontFamily: SANS, fontSize: 14, color: selecionada ? C.text : C.muted,
+        outline: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        boxShadow: open ? `0 0 0 3px ${C.navy}1f` : 'none', transition: 'border-color 0.18s, box-shadow 0.18s',
+      }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selecionada ? selecionada.label : 'Selecione…'}</span>
+        <motion.span animate={open ? 'open' : 'closed'} variants={selectIconVariants} style={{ display: 'flex', color: C.muted, flexShrink: 0 }}>
+          <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 7l5 6 5-6" /></svg>
+        </motion.span>
+      </button>
+
+      <motion.div initial="closed" animate={open ? 'open' : 'closed'} variants={selectWrapperVariants} style={{
+        position: 'absolute', zIndex: 30, top: 'calc(100% + 6px)', left: 0, right: 0,
+        background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12,
+        boxShadow: '0 12px 34px rgba(14,37,73,0.14)', overflow: 'hidden', transformOrigin: 'top center',
+        pointerEvents: open ? 'auto' : 'none',
+      }}>
+        <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+          {normalizadas.map(o => (
+            <motion.button key={o.value} type="button" variants={selectItemVariants}
+              onClick={() => { onChange(o.value); setOpen(false); }}
+              style={{
+                width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', cursor: 'pointer',
+                background: value === o.value ? `${C.navy}0f` : 'none',
+                fontFamily: SANS, fontSize: 14, color: C.text, fontWeight: value === o.value ? 700 : 400,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = `${C.navy}0f`; }}
+              onMouseLeave={e => { e.currentTarget.style.background = value === o.value ? `${C.navy}0f` : 'transparent'; }}>
+              {o.label}
+            </motion.button>
+          ))}
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -543,6 +594,44 @@ export function Actions({ editing, accent, onSave, onDelete, saving, saveLabel }
         onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.opacity = saving ? '0.7' : '1'; }}>
         {saveLabel || (saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Salvar cadastro')}
       </button>
+    </div>
+  );
+}
+
+/* ── Modal de confirmação (ex.: excluir um registro) — substitui o
+   window.confirm() nativo do navegador por algo consistente com o resto
+   do sistema. ── */
+export function ConfirmModal({ title, message, confirmLabel = 'Excluir', cancelLabel = 'Cancelar', danger = true, onConfirm, onCancel }) {
+  const cor = danger ? C.danger : C.navy;
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(14,37,73,0.45)', zIndex: 400,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }} onClick={onCancel}>
+      <div style={{
+        background: '#fff', borderRadius: 18, width: 380, maxWidth: '100%', padding: '28px 26px',
+        boxShadow: '0 20px 60px rgba(14,37,73,0.25)', animation: 'fadeUp 0.22s ease both', textAlign: 'center',
+      }} onClick={(e) => e.stopPropagation()}>
+        <div style={{
+          width: 52, height: 52, borderRadius: '50%', margin: '0 auto 16px',
+          background: `${cor}15`, color: cor, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Icon name="alert" size={26} />
+        </div>
+        <h3 style={{ fontFamily: MONT, fontWeight: 700, fontSize: 16, color: C.text, margin: '0 0 8px' }}>{title}</h3>
+        {message && <p style={{ fontFamily: SANS, fontSize: 13.5, color: C.muted, margin: 0, lineHeight: 1.5 }}>{message}</p>}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 24 }}>
+          <button onClick={onCancel} style={{
+            padding: '11px 22px', borderRadius: 11, border: `1.5px solid ${C.border}`, background: '#fff',
+            color: C.label, fontFamily: MONT, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+          }}>{cancelLabel}</button>
+          <button onClick={onConfirm} style={{
+            padding: '11px 22px', borderRadius: 11, border: 'none', background: cor,
+            color: '#fff', fontFamily: MONT, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+            boxShadow: `0 8px 20px ${cor}44`,
+          }}>{confirmLabel}</button>
+        </div>
+      </div>
     </div>
   );
 }

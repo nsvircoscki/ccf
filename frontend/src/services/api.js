@@ -395,4 +395,43 @@ export const api = {
     },
 
     urlPdfNotaFiscal: (id) => `${BASE_URL}/notas-fiscais/${id}/pdf`,
+
+    // ---- TAREFAS ----
+    getTarefas: async ({ setor, servicoId, status } = {}) => {
+        const params = new URLSearchParams();
+        if (setor) params.set('setor', setor);
+        if (servicoId) params.set('servicoId', servicoId);
+        if (status) params.set('status', status);
+        const query = params.toString();
+        const res = await fetch(`${BASE_URL}/tarefas${query ? `?${query}` : ''}`);
+        return res.json();
+    },
+
+    criarTarefa: async (dados) => {
+        const res = await fetch(`${BASE_URL}/tarefas`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    concluirTarefa: async (id, setor) => {
+        const res = await fetch(`${BASE_URL}/tarefas/${id}/concluir`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ setor }),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    reabrirTarefa: async (id) => {
+        const res = await fetch(`${BASE_URL}/tarefas/${id}/reabrir`, { method: 'POST' });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    excluirTarefa: async (id) => {
+        const res = await fetch(`${BASE_URL}/tarefas/${id}`, { method: 'DELETE' });
+        return { ok: res.ok };
+    },
 };

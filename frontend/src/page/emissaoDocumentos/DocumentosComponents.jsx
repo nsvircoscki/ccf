@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, ChevronDown, UserRound, X } from 'lucide-react';
 
-import { currency, fieldBase, labelStyle } from './documentosUtils.js';
-import { formatarMoeda, desformatarMoeda, numeroParaMoeda } from '../../utils/mascaras.js';
+import { currency, fieldBase, labelStyle, nomeCompletoServico } from './documentosUtils.js';
+import { formatarMoeda, desformatarMoeda, numeroParaMoeda, formatarIndice, desformatarIndice } from '../../utils/mascaras.js';
+import { AnimatedSelect } from '../../components/AnimatedDropdown';
 
 const dropdownWrapperVariants = {
   open: { opacity: 1, scaleY: 1, transition: { duration: 0.18, ease: 'easeOut' } },
@@ -105,7 +106,10 @@ export function AnimatedDropdown({ value, onChange, options, width = '100%', sea
   );
 }
 
+const ESTADOS_CIVIS = ['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)'];
+
 export function ContractModal({ onClose }) {
+  const [estadoCivil, setEstadoCivil] = useState('');
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(15, 23, 42, 0.48)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
       <div style={{ width: 'min(860px, 100%)', borderRadius: '22px', overflow: 'hidden', background: '#F6F8FC', boxShadow: '0 28px 90px rgba(15, 23, 42, 0.32)' }}>
@@ -123,7 +127,7 @@ export function ContractModal({ onClose }) {
         <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.85fr 1fr', gap: '14px' }}>
             <label style={labelStyle}>Nacionalidade<input placeholder="Brasileiro(a)" style={fieldBase} /></label>
-            <label style={labelStyle}>Estado Civil<select defaultValue="" style={fieldBase}><option value="" disabled>Selecione</option><option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option></select></label>
+            <label style={labelStyle}>Estado Civil<AnimatedSelect value={estadoCivil} onChange={setEstadoCivil} options={ESTADOS_CIVIS} style={fieldBase} /></label>
             <label style={labelStyle}>Profissão<input placeholder="Ex.: Produtor rural" style={fieldBase} /></label>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.55fr', gap: '14px' }}>
@@ -169,8 +173,9 @@ export function OrcamentoDocumentoModal({ cliente, servicosSelecionados, onClose
   };
 
   const updateServiceIndice = (id, value) => {
-    const parsed = parseFloat(String(value).replace(',', '.').replace(/[^0-9.]/g, ''));
-    setServicosModal((current) => current.map((service) => (service.id === id ? { ...service, indice: Number.isFinite(parsed) ? parsed : 0 } : service)));
+    const indiceTexto = formatarIndice(value);
+    const novoIndice = desformatarIndice(indiceTexto);
+    setServicosModal((current) => current.map((service) => (service.id === id ? { ...service, indice: novoIndice, indiceTexto } : service)));
   };
 
   const handleConfirm = () => {
@@ -212,8 +217,8 @@ export function OrcamentoDocumentoModal({ cliente, servicosSelecionados, onClose
                 const isSelected = service.selecionado && service.ativo;
                 return (
                   <div key={service.id} onClick={() => toggleService(service.id)} style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.7fr 1fr', gap: '16px', alignItems: 'center', padding: '12px 14px', borderRadius: '12px', border: isSelected ? '2px solid #2D7AFD' : '1px solid rgba(45, 42, 53, 0.08)', background: isSelected ? '#E8F0FF' : '#FFFFFF', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', minWidth: 0 }}><input type="checkbox" checked={isSelected} readOnly style={{ width: '20px', height: '20px', minWidth: '20px', accentColor: '#2D7AFD', marginTop: '1px' }} /><div><div style={{ fontSize: '13px', fontWeight: 800, lineHeight: 1.2, color: isSelected ? '#2D7AFD' : '#2D2A35' }}>{service.nome}</div><div style={{ fontSize: '11px', color: '#8E8A97', marginTop: '4px' }}>{service.detalhe}</div></div></div>
-                    <div style={{ textAlign: 'center' }} onClick={(event) => event.stopPropagation()}><input type="text" value={service.indice.toFixed(1).replace('.', ',')} onChange={(event) => updateServiceIndice(service.id, event.target.value)} style={{ width: '64px', height: '34px', borderRadius: '8px', border: '1px solid rgba(45, 42, 53, 0.15)', background: '#FFFFFF', fontSize: '13px', fontWeight: 700, color: '#2D2A35', textAlign: 'center', outline: 'none' }} /></div>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', minWidth: 0 }}><input type="checkbox" checked={isSelected} readOnly style={{ width: '20px', height: '20px', minWidth: '20px', accentColor: '#2D7AFD', marginTop: '1px' }} /><div><div style={{ fontSize: '13px', fontWeight: 800, lineHeight: 1.2, color: isSelected ? '#2D7AFD' : '#2D2A35' }}>{nomeCompletoServico(service.nome)}</div><div style={{ fontSize: '11px', color: '#8E8A97', marginTop: '4px' }}>{service.detalhe}</div></div></div>
+                    <div style={{ textAlign: 'center' }} onClick={(event) => event.stopPropagation()}><input type="text" value={service.indiceTexto ?? service.indice.toFixed(1).replace('.', ',')} onChange={(event) => updateServiceIndice(service.id, event.target.value)} style={{ width: '64px', height: '34px', borderRadius: '8px', border: '1px solid rgba(45, 42, 53, 0.15)', background: '#FFFFFF', fontSize: '13px', fontWeight: 700, color: '#2D2A35', textAlign: 'center', outline: 'none' }} /></div>
                     <div style={{ textAlign: 'right', fontSize: '13px', fontWeight: 800 }}>{service.indice > 0 ? currency(service.indice * valorReferencia) : '-'}</div>
                   </div>
                 );

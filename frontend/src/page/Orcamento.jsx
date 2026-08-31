@@ -16,7 +16,7 @@ import ModalPagamento from './ModalPagamento.jsx';
 import PlaceholderMapa from './PlaceholderMapa.jsx';
 import { AnimatedDropdown } from '../components/AnimatedDropdown';
 import { servicoService } from '../services/servicoService.js';
-import { formatarTelefone, formatarMatricula, formatarMoeda, desformatarMoeda, numeroParaMoeda } from '../utils/mascaras.js';
+import { formatarTelefone, formatarMatricula, formatarMoeda, desformatarMoeda, numeroParaMoeda, formatarIndice, desformatarIndice } from '../utils/mascaras.js';
 import VisualizadorImagem from './VisualizadorImagem.jsx';
 import VisualizadorFicha from './VisualizadorFicha.jsx';
 
@@ -295,7 +295,7 @@ function ServiceCard({ service, selected, salarioMinimo, onToggle, onIndiceChang
             <span style={{ color: '#7C8AA5', fontSize: '12px', fontWeight: 800 }}>Indice</span>
             <input
               type="text"
-              value={formatIndex(service.indice)}
+              value={service.indiceTexto ?? formatIndex(service.indice)}
               onChange={(event) => onIndiceChange(service.id, event.target.value)}
               style={{
                 width: '60px',
@@ -663,8 +663,9 @@ function Orcamento({ onBack, onOrcamentoDecidido }) {
   };
 
   const updateServiceIndice = (id, value) => {
-    const newIndice = parseNumberInput(value);
-    setServices((current) => current.map((service) => (service.id === id ? { ...service, indice: newIndice } : service)));
+    const indiceTexto = formatarIndice(value);
+    const newIndice = desformatarIndice(indiceTexto);
+    setServices((current) => current.map((service) => (service.id === id ? { ...service, indice: newIndice, indiceTexto } : service)));
   };
 
   const updateTopographicFields = (field, value) => {

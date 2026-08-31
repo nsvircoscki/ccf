@@ -3,6 +3,7 @@ import { tipoProcessoService } from '../services/tipoProcessoService';
 import {
   Actions, SearchableSelect, Section, Shell, Toast, useToast, C, MONT, SANS,
 } from '../components/cadastros/CadastroKit.jsx';
+import { AnimatedSelect } from '../components/AnimatedDropdown';
 
 const SETORES = ['ENG', 'CRD', 'DES', 'TOPO'];
 
@@ -141,12 +142,12 @@ export default function ConfigEtapasView({ onBack, usuarioLogado }) {
                     flex: 1, minWidth: 0, border: `1.5px solid ${C.border}`, borderRadius: 8, padding: '8px 10px',
                     fontFamily: SANS, fontSize: 13.5, color: C.text, outline: 'none',
                   }} />
-                <select value={etapa.setor} onChange={(e) => alterarEtapa(indice, 'setor')(e.target.value)} style={{
-                  border: `1.5px solid ${C.border}`, borderRadius: 8, padding: '8px 10px',
-                  fontFamily: SANS, fontSize: 13, color: C.text, outline: 'none', cursor: 'pointer', width: 150, flexShrink: 0,
-                }}>
-                  {SETORES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <div style={{ width: 150, flexShrink: 0 }}>
+                  <AnimatedSelect value={etapa.setor} onChange={alterarEtapa(indice, 'setor')} options={SETORES} style={{
+                    width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.border}`, borderRadius: 8, padding: '8px 10px',
+                    fontFamily: SANS, fontSize: 13, color: C.text, outline: 'none', background: '#fff',
+                  }} />
+                </div>
                 <button type="button" onClick={() => moverEtapa(indice, -1)} disabled={indice === 0}
                   title="Mover para cima" style={botaoIconeStyle(indice === 0)}>↑</button>
                 <button type="button" onClick={() => moverEtapa(indice, 1)} disabled={indice === etapas.length - 1}

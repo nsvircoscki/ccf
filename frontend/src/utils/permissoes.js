@@ -5,8 +5,8 @@
 const PERMISSOES = {
   ENG: 'todos',
   DEV: 'todos',
-  DES: ['dashboard', 'kanban', 'vinculacao', 'sis-mon', 'cadastro', 'importar-pontos', 'clientes', 'imoveis'],
-  CRD: ['orcamento', 'cadastro', 'emissao-documentos', 'sis-caixa', 'vinculacao', 'config', 'dashboard', 'kanban', 'clientes', 'imoveis', 'faturamento'],
+  DES: ['dashboard', 'kanban', 'vinculacao', 'sis-mon', 'cadastro', 'importar-pontos', 'clientes', 'imoveis', 'tarefas'],
+  CRD: ['orcamento', 'cadastro', 'emissao-documentos', 'sis-caixa', 'vinculacao', 'config', 'dashboard', 'kanban', 'clientes', 'imoveis', 'faturamento', 'tarefas'],
   TOPO: ['dashboard', 'kanban', 'importar-pontos'],
 };
 

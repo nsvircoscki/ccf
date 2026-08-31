@@ -16,3 +16,13 @@ backend/backup_antigo/
 *.crt
 *.key
 *.pem
+
+# Dependências
+node_modules/
+**/node_modules/
+
+# Ambientes e builds
+.env
+dist/
+build/
+

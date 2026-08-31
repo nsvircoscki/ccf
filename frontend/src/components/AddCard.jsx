@@ -1,6 +1,7 @@
 // src/components/AddCard.jsx
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { AnimatedSelect } from './AnimatedDropdown';
 
 const IconePlus = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -58,15 +59,12 @@ export function AddCard({ column, workflowAtivo, projeto, kanban, usuarioLogado,
           />
           <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#4B5563' }}>
             Responsável
-            <select
+            <AnimatedSelect
               value={responsavel}
-              onChange={(e) => setResponsavel(e.target.value)}
+              onChange={setResponsavel}
+              options={usuarios}
               style={{ width: '100%', borderRadius: '12px', border: '1px solid #D1D5DB', padding: '10px 12px', background: '#FFF', color: '#111827' }}
-            >
-              {usuarios.map(user => (
-                <option key={user} value={user}>{user}</option>
-              ))}
-            </select>
+            />
           </label>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
             <button type="button" onClick={() => setAdding(false)} style={{ flex: 1, padding: '10px 14px', borderRadius: '12px', border: '1px solid #D1D5DB', background: '#FFFFFF', color: '#374151', cursor: 'pointer' }}>
