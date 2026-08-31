@@ -23,6 +23,15 @@ export const tarefaController = {
     }
   },
 
+  async atualizarObservacao(req, res) {
+    try {
+      const tarefa = await tarefaService.atualizarObservacao(req.params.id, req.body.observacoes);
+      res.status(200).json(tarefa);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+
   async concluir(req, res) {
     try {
       const tarefa = await tarefaService.concluir(req.params.id, req.body.setor);

@@ -17,10 +17,11 @@ function caminhoParaFileUrl(caminho) {
   return `file:///${limpo.replace(/\\/g, '/')}`;
 }
 
-// Hoje só o DES usa essa tela como responsável pelas tarefas — o CRD lança
-// as atividades, o DES executa. Se algum dia outro setor passar a usar
-// isso também, é só voltar a ter um seletor de setor no formulário.
-const SETOR_UNICO = 'DES';
+const SETORES = [
+  { value: 'DES_1', label: 'Desenho - Usuário 1' },
+  { value: 'DES_2', label: 'Desenho - Usuário 2' },
+];
+
 const PRIORIDADES = ['BAIXA', 'MEDIA', 'ALTA'];
 
 const CORES_PRIORIDADE = { BAIXA: '#64748b', MEDIA: '#b45309', ALTA: '#be123c' };
@@ -29,10 +30,11 @@ const LABEL_PRIORIDADE = { BAIXA: 'Baixa', MEDIA: 'Média', ALTA: 'Alta' };
 const tarefaVazia = {
   titulo: '',
   descricao: '',
-  setor: SETOR_UNICO,
+  setor: 'DES_1',
   prioridade: 'MEDIA',
   servicoId: null,
   prazo: '',
+  observacoes: '',
   linkPasta: '',
 };
 
@@ -50,19 +52,56 @@ function BadgePrioridade({ prioridade }) {
   );
 }
 
-// Largura fixa (tableLayout: fixed) + quebra de texto no título/descrição —
-// sem isso, uma tarefa com texto grande empurrava as colunas de ação pra
-// fora da tela em vez de quebrar linha.
-function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabrir, onExcluir, onAbrirPasta }) {
+function CampoObservacao({ tarefaId, observacaoInicial, onSalvarObservacao }) {
+  const [texto, setTexto] = useState(observacaoInicial || '');
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    setTexto(observacaoInicial || '');
+  }, [observacaoInicial]);
+
+  const handleBlur = async () => {
+    if (texto === (observacaoInicial || '')) return;
+    setSalvando(true);
+    await onSalvarObservacao(tarefaId, texto);
+    setSalvando(false);
+  };
+
+  return (
+    <input
+      type="text"
+      value={texto}
+      onChange={(e) => setTexto(e.target.value)}
+      onBlur={handleBlur}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+      placeholder="Observação…"
+      style={{
+        width: '100%',
+        padding: '6px 10px',
+        borderRadius: 8,
+        border: '1px solid rgba(15, 23, 42, 0.15)',
+        fontSize: 12,
+        outline: 'none',
+        color: '#1E293B',
+        background: salvando ? '#F1F5F9' : '#F8FAFC',
+        transition: 'all 0.15s ease',
+      }}
+    />
+  );
+}
+
+// Largura fixa (tableLayout: fixed) + quebra de texto no título/descrição
+function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabrir, onExcluir, onAbrirPasta, onSalvarObservacao }) {
   return (
     <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${C.borderSoft}`, overflow: 'hidden' }}>
       <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontFamily: '"Open Sans", sans-serif', fontSize: 13 }}>
         <colgroup>
           <col style={{ width: 'auto' }} />
+          <col style={{ width: 100 }} />
+          <col style={{ width: 150 }} />
           <col style={{ width: 110 }} />
           <col style={{ width: 180 }} />
-          <col style={{ width: 130 }} />
-          <col style={{ width: 190 }} />
+          <col style={{ width: 170 }} />
         </colgroup>
         <thead>
           <tr style={{ textAlign: 'left', color: C.muted, fontSize: 11, textTransform: 'uppercase', background: C.bg }}>
@@ -70,6 +109,7 @@ function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabri
             <th style={{ padding: '10px 14px' }}>Prioridade</th>
             <th style={{ padding: '10px 14px' }}>Serviço</th>
             <th style={{ padding: '10px 14px' }}>{aba === 'pendentes' ? 'Prazo' : 'Concluída'}</th>
+            <th style={{ padding: '10px 14px' }}>Observações</th>
             <th style={{ padding: '10px 14px' }}></th>
           </tr>
         </thead>
@@ -97,6 +137,13 @@ function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabri
                 {aba === 'pendentes'
                   ? (t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : '—')
                   : (t.concluido_em ? `${t.concluidoPor || '—'} em ${new Date(t.concluido_em).toLocaleDateString('pt-BR')}` : '—')}
+              </td>
+              <td style={{ padding: '12px 14px' }}>
+                <CampoObservacao
+                  tarefaId={t.id}
+                  observacaoInicial={t.observacoes}
+                  onSalvarObservacao={onSalvarObservacao}
+                />
               </td>
               <td style={{ padding: '12px 14px' }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 }}>
@@ -130,7 +177,7 @@ function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabri
           ))}
           {tarefas.length === 0 && (
             <tr>
-              <td colSpan={5} style={{ padding: '20px 14px', textAlign: 'center', color: C.muted }}>
+              <td colSpan={6} style={{ padding: '20px 14px', textAlign: 'center', color: C.muted }}>
                 {aba === 'pendentes' ? 'Nenhuma tarefa pendente.' : 'Nenhuma tarefa concluída ainda.'}
               </td>
             </tr>
@@ -151,6 +198,7 @@ export default function TarefasView({ onBack, usuarioLogado }) {
   const [processando, setProcessando] = useState(null);
 
   const [secao, setSecao] = useState('cadastro'); // 'cadastro' | 'tabelas'
+  const [setorFiltro, setSetorFiltro] = useState('DES_1'); // 'DES_1' | 'DES_2' | 'TODOS'
   const [aba, setAba] = useState('pendentes'); // 'pendentes' | 'concluidas'
   const [tarefas, setTarefas] = useState([]);
   const [tarefaParaExcluir, setTarefaParaExcluir] = useState(null);
@@ -163,14 +211,22 @@ export default function TarefasView({ onBack, usuarioLogado }) {
 
   const carregarTarefas = async () => {
     try {
-      const lista = await tarefaService.listar({ status: aba === 'pendentes' ? 'PENDENTE' : 'CONCLUIDA', setor: SETOR_UNICO });
+      const filtros = { status: aba === 'pendentes' ? 'PENDENTE' : 'CONCLUIDA' };
+      if (setorFiltro !== 'TODOS') {
+        filtros.setor = setorFiltro;
+      }
+      const lista = await tarefaService.listar(filtros);
       if (Array.isArray(lista)) setTarefas(lista);
     } catch (erro) {
       console.error('Erro ao carregar tarefas:', erro);
     }
   };
 
-  useEffect(() => { carregarTarefas(); }, [aba]);
+  useEffect(() => {
+    carregarTarefas();
+    const interval = setInterval(carregarTarefas, 5000);
+    return () => clearInterval(interval);
+  }, [aba, setorFiltro]);
 
   const opcoesServicos = servicos.map((s) => ({ value: s.id, label: s.numeroServico, sub: s.nomeCliente }));
   const setCampo = (campo) => (valor) => setForm((atual) => ({ ...atual, [campo]: valor }));
@@ -181,14 +237,32 @@ export default function TarefasView({ onBack, usuarioLogado }) {
     try {
       const { data, ok } = await tarefaService.criar({ ...form, criadoPor: usuarioLogado });
       if (!ok) { show(data?.error || 'Erro ao lançar tarefa.', 'err'); return; }
-      show('Tarefa lançada.', 'ok');
+      show('Tarefa lançada com sucesso.', 'ok');
       setForm(tarefaVazia);
+      if (data) {
+        setTarefas((prev) => [data, ...prev.filter((t) => t.id !== data.id)]);
+      }
       carregarTarefas();
     } catch (erro) {
       console.error(erro);
       show('Erro ao conectar com o servidor.', 'err');
     } finally {
       setSalvando(false);
+    }
+  };
+
+  const salvarObservacao = async (id, observacoes) => {
+    try {
+      const { ok } = await tarefaService.atualizarObservacao(id, observacoes);
+      if (ok) {
+        setTarefas((prev) => prev.map((t) => t.id === id ? { ...t, observacoes } : t));
+        show('Observação salva.', 'ok');
+      } else {
+        show('Erro ao salvar observação.', 'err');
+      }
+    } catch (erro) {
+      console.error(erro);
+      show('Erro ao salvar observação.', 'err');
     }
   };
 
@@ -246,7 +320,7 @@ export default function TarefasView({ onBack, usuarioLogado }) {
   };
 
   return (
-    <Shell user={usuarioLogado} title="Tarefas" subtitle="Planilha de atividades do DES" onBack={onBack} accent={accent} wide>
+    <Shell user={usuarioLogado} title="Tarefas" subtitle="Planilha de atividades do Desenho" onBack={onBack} accent={accent} wide>
       {toast && <Toast msg={toast.msg} kind={toast.kind} />}
 
       <div style={{ display: 'flex', background: '#EAEAEA', borderRadius: 20, padding: 4, width: 'fit-content', marginBottom: 22 }}>
@@ -264,11 +338,13 @@ export default function TarefasView({ onBack, usuarioLogado }) {
 
       {secao === 'cadastro' && (
         <>
-          <Section icon="ring" title="Nova tarefa para o DES" desc="Com ou sem serviço vinculado" accent={accent}>
+          <Section icon="ring" title="Nova tarefa para o Desenho" desc="Selecione o Usuário do Desenho responsável" accent={accent}>
             <Field label="Título" icon="doc" span={2} value={form.titulo} onChange={setCampo('titulo')} placeholder="Ex: Ligar pro cliente sobre o boleto" />
             <Field label="Descrição" span={2} textarea value={form.descricao} onChange={setCampo('descricao')} placeholder="Detalhes adicionais (opcional)" />
+            <SelectField label="Desenho (Responsável)" icon="user" value={form.setor} onChange={setCampo('setor')} options={SETORES} />
             <SelectField label="Prioridade" icon="scale" value={form.prioridade} onChange={setCampo('prioridade')} options={PRIORIDADES.map((p) => ({ value: p, label: LABEL_PRIORIDADE[p] }))} />
             <Field label="Prazo (opcional)" icon="calendar" type="date" value={form.prazo} onChange={setCampo('prazo')} />
+            <Field label="Observações iniciais (opcional)" icon="doc" value={form.observacoes} onChange={setCampo('observacoes')} placeholder="Observações da tarefa" />
             <Field label="Link da pasta (opcional)" icon="folder" span={2} value={form.linkPasta} onChange={setCampo('linkPasta')} placeholder="Ex: \\SERVIDOR\Servicos\2026-123" />
             <SearchableSelect
               label="Serviço vinculado (opcional)" icon="folder" span={2} accent={accent}
@@ -283,17 +359,38 @@ export default function TarefasView({ onBack, usuarioLogado }) {
 
       {secao === 'tabelas' && (
         <>
-          <div style={{ display: 'flex', background: '#EAEAEA', borderRadius: 20, padding: 4, width: 'fit-content', marginBottom: 18 }}>
-            {[['pendentes', 'Pendentes'], ['concluidas', 'Concluídas']].map(([valor, rotulo]) => (
-              <button key={valor} type="button" onClick={() => setAba(valor)} style={{
-                padding: '8px 18px', borderRadius: 16, border: 'none', cursor: 'pointer',
-                fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 13,
-                background: aba === valor ? accent : 'transparent', color: aba === valor ? '#fff' : '#787373',
-                transition: 'all 0.15s ease',
-              }}>
-                {rotulo}
-              </button>
-            ))}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+            {/* Filtro de Usuários do Desenho */}
+            <div style={{ display: 'flex', background: '#EAEAEA', borderRadius: 20, padding: 4, width: 'fit-content' }}>
+              {[
+                ['DES_1', 'Desenho - Usuário 1'],
+                ['DES_2', 'Desenho - Usuário 2'],
+                ['TODOS', 'Todos do Desenho'],
+              ].map(([valor, rotulo]) => (
+                <button key={valor} type="button" onClick={() => setSetorFiltro(valor)} style={{
+                  padding: '8px 16px', borderRadius: 16, border: 'none', cursor: 'pointer',
+                  fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 12.5,
+                  background: setorFiltro === valor ? accent : 'transparent', color: setorFiltro === valor ? '#fff' : '#787373',
+                  transition: 'all 0.15s ease',
+                }}>
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+
+            {/* Filtro de Status (Pendentes / Concluídas) */}
+            <div style={{ display: 'flex', background: '#EAEAEA', borderRadius: 20, padding: 4, width: 'fit-content' }}>
+              {[['pendentes', 'Pendentes'], ['concluidas', 'Concluídas']].map(([valor, rotulo]) => (
+                <button key={valor} type="button" onClick={() => setAba(valor)} style={{
+                  padding: '8px 18px', borderRadius: 16, border: 'none', cursor: 'pointer',
+                  fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 12.5,
+                  background: aba === valor ? accent : 'transparent', color: aba === valor ? '#fff' : '#787373',
+                  transition: 'all 0.15s ease',
+                }}>
+                  {rotulo}
+                </button>
+              ))}
+            </div>
           </div>
 
           <TabelaTarefas
@@ -305,6 +402,7 @@ export default function TarefasView({ onBack, usuarioLogado }) {
             onReabrir={reabrirTarefa}
             onExcluir={setTarefaParaExcluir}
             onAbrirPasta={abrirPasta}
+            onSalvarObservacao={salvarObservacao}
           />
         </>
       )}

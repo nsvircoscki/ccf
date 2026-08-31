@@ -434,4 +434,13 @@ export const api = {
         const res = await fetch(`${BASE_URL}/tarefas/${id}`, { method: 'DELETE' });
         return { ok: res.ok };
     },
+
+    atualizarObservacaoTarefa: async (id, observacoes) => {
+        const res = await fetch(`${BASE_URL}/tarefas/${id}/observacao`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ observacoes }),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
 };

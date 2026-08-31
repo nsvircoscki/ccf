@@ -25,6 +25,10 @@ export function useKanban() {
 
   useEffect(() => {
     carregarDados();
+    const interval = setInterval(() => {
+      carregarDados();
+    }, 10000);
+    return () => clearInterval(interval);
   }, [carregarDados]);
 
   const moverTicketOtimista = async (ticket, etapaDestino, usuarioLogado) => {

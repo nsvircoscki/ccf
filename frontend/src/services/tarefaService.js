@@ -17,4 +17,7 @@ export const tarefaService = {
   async excluir(id) {
     return api.excluirTarefa(id);
   },
+  async atualizarObservacao(id, observacoes) {
+    return api.atualizarObservacaoTarefa(id, observacoes);
+  },
 };

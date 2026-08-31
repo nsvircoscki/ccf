@@ -24,9 +24,21 @@ async function criar(dados) {
       prioridade: dados.prioridade || 'MEDIA',
       servicoId: dados.servicoId || null,
       prazo: dados.prazo ? new Date(dados.prazo) : null,
+      observacoes: dados.observacoes || null,
       linkPasta: dados.linkPasta || null,
       criadoPor: dados.criadoPor || null,
     },
+    include: { servico: { select: { numeroServico: true, nomeCliente: true } } },
+  });
+}
+
+async function atualizarObservacao(id, observacoes) {
+  const tarefa = await prisma.tarefa.findUnique({ where: { id } });
+  if (!tarefa) throw new Error('Tarefa não encontrada.');
+
+  return prisma.tarefa.update({
+    where: { id },
+    data: { observacoes: observacoes ?? null },
     include: { servico: { select: { numeroServico: true, nomeCliente: true } } },
   });
 }
@@ -61,4 +73,4 @@ async function excluir(id) {
   await prisma.tarefa.delete({ where: { id } });
 }
 
-export const tarefaService = { listar, criar, concluir, reabrir, excluir };
+export const tarefaService = { listar, criar, atualizarObservacao, concluir, reabrir, excluir };
