@@ -34,7 +34,7 @@ export function LoginView({ onLogin, globalCss }) {
   const [senhaInput, setSenhaInput] = useState('');
   const [confirmarSenhaInput, setConfirmarSenhaInput] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
-  const [usuarioSelecionadoLogin, setUsuarioSelecionadoLogin] = useState('ENG');
+  const [usuarioSelecionadoLogin, setUsuarioSelecionadoLogin] = useState('');
   // 'login': tela normal. 'criar-senha': primeiro acesso desse usuário —
   // password_hash ainda é nulo no banco, então pedimos pra ele definir uma.
   const [modo, setModo] = useState('login');
@@ -52,6 +52,11 @@ export function LoginView({ onLogin, globalCss }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     setErro('');
+
+    if (!usuarioSelecionadoLogin) {
+      setErro('Selecione um usuário para entrar.');
+      return;
+    }
 
     if (modo === 'criar-senha') {
       if (senhaInput !== confirmarSenhaInput) {

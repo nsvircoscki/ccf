@@ -485,7 +485,6 @@ export function PesquisaView({
                     style={{
                       cursor: 'pointer', background: '#fff', borderRadius: '12px', padding: '13px 16px',
                       border: isActive ? '1px solid #1a3a8a' : '1px solid #EEE',
-                      borderLeft: isActive ? '4px solid #1a3a8a' : '4px solid #EEE',
                       boxShadow: isActive ? '0 4px 14px rgba(26,58,138,0.15)' : 'none',
                       transition: 'all 0.15s ease',
                     }}

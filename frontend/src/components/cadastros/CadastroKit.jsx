@@ -484,7 +484,7 @@ export function Toast({ msg, kind }) {
   return (
     <div style={{
       position: 'fixed', top: 78, right: 24, zIndex: 200, background: '#fff',
-      borderRadius: 12, border: `1px solid ${color}33`, borderLeft: `4px solid ${color}`,
+      borderRadius: 12, border: `1px solid ${color}44`,
       boxShadow: '0 10px 30px rgba(14,37,73,0.16)', padding: '14px 18px',
       display: 'flex', alignItems: 'center', gap: 10, animation: 'fadeUp 0.3s ease both',
       maxWidth: 340,
@@ -545,7 +545,7 @@ export function Shell({ user, title, subtitle, onBack, accent, children, wide, m
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
       }}>
         <div style={{
-          background: C.bg, borderRadius: 18, width: wide ? 860 : 720, maxWidth: '100%',
+          background: C.bg, borderRadius: 18, width: wide ? 1200 : 720, maxWidth: '100%',
           maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
           boxShadow: '0 20px 60px rgba(14,37,73,0.25)', animation: 'fadeUp 0.25s ease both',
         }}>
@@ -561,7 +561,7 @@ export function Shell({ user, title, subtitle, onBack, accent, children, wide, m
   return (
     <div style={{ position: 'relative', flex: 1, minHeight: 0, background: C.bg, display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'fadeUp 0.4s ease both' }}>
       {header}
-      <main className="scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', maxWidth: wide ? 820 : 720, width: '100%', margin: '0 auto', padding: '26px 24px 60px', boxSizing: 'border-box' }}>
+      <main className="scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', maxWidth: wide ? 1360 : 780, width: '100%', margin: '0 auto', padding: '26px 32px 60px', boxSizing: 'border-box' }}>
         {children}
       </main>
     </div>

@@ -19,7 +19,7 @@ export const TicketCard = React.memo(({
       onDragStart={onDragStart} 
       onDragEnd={onDragEnd}
       onClick={onClick}
-      style={{ background: cor.bg, borderLeft: `6px solid ${cor.borda}`, padding: '16px', borderRadius: '8px', opacity: temPermissao ? 1 : 0.6, cursor: temPermissao ? 'grab' : 'not-allowed', boxShadow: '0px 2px 4px rgba(0,0,0,0.1)' }}
+      style={{ background: cor.bg, border: '1px solid rgba(0,0,0,0.08)', padding: '16px', borderRadius: '12px', opacity: temPermissao ? 1 : 0.6, cursor: temPermissao ? 'grab' : 'not-allowed', boxShadow: '0px 2px 4px rgba(0,0,0,0.05)' }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>

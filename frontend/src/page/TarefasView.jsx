@@ -24,14 +24,26 @@ const SETORES = [
 
 const PRIORIDADES = ['BAIXA', 'MEDIA', 'ALTA'];
 
-const CORES_PRIORIDADE = { BAIXA: '#64748b', MEDIA: '#b45309', ALTA: '#be123c' };
+const PESO_PRIORIDADE = { ALTA: 1, MEDIA: 2, BAIXA: 3 };
+const CORES_PRIORIDADE = { BAIXA: '#16a34a', MEDIA: '#ea580c', ALTA: '#dc2626' };
 const LABEL_PRIORIDADE = { BAIXA: 'Baixa', MEDIA: 'Média', ALTA: 'Alta' };
+
+const LARGURAS_INICIAIS = {
+  pasta: 44,
+  tarefa: 220,
+  descricao: 280,
+  prioridade: 115,
+  servico: 160,
+  prazo: 120,
+  observacoes: 180,
+  acoes: 100,
+};
 
 const tarefaVazia = {
   titulo: '',
   descricao: '',
-  setor: 'DES_1',
-  prioridade: 'MEDIA',
+  setor: '',
+  prioridade: '',
   servicoId: null,
   prazo: '',
   observacoes: '',
@@ -55,129 +67,382 @@ function BadgePrioridade({ prioridade }) {
 function CampoObservacao({ tarefaId, observacaoInicial, onSalvarObservacao }) {
   const [texto, setTexto] = useState(observacaoInicial || '');
   const [salvando, setSalvando] = useState(false);
+  const [expandido, setExpandido] = useState(false);
+  const [focado, setFocado] = useState(false);
 
   useEffect(() => {
     setTexto(observacaoInicial || '');
   }, [observacaoInicial]);
 
   const handleBlur = async () => {
+    setFocado(false);
     if (texto === (observacaoInicial || '')) return;
     setSalvando(true);
     await onSalvarObservacao(tarefaId, texto);
     setSalvando(false);
   };
 
+  const limite = 50;
+  const precisaExpandir = texto.length > limite;
+
   return (
-    <input
-      type="text"
-      value={texto}
-      onChange={(e) => setTexto(e.target.value)}
-      onBlur={handleBlur}
-      onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-      placeholder="Observação…"
-      style={{
-        width: '100%',
-        padding: '6px 10px',
-        borderRadius: 8,
-        border: '1px solid rgba(15, 23, 42, 0.15)',
-        fontSize: 12,
-        outline: 'none',
-        color: '#1E293B',
-        background: salvando ? '#F1F5F9' : '#F8FAFC',
-        transition: 'all 0.15s ease',
-      }}
-    />
+    <div style={{ position: 'relative', width: '100%' }}>
+      {focado || expandido ? (
+        <textarea
+          rows={3}
+          value={texto}
+          autoFocus={focado}
+          onChange={(e) => setTexto(e.target.value)}
+          onFocus={() => setFocado(true)}
+          onBlur={handleBlur}
+          placeholder="Observação…"
+          style={{
+            width: '100%',
+            padding: '8px 10px',
+            borderRadius: 8,
+            border: `1.5px solid ${focado ? '#2D7AFD' : 'rgba(15, 23, 42, 0.2)'}`,
+            fontSize: 12,
+            outline: 'none',
+            color: '#1E293B',
+            background: salvando ? '#F1F5F9' : '#fff',
+            resize: 'vertical',
+            fontFamily: 'inherit',
+            boxSizing: 'border-box',
+            boxShadow: focado ? '0 0 0 3px rgba(45,122,253,0.12)' : 'none',
+            transition: 'all 0.15s ease',
+          }}
+        />
+      ) : (
+        <input
+          type="text"
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          onFocus={() => setFocado(true)}
+          onBlur={handleBlur}
+          placeholder="Observação…"
+          style={{
+            width: '100%',
+            padding: '6px 10px',
+            borderRadius: 8,
+            border: '1px solid rgba(15, 23, 42, 0.15)',
+            fontSize: 12,
+            outline: 'none',
+            color: '#1E293B',
+            background: salvando ? '#F1F5F9' : '#F8FAFC',
+            boxSizing: 'border-box',
+            transition: 'all 0.15s ease',
+          }}
+        />
+      )}
+      {precisaExpandir && !focado && (
+        <button
+          type="button"
+          onClick={() => setExpandido((e) => !e)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#2D7AFD',
+            cursor: 'pointer',
+            fontSize: 11,
+            fontWeight: 700,
+            padding: 0,
+            marginTop: 4,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          {expandido ? 'Recolher' : 'Ver mais...'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CelulaDescricao({ descricao }) {
+  const [expandido, setExpandido] = useState(false);
+
+  if (!descricao) {
+    return <span style={{ color: C.muted }}>—</span>;
+  }
+
+  const limite = 60;
+  const precisaExpandir = descricao.length > limite;
+  const textoExibido = expandido || !precisaExpandir ? descricao : `${descricao.slice(0, limite)}...`;
+
+  return (
+    <div style={{ color: '#475569', fontSize: 12, lineHeight: 1.4, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+      <div style={{ whiteSpace: expandido ? 'pre-wrap' : 'normal' }}>
+        {textoExibido}
+      </div>
+      {precisaExpandir && (
+        <button
+          type="button"
+          onClick={() => setExpandido((e) => !e)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#2D7AFD',
+            cursor: 'pointer',
+            fontSize: 11,
+            fontWeight: 700,
+            padding: 0,
+            marginTop: 4,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          {expandido ? 'Ver menos' : 'Ver mais...'}
+        </button>
+      )}
+    </div>
   );
 }
 
 // Largura fixa (tableLayout: fixed) + quebra de texto no título/descrição
 function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabrir, onExcluir, onAbrirPasta, onSalvarObservacao }) {
+  const [colWidths, setColWidths] = useState(LARGURAS_INICIAIS);
+
+  const resetarLargura = (colKey) => {
+    if (colKey) {
+      setColWidths((prev) => ({ ...prev, [colKey]: LARGURAS_INICIAIS[colKey] }));
+    } else {
+      setColWidths(LARGURAS_INICIAIS);
+    }
+  };
+
+  const iniciarRedimensionamento = (colKey, e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = colWidths[colKey];
+
+    const onMouseMove = (moveEvent) => {
+      const minWidth = colKey === 'pasta' ? 36 : 60;
+      const newWidth = Math.max(minWidth, startWidth + (moveEvent.clientX - startX));
+      setColWidths((prev) => ({ ...prev, [colKey]: newWidth }));
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
+  const renderHeader = (colKey, label) => (
+    <th
+      onDoubleClick={() => resetarLargura(colKey)}
+      title="Arraste a divisória para redimensionar | Clique duplo para restaurar tamanho padrão"
+      style={{
+        padding: '10px 14px',
+        position: 'relative',
+        userSelect: 'none',
+        width: colWidths[colKey],
+        borderRight: '1px solid rgba(226, 232, 240, 0.8)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>{label}</span>
+      </div>
+      <div
+        onMouseDown={(e) => iniciarRedimensionamento(colKey, e)}
+        onDoubleClick={(e) => { e.stopPropagation(); resetarLargura(colKey); }}
+        title="Arraste para redimensionar | Clique duplo para restaurar tamanho padrão"
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: 9,
+          cursor: 'col-resize',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10,
+          transition: 'background 0.15s ease',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(45, 122, 253, 0.2)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      >
+        <div style={{ width: 2, height: 14, background: '#94A3B8', borderRadius: 1 }} />
+      </div>
+    </th>
+  );
+
+  const totalWidth = Object.values(colWidths).reduce((a, b) => a + b, 0);
+
   return (
-    <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${C.borderSoft}`, overflow: 'hidden' }}>
-      <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontFamily: '"Open Sans", sans-serif', fontSize: 13 }}>
+    <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${C.borderSoft}`, overflowX: 'auto' }}>
+      <table style={{ width: totalWidth, minWidth: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontFamily: '"Open Sans", sans-serif', fontSize: 13 }}>
         <colgroup>
-          <col style={{ width: 'auto' }} />
-          <col style={{ width: 100 }} />
-          <col style={{ width: 150 }} />
-          <col style={{ width: 110 }} />
-          <col style={{ width: 180 }} />
-          <col style={{ width: 170 }} />
+          <col style={{ width: colWidths.pasta }} />
+          <col style={{ width: colWidths.tarefa }} />
+          <col style={{ width: colWidths.descricao }} />
+          <col style={{ width: colWidths.prioridade }} />
+          <col style={{ width: colWidths.servico }} />
+          <col style={{ width: colWidths.prazo }} />
+          <col style={{ width: colWidths.observacoes }} />
+          <col style={{ width: colWidths.acoes }} />
         </colgroup>
         <thead>
           <tr style={{ textAlign: 'left', color: C.muted, fontSize: 11, textTransform: 'uppercase', background: C.bg }}>
-            <th style={{ padding: '10px 14px' }}>Tarefa</th>
-            <th style={{ padding: '10px 14px' }}>Prioridade</th>
-            <th style={{ padding: '10px 14px' }}>Serviço</th>
-            <th style={{ padding: '10px 14px' }}>{aba === 'pendentes' ? 'Prazo' : 'Concluída'}</th>
-            <th style={{ padding: '10px 14px' }}>Observações</th>
-            <th style={{ padding: '10px 14px' }}></th>
+            <th style={{ padding: '10px 8px', width: colWidths.pasta, position: 'relative', borderRight: '1px solid rgba(226, 232, 240, 0.8)' }}>
+              <div
+                onMouseDown={(e) => iniciarRedimensionamento('pasta', e)}
+                onDoubleClick={() => resetarLargura('pasta')}
+                title="Arraste para redimensionar | Clique duplo para restaurar"
+                style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 9, cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(45, 122, 253, 0.2)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <div style={{ width: 2, height: 14, background: '#94A3B8', borderRadius: 1 }} />
+              </div>
+            </th>
+            {renderHeader('tarefa', 'Tarefa')}
+            {renderHeader('descricao', 'Descrição')}
+            {renderHeader('prioridade', 'Prioridade')}
+            {renderHeader('servico', 'Serviço')}
+            {renderHeader('prazo', aba === 'pendentes' ? 'Prazo' : 'Concluída')}
+            {renderHeader('observacoes', 'Observações')}
+            <th style={{ padding: '10px 14px', width: colWidths.acoes }}></th>
           </tr>
         </thead>
         <tbody>
-          {tarefas.map((t) => (
-            <tr key={t.id} style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-              <td style={{ padding: '12px 14px', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                <div style={{ fontWeight: 700, color: C.text }}>{t.titulo}</div>
-                {t.descricao && <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{t.descricao}</div>}
-                {t.linkPasta && (
-                  <button onClick={() => onAbrirPasta(t.linkPasta)} title={t.linkPasta} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, padding: '3px 9px 3px 6px',
-                    borderRadius: 999, border: `1px solid ${accent}33`, background: `${accent}0d`, color: accent,
-                    fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 11, cursor: 'pointer',
-                  }}>
-                    <Icon name="folder" size={11} /> Abrir pasta
-                  </button>
-                )}
-              </td>
-              <td style={{ padding: '12px 14px' }}><BadgePrioridade prioridade={t.prioridade} /></td>
-              <td style={{ padding: '12px 14px', color: C.muted, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                {t.servico ? `${t.servico.numeroServico} — ${t.servico.nomeCliente}` : '—'}
-              </td>
-              <td style={{ padding: '12px 14px', color: C.muted, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                {aba === 'pendentes'
-                  ? (t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : '—')
-                  : (t.concluido_em ? `${t.concluidoPor || '—'} em ${new Date(t.concluido_em).toLocaleDateString('pt-BR')}` : '—')}
-              </td>
-              <td style={{ padding: '12px 14px' }}>
-                <CampoObservacao
-                  tarefaId={t.id}
-                  observacaoInicial={t.observacoes}
-                  onSalvarObservacao={onSalvarObservacao}
-                />
-              </td>
-              <td style={{ padding: '12px 14px' }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 }}>
-                  {aba === 'pendentes' ? (
-                    <button onClick={() => onConcluir(t.id)} disabled={processando === t.id} style={{
-                      padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-                      background: accent, color: '#fff', fontFamily: '"Montserrat", sans-serif',
-                      fontWeight: 700, fontSize: 11.5, opacity: processando === t.id ? 0.6 : 1,
-                    }}>
-                      {processando === t.id ? 'Concluindo…' : 'Concluir'}
+          {tarefas.map((t) => {
+            const pastaDestino = t.linkPasta || t.servico?.caminhoPasta;
+            return (
+              <tr key={t.id} style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+                <td style={{ padding: '12px 6px 12px 12px', textAlign: 'center', width: colWidths.pasta }}>
+                  {pastaDestino ? (
+                    <button
+                      type="button"
+                      onClick={() => onAbrirPasta(pastaDestino)}
+                      title={`Abrir pasta: ${pastaDestino}`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        border: `1.5px solid ${accent}44`,
+                        background: `${accent}12`,
+                        color: accent,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <Icon name="folder" size={15} />
                     </button>
-                  ) : (
-                    <button onClick={() => onReabrir(t.id)} disabled={processando === t.id} style={{
-                      padding: '6px 14px', borderRadius: 8, border: `1.5px solid ${accent}`, cursor: 'pointer', whiteSpace: 'nowrap',
-                      background: '#fff', color: accent, fontFamily: '"Montserrat", sans-serif',
-                      fontWeight: 700, fontSize: 11.5, opacity: processando === t.id ? 0.6 : 1,
-                    }}>
-                      {processando === t.id ? 'Reabrindo…' : 'Reabrir'}
+                  ) : null}
+                </td>
+                <td style={{ padding: '12px 14px', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                  <div style={{ fontWeight: 700, color: C.text, fontSize: 13.5, lineHeight: 1.3 }}>
+                    {t.titulo}
+                  </div>
+                </td>
+                <td style={{ padding: '12px 14px' }}>
+                  <CelulaDescricao descricao={t.descricao} />
+                </td>
+                <td style={{ padding: '12px 14px' }}><BadgePrioridade prioridade={t.prioridade} /></td>
+                <td style={{ padding: '12px 14px', color: C.muted, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                  {t.servico ? `${t.servico.numeroServico} — ${t.servico.nomeCliente}` : '—'}
+                </td>
+                <td style={{ padding: '12px 14px', color: C.muted, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                  {aba === 'pendentes'
+                    ? (t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : '—')
+                    : (t.concluido_em ? `${t.concluidoPor || '—'} em ${new Date(t.concluido_em).toLocaleDateString('pt-BR')}` : '—')}
+                </td>
+                <td style={{ padding: '12px 14px' }}>
+                  <CampoObservacao
+                    tarefaId={t.id}
+                    observacaoInicial={t.observacoes}
+                    onSalvarObservacao={onSalvarObservacao}
+                  />
+                </td>
+                <td style={{ padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                    {aba === 'pendentes' ? (
+                      <button
+                        type="button"
+                        onClick={() => onConcluir(t.id)}
+                        disabled={processando === t.id}
+                        title="Concluir tarefa"
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          border: `1.5px solid ${C.green}44`,
+                          background: '#fff',
+                          color: C.green,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: processando === t.id ? 'default' : 'pointer',
+                          opacity: processando === t.id ? 0.6 : 1,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <Icon name="check" size={16} />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onReabrir(t.id)}
+                        disabled={processando === t.id}
+                        title="Reabrir tarefa"
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          border: `1.5px solid ${accent}`,
+                          background: '#fff',
+                          color: accent,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: processando === t.id ? 'default' : 'pointer',
+                          opacity: processando === t.id ? 0.6 : 1,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <Icon name="hash" size={15} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onExcluir(t.id)}
+                      disabled={processando === t.id}
+                      title="Excluir tarefa"
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        border: `1.5px solid ${C.danger}33`,
+                        background: '#fff',
+                        color: C.danger,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: processando === t.id ? 'default' : 'pointer',
+                        opacity: processando === t.id ? 0.6 : 1,
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <Icon name="trash" size={16} />
                     </button>
-                  )}
-                  <button onClick={() => onExcluir(t.id)} disabled={processando === t.id} style={{
-                    padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${C.danger}`, cursor: 'pointer', whiteSpace: 'nowrap',
-                    background: '#fff', color: C.danger, fontFamily: '"Montserrat", sans-serif',
-                    fontWeight: 700, fontSize: 11.5, opacity: processando === t.id ? 0.6 : 1,
-                  }}>
-                    Excluir
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
           {tarefas.length === 0 && (
             <tr>
-              <td colSpan={6} style={{ padding: '20px 14px', textAlign: 'center', color: C.muted }}>
+              <td colSpan={8} style={{ padding: '20px 14px', textAlign: 'center', color: C.muted }}>
                 {aba === 'pendentes' ? 'Nenhuma tarefa pendente.' : 'Nenhuma tarefa concluída ainda.'}
               </td>
             </tr>
@@ -216,7 +481,15 @@ export default function TarefasView({ onBack, usuarioLogado }) {
         filtros.setor = setorFiltro;
       }
       const lista = await tarefaService.listar(filtros);
-      if (Array.isArray(lista)) setTarefas(lista);
+      if (Array.isArray(lista)) {
+        const ordenadas = [...lista].sort((a, b) => {
+          const pesoA = PESO_PRIORIDADE[a.prioridade] || 99;
+          const pesoB = PESO_PRIORIDADE[b.prioridade] || 99;
+          if (pesoA !== pesoB) return pesoA - pesoB;
+          return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+        });
+        setTarefas(ordenadas);
+      }
     } catch (erro) {
       console.error('Erro ao carregar tarefas:', erro);
     }
@@ -233,6 +506,8 @@ export default function TarefasView({ onBack, usuarioLogado }) {
 
   const salvarTarefa = async () => {
     if (!form.titulo.trim()) { show('Informe um título pra tarefa.', 'err'); return; }
+    if (!form.setor) { show('Selecione o Desenho (Responsável).', 'err'); return; }
+    if (!form.prioridade) { show('Selecione a prioridade.', 'err'); return; }
     setSalvando(true);
     try {
       const { data, ok } = await tarefaService.criar({ ...form, criadoPor: usuarioLogado });
@@ -320,7 +595,7 @@ export default function TarefasView({ onBack, usuarioLogado }) {
   };
 
   return (
-    <Shell user={usuarioLogado} title="Tarefas" subtitle="Planilha de atividades do Desenho" onBack={onBack} accent={accent} wide>
+    <Shell user={usuarioLogado} title="Tarefas" subtitle="Planilha de atividades do Desenho" onBack={onBack} accent={accent} wide={secao === 'tabelas'}>
       {toast && <Toast msg={toast.msg} kind={toast.kind} />}
 
       <div style={{ display: 'flex', background: '#EAEAEA', borderRadius: 20, padding: 4, width: 'fit-content', marginBottom: 22 }}>

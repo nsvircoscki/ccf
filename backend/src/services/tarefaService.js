@@ -7,7 +7,7 @@ async function listar({ setor, servicoId, status } = {}) {
       ...(servicoId ? { servicoId } : {}),
       ...(status ? { status } : {}),
     },
-    include: { servico: { select: { numeroServico: true, nomeCliente: true } } },
+    include: { servico: { select: { numeroServico: true, nomeCliente: true, caminhoPasta: true } } },
     orderBy: { created_at: 'desc' },
   });
 }
@@ -28,7 +28,7 @@ async function criar(dados) {
       linkPasta: dados.linkPasta || null,
       criadoPor: dados.criadoPor || null,
     },
-    include: { servico: { select: { numeroServico: true, nomeCliente: true } } },
+    include: { servico: { select: { numeroServico: true, nomeCliente: true, caminhoPasta: true } } },
   });
 }
 
@@ -39,7 +39,7 @@ async function atualizarObservacao(id, observacoes) {
   return prisma.tarefa.update({
     where: { id },
     data: { observacoes: observacoes ?? null },
-    include: { servico: { select: { numeroServico: true, nomeCliente: true } } },
+    include: { servico: { select: { numeroServico: true, nomeCliente: true, caminhoPasta: true } } },
   });
 }
 
@@ -51,7 +51,7 @@ async function concluir(id, setorQuemConcluiu) {
   return prisma.tarefa.update({
     where: { id },
     data: { status: 'CONCLUIDA', concluidoPor: setorQuemConcluiu || null, concluido_em: new Date() },
-    include: { servico: { select: { numeroServico: true, nomeCliente: true } } },
+    include: { servico: { select: { numeroServico: true, nomeCliente: true, caminhoPasta: true } } },
   });
 }
 
@@ -63,7 +63,7 @@ async function reabrir(id) {
   return prisma.tarefa.update({
     where: { id },
     data: { status: 'PENDENTE', concluidoPor: null, concluido_em: null },
-    include: { servico: { select: { numeroServico: true, nomeCliente: true } } },
+    include: { servico: { select: { numeroServico: true, nomeCliente: true, caminhoPasta: true } } },
   });
 }
 
