@@ -879,7 +879,12 @@ function Orcamento({ onBack, onOrcamentoDecidido }) {
                   onChange={handleOrcamentoChange}
                   options={[
                     { value: '', label: orcamentos.length ? 'Selecione um orçamento' : 'Nenhum orçamento cadastrado' },
-                    ...orcamentos.map((orc) => ({ value: orc.id, label: orc.numero })),
+                    ...orcamentos.map((orc) => ({
+                      value: orc.id,
+                      label: orc.numero,
+                      sub: orc.cliente ? `— ${orc.cliente}` : '',
+                      keywords: `${orc.cliente || ''} ${orc.matricula || ''}`,
+                    })),
                   ]}
                   width="100%"
                   searchable

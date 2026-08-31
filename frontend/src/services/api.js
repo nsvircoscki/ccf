@@ -443,4 +443,13 @@ export const api = {
         });
         return { data: await res.json(), ok: res.ok };
     },
+
+    abrirPastaTarefa: async (caminho) => {
+        const res = await fetch(`${BASE_URL}/tarefas/abrir-pasta`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ caminho }),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
 };

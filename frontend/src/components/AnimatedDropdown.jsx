@@ -180,7 +180,9 @@ export function AnimatedDropdown({ label, value, onChange, options, width, searc
             if (!termo) return true;
             // keywords: texto extra pesquisável (ex.: nome do cliente, matrícula)
             // que não aparece no label exibido, mas ainda deve ser encontrável.
-            return option.label.toLowerCase().includes(termo) || (option.keywords || '').toLowerCase().includes(termo);
+            return option.label.toLowerCase().includes(termo) ||
+                   (option.sub || '').toLowerCase().includes(termo) ||
+                   (option.keywords || '').toLowerCase().includes(termo);
           }) : options).map(option => (
             <motion.button
               key={option.value}

@@ -5,6 +5,33 @@ import {
   Actions, ConfirmModal, Field, Icon, SearchableSelect, SelectField, Section, Shell, Toast, useToast, C,
 } from '../components/cadastros/CadastroKit.jsx';
 
+async function copiarParaAreaDeTransferencia(texto) {
+  if (!texto) return false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(texto);
+      return true;
+    }
+  } catch (e) {
+    console.warn('Clipboard API falhou, tentando fallback:', e);
+  }
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = texto;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const copiado = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return copiado;
+  } catch (err) {
+    console.error('Fallback execCommand falhou:', err);
+    return false;
+  }
+}
+
 // Converte um caminho de pasta (rede \\SERVIDOR\Pasta ou local C:\Pasta) num
 // link file:// — nem todo navegador deixa clicar e abrir direto (é uma
 // restrição de segurança do próprio navegador, não bug daqui), por isso
@@ -585,13 +612,34 @@ export default function TarefasView({ onBack, usuarioLogado }) {
   };
 
   const abrirPasta = async (caminho) => {
+    if (!caminho) return;
+
+    // 1. Copia o caminho para a área de transferência com fallback robusto
+    const copiado = await copiarParaAreaDeTransferencia(caminho);
+
+    // 2. Chama o backend para abrir a pasta diretamente no Windows Explorer
     try {
-      await navigator.clipboard.writeText(caminho);
-      show('Caminho copiado! Cole no Explorador de Arquivos (Win+E) se a pasta não abrir sozinha.', 'ok');
-    } catch (erro) {
-      console.error('Não deu pra copiar o caminho:', erro);
+      const res = await tarefaService.abrirPasta(caminho);
+      if (res && res.ok) {
+        show(copiado ? 'Pasta aberta no Windows Explorer e caminho copiado!' : 'Pasta aberta no Windows Explorer!', 'ok');
+        return;
+      }
+    } catch (e) {
+      console.warn('Erro ao abrir pasta via backend:', e);
     }
-    window.open(caminhoParaFileUrl(caminho), '_blank');
+
+    // 3. Fallback se não for possível abrir no backend
+    if (copiado) {
+      show('Caminho copiado com sucesso! Pressione Win+E e cole no Explorador de Arquivos.', 'ok');
+    } else {
+      show(`Caminho da pasta: ${caminho}`, 'ok');
+    }
+
+    try {
+      window.open(caminhoParaFileUrl(caminho), '_blank');
+    } catch (e) {
+      console.warn(e);
+    }
   };
 
   return (

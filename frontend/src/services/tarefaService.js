@@ -20,4 +20,7 @@ export const tarefaService = {
   async atualizarObservacao(id, observacoes) {
     return api.atualizarObservacaoTarefa(id, observacoes);
   },
+  async abrirPasta(caminho) {
+    return api.abrirPastaTarefa(caminho);
+  },
 };
