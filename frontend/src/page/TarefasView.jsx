@@ -668,7 +668,7 @@ export default function TarefasView({ onBack, usuarioLogado }) {
             <SelectField label="Prioridade" icon="scale" value={form.prioridade} onChange={setCampo('prioridade')} options={PRIORIDADES.map((p) => ({ value: p, label: LABEL_PRIORIDADE[p] }))} />
             <Field label="Prazo (opcional)" icon="calendar" type="date" value={form.prazo} onChange={setCampo('prazo')} />
             <Field label="Observações iniciais (opcional)" icon="doc" value={form.observacoes} onChange={setCampo('observacoes')} placeholder="Observações da tarefa" />
-            <Field label="Link da pasta (opcional)" icon="folder" span={2} value={form.linkPasta} onChange={setCampo('linkPasta')} placeholder="Ex: \\SERVIDOR\Servicos\2026-123" />
+            <Field label="Link da pasta (opcional)" icon="folder" span={2} value={form.linkPasta} onChange={setCampo('linkPasta')} placeholder="Ex: \\\\SERVIDOR\\Servicos\\2026-123" />
             <SearchableSelect
               label="Serviço vinculado (opcional)" icon="folder" span={2} accent={accent}
               options={opcoesServicos} value={form.servicoId} onChange={setCampo('servicoId')}

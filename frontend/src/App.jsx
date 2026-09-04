@@ -18,6 +18,7 @@ import ImportarPontosView from './page/ImportarPontosView';
 import TabelaServicosView from './page/TabelaServicosView';
 import FaturamentoView from './page/FaturamentoView';
 import TarefasView from './page/TarefasView';
+import SisPontoView from './page/SisPontoView';
 
 import { EditarProjetoModal } from './modals/EditarProjetoModal';
 import { TicketDetailModal } from './modals/TicketDetailModal';
@@ -239,6 +240,8 @@ export default function App() {
           {telaAtiva === 'tarefas' && (
             <TarefasView onBack={() => setModuloEscolhido(false)} usuarioLogado={usuarioLogado} />
           )}
+
+          {telaAtiva === 'sis-ponto' && <SisPontoView usuarioLogado={usuarioLogado} />}
         </div>
 
 

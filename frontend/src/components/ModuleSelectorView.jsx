@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, ListChecks, ArrowLeft,
-  BookOpen, Wallet, FileSpreadsheet, Table, Receipt, ClipboardCheck,
+  BookOpen, Wallet, FileSpreadsheet, Table, Receipt, ClipboardCheck, Clock3,
 } from 'lucide-react';
 import { temAcessoAoModulo } from '../utils/permissoes';
 
@@ -28,6 +28,7 @@ const MODULOS = [
   { id: 'tabela-servicos', label: 'Tabela de Serviços', desc: 'Todos os projetos, etapa atual e o que falta em cada um', icon: Table, color: '#4d7c0f' },
   { id: 'faturamento', label: 'Faturamento', desc: 'Emitir boletos e notas fiscais', icon: Receipt, color: '#b91c1c' },
   { id: 'tarefas', label: 'Tarefas', desc: 'Planilha de atividades por setor, com histórico do que já foi concluído', icon: ClipboardCheck, color: '#ea580c' },
+  { id: 'sis-ponto', label: 'SIS Ponto', desc: 'Sistema para bater o ponto dos funcionários', icon: Clock3, color: '#2563eb' },
 ];
 
 // Sub-módulos dentro de "Configurações" — clicar no tile principal abre esta

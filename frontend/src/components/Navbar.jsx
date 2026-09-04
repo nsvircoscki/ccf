@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, KeyRound, ListChecks, Bell,
-  Wallet, BookOpen, FileSpreadsheet, Table, Receipt, ClipboardCheck,
+  Wallet, BookOpen, FileSpreadsheet, Table, Receipt, ClipboardCheck, Clock3,
 } from 'lucide-react';
 import { AlterarSenhaModal } from '../modals/AlterarSenhaModal.jsx';
 import { api } from '../services/api';
@@ -24,6 +24,7 @@ const ITENS = [
   { id: 'tabela-servicos', label: 'Tabela de Serviços', icon: Table, color: '#4d7c0f' },
   { id: 'faturamento', label: 'Faturamento', icon: Receipt, color: '#b91c1c' },
   { id: 'tarefas', label: 'Tarefas', icon: ClipboardCheck, color: '#ea580c' },
+  { id: 'sis-ponto', label: 'SIS Ponto', icon: Clock3, color: '#2563eb' },
   { id: 'config', label: 'Configurações', icon: Settings2, color: '#64748b' },
 ];
 
