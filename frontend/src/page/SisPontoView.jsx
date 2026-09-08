@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, FileText, Hourglass, LogIn, TimerReset, Trash2, X } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, FileText, Hourglass, LogIn, TimerReset, Trash2, X, ChartNoAxesColumn, Files, User } from 'lucide-react';
 
 const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -13,6 +13,10 @@ function Card({ children, style }) {
 }
 
 export default function SisPontoView({ usuarioLogado }) {
+  if (usuarioLogado === 'ENG') {
+    return <EngAdminSisPontoScreen usuarioLogado={usuarioLogado} />;
+  }
+
   const [agora, setAgora] = useState(new Date());
   const [mes, setMes] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [aba, setAba] = useState('calendario');
@@ -173,6 +177,418 @@ export default function SisPontoView({ usuarioLogado }) {
         </div>
       </div>
       {modalRegistros && <ModalRegistros registros={registrosDoModal} statusRegistro={statusRegistro} horarioEsperado={horarioEsperado} onExcluir={excluirRegistro} onClose={() => { setModalRegistros(false); setDiaModal(null); }} />}
+    </main>
+  );
+}
+
+function formatHorario(data) {
+  if (!data) return '—';
+  return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(data);
+}
+
+function formatDuracaoEmHoras(inicio, fim) {
+  if (!inicio || !fim) return '00h00';
+  const diffMin = Math.max(0, Math.round((fim - inicio) / 60000));
+  const horas = Math.floor(diffMin / 60);
+  const minutos = diffMin % 60;
+  return `${String(horas).padStart(2, '0')}h${String(minutos).padStart(2, '0')}`;
+}
+
+function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Date())) {
+  try {
+    const keys = Object.keys(localStorage || {}).filter((key) => key.startsWith('ccf-ponto-') && key !== 'ccf-ponto-ENG');
+    if (!keys.length) return [];
+
+    return keys.map((storageKey) => {
+      const perfil = storageKey.replace('ccf-ponto-', '');
+      const blob = JSON.parse(localStorage.getItem(storageKey)) || {};
+      const registrosDia = (blob[selectedDate] || []).map((iso) => new Date(iso)).sort((a, b) => a - b);
+      const entrada = registrosDia[0] ?? null;
+      const intervalo = registrosDia[1] ?? null;
+      const retorno = registrosDia[2] ?? null;
+      const saida = registrosDia[registrosDia.length - 1] ?? null;
+      const total = entrada && saida ? formatDuracaoEmHoras(entrada, saida) : '00h00';
+      const status = registrosDia.length === 0 ? 'Ausente' : (registrosDia.length > 2 ? 'Trabalhando' : 'Normal');
+
+      return {
+        nome: perfil,
+        setor: perfil,
+        cargo: 'Colaborador',
+        entrada: formatHorario(entrada),
+        intervalo: formatHorario(intervalo),
+        retorno: formatHorario(retorno),
+        saida: formatHorario(saida),
+        total,
+        status,
+        justificativa: 0,
+        jornadaPrevista: '08:00',
+        jornadaRealizada: total,
+        jornadaTipo: 'Jornada prevista',
+        banco: '+00h00',
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+function EngAdminSisPontoScreen({ usuarioLogado = 'ENG' }) {
+  const [activePage, setActivePage] = useState('dashboard');
+  const [date, setDate] = useState(chaveData(new Date()));
+  const funcionarios = useMemo(() => buildEngFuncionariosFromStorage(date), [date]);
+  const setores = Array.from(new Set(funcionarios.map((f) => f.setor))).sort();
+  const [funcionarioFiltro, setFuncionarioFiltro] = useState('Todos os funcionários');
+  const [setorFiltro, setSetorFiltro] = useState('Todos os setores');
+  const [statusFiltro, setStatusFiltro] = useState('Todos os status');
+  const [activeTab, setActiveTab] = useState('resumo');
+  const [funcionarioSelecionado, setFuncionarioSelecionado] = useState(funcionarios[0] || { nome: 'Sem registros', setor: '—', cargo: '—', entrada: '—', intervalo: '—', retorno: '—', saida: '—', total: '00h00', status: 'Ausente', justificativa: 0, jornadaPrevista: '08:00', jornadaRealizada: '00h00', jornadaTipo: 'Jornada prevista', banco: '+00h00' });
+
+  const exportarRelatorio = () => {
+    const headers = ['Funcionário', 'Setor', 'Cargo', 'Entrada', 'Intervalo', 'Retorno', 'Saída', 'Total', 'Status'];
+    const linhas = filtered.map((f) => [f.nome, f.setor, f.cargo, f.entrada, f.intervalo, f.retorno, f.saida, f.total, f.status]);
+    const csv = [headers, ...linhas].map((linha) => linha.map((campo) => `"${String(campo ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `sis-ponto-${date}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const filtered = useMemo(() => {
+    return funcionarios.filter((f) => {
+      const okFuncionario = funcionarioFiltro === 'Todos os funcionários' || f.nome === funcionarioFiltro;
+      const okSetor = setorFiltro === 'Todos os setores' || f.setor === setorFiltro;
+      const okStatus = statusFiltro === 'Todos os status' || f.status === statusFiltro;
+      return okFuncionario && okSetor && okStatus;
+    });
+  }, [funcionarioFiltro, setorFiltro, statusFiltro]);
+
+  const presentes = funcionarios.filter((f) => f.status === 'Normal').length;
+  const atrasados = funcionarios.filter((f) => f.status === 'Atrasado').length;
+  const ausentes = funcionarios.filter((f) => f.status === 'Ausente').length;
+
+  return (
+    <main className="sis-ponto-admin-screen">
+      <style>{`
+        :root { --text: #1c2440; --muted: #718398; --title: #2d3c59; --blue: #3177dd; --blue-deep: #244c91; --blue-soft: #eef4ff; --green: #2aba72; --green-soft: #ddfbe9; --orange: #ff9c2e; --orange-soft: #ffeede; --red: #e4544e; --red-soft: #ffecef; --line: #ccd9ea; --paper: #ffffff; --body: #eef4f9; --shadow: rgba(31,47,87,.12); }
+        .sis-ponto-admin-screen { min-height: 100vh; background: var(--body); color: var(--text); font-family: Inter, 'Segoe UI', Arial, sans-serif; }
+        .sis-ponto-admin-screen * { box-sizing: border-box; }
+        .sis-admin-layout { min-height: 100vh; display: flex; background: var(--body); }
+        .sis-admin-sidebar { width: 220px; background: #f8fbff; border-right: 1px solid var(--line); padding: 16px 12px; }
+        .sis-admin-nav { display: flex; flex-direction: column; gap: 10px; }
+        .sis-admin-nav-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 0; background: transparent; color: #4b607d; font-size: 14px; font-weight: 800; cursor: pointer; text-align: left; }
+        .sis-admin-nav-item.active { background: var(--blue); color: #fff; }
+        .sis-admin-nav-item:hover { background: var(--blue-soft); color: var(--blue); }
+        .sis-admin-nav-item.active:hover { background: var(--blue); color: #fff; }
+
+        .sis-admin-content { flex: 1; padding: 26px 30px; max-height: calc(100vh - 80px); overflow-y: auto; }
+        .sis-title { margin: 0; font-size: 30px; font-weight: 900; color: #2a3c68; letter-spacing: -.03em; }
+        .sis-subtitle { margin: 4px 0 14px; color: var(--muted); font-size: 14px; font-weight: 700; }
+
+        .sis-metrics { display: grid; grid-template-columns: repeat(4, minmax(160px, auto)); gap: 14px; margin-bottom: 16px; }
+        .sis-metric-card { background: var(--paper); border-radius: 12px; border: 1px solid var(--line); padding: 16px; display: flex; align-items: center; gap: 12px; min-height: 80px; box-shadow: 0 5px 11px var(--shadow); }
+        .sis-metric-card .icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: white; }
+        .sis-metric-card.total { border-color: #b9d9ff; background: #eef4ff; color: var(--blue-deep); }
+        .sis-metric-card.total .icon { background: var(--blue); color: white; }
+        .sis-metric-card.present { border-color: #b7f0d6; background: #effaf6; color: var(--green); }
+        .sis-metric-card.present .icon { background: var(--green); color: white; }
+        .sis-metric-card.late { border-color: #ffd8aa; background: #fff8ee; color: var(--orange); }
+        .sis-metric-card.late .icon { background: var(--orange); color: white; }
+        .sis-metric-card.absent { border-color: #ffc4bd; background: #fff4f3; color: var(--red); }
+        .sis-metric-card.absent .icon { background: var(--red); color: white; }
+        .sis-metric-card .number { font-size: 27px; font-weight: 900; color: var(--text); margin: 0; line-height: 1.4; }
+        .sis-metric-card .label { font-size: 12px; color: var(--muted); font-weight: 800; }
+
+        .sis-filterbar { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; box-shadow: 0 4px 10px var(--shadow); }
+        .sis-filter-group { display: flex; align-items: center; gap: 8px; }
+        .sis-filterbar input, .sis-filterbar select { height: 38px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--text); padding: 7px 10px; font-size: 12px; font-weight: 700; }
+        .sis-filterbar input[type='date'] { min-width: 150px; }
+        .sis-filterbar select { min-width: 170px; }
+        .sis-export-button { margin-left: auto; height: 38px; padding: 0 16px; border-radius: 8px; border: 0; background: var(--blue); color: white; font-size: 12px; font-weight: 900; cursor: pointer; }
+
+        .sis-grid { display: grid; grid-template-columns: minmax(640px, auto) 280px; gap: 14px; margin-top: 16px; align-items: start; }
+        .sis-table-card { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 8px 16px var(--shadow); overflow: hidden; max-height: calc(100vh - 280px); overflow-y: auto; }
+        .sis-table-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+        .sis-table-head .left { color: #2d3c59; font-size: 16px; font-weight: 900; }
+        .sis-table-head .right { color: #718398; font-size: 12px; font-weight: 800; }
+        .sis-table { width: 100%; border-collapse: collapse; } 
+        .sis-table th { background: #eef4ff; color: #43546c; font-size: 11px; font-weight: 900; padding: 12px 8px; border-bottom: 1px solid var(--line); text-align: center; }
+        .sis-table td { padding: 11px 8px; border-bottom: 1px solid var(--line); font-size: 11px; color: var(--text); text-align: center; }
+        .sis-table tbody tr { transition: background .2s; }
+        .sis-table tbody tr:hover { background: #f7faff; }
+        .sis-employee { display: flex; align-items: center; gap: 10px; min-width: 160px; }
+        .sis-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 900; border: 2px solid #eaf2ff; }
+        .sis-person { text-align: left; }
+        .sis-person b { display: block; color: var(--text); font-size: 12px; }
+        .sis-person small { display: block; color: var(--muted); font-size: 11px; }
+        .sis-status { min-width: 78px; display: inline-flex; align-items: center; justify-content: center; padding: 6px 8px; border-radius: 99px; color: white; font-size: 11px; font-weight: 900; }
+        .sis-status.Normal { background: var(--green); }
+        .sis-status.Atrasado { background: var(--orange); }
+        .sis-status.Ausente { background: var(--red); }
+        .sis-status.Trabalhando { background: var(--blue); }
+        .sis-arrow { width: 34px; height: 34px; border-radius: 50%; border: none; background: var(--blue); color: #fff; display: grid; place-items: center; cursor: pointer; font-size: 16px; }
+
+        .sis-detail-panel { background: var(--paper); border-radius: 14px; border: 1px solid var(--line); box-shadow: 0 8px 16px var(--shadow); padding: 14px; max-height: calc(100vh - 280px); overflow-y: auto; }
+        .sis-person-detail { background: #f8fbff; border-radius: 12px; padding: 14px; border: 1px solid var(--line); }
+        .sis-detail-head { display: flex; align-items: center; gap: 12px; }
+        .sis-detail-avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--blue); color: white; display: grid; place-items: center; font-size: 14px; font-weight: 900; }
+        .sis-detail-person-name { font-size: 20px; font-weight: 900; color: var(--text); }
+        .sis-detail-person-setor { font-size: 11px; color: var(--muted); font-weight: 800; }
+        .sis-detail-tabs { display: flex; gap: 10px; border-bottom: 1px solid var(--line); margin: 12px 0 0; padding-bottom: 8px; }
+        .sis-detail-tabs button { background: transparent; border: 0; padding: 8px 10px; color: var(--muted); font-size: 11px; font-weight: 900; cursor: pointer; border-bottom: 2px solid transparent; }
+        .sis-detail-tabs button.active { color: var(--blue); border-bottom-color: var(--blue); }
+        .sis-detail-date { color: var(--text); font-size: 12px; font-weight: 900; margin-top: 12px; }
+        .sis-detail-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+        .sis-detail-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 11px; }
+        .sis-detail-row .label { color: var(--muted); font-weight: 800; }
+        .sis-detail-row .value { color: var(--text); font-weight: 900; }
+        .sis-detail-status { background: var(--green); color: #fff; border-radius: 8px; padding: 9px 12px; text-align: center; font-size: 11px; font-weight: 900; margin-top: 12px; }
+        @media (max-width: 980px) { .sis-grid { grid-template-columns: 1fr; } .sis-admin-layout { flex-direction: column; } .sis-admin-sidebar { width: 100%; } .sis-metrics { grid-template-columns: repeat(2, minmax(160px, auto)); } }
+      `}</style>
+
+      <div className="sis-admin-layout">
+        <aside className="sis-admin-sidebar">
+          <nav className="sis-admin-nav">
+            <button className={`sis-admin-nav-item ${activePage === 'dashboard' ? 'active' : ''}`} onClick={() => setActivePage('dashboard')}><CalendarDays size={16} /> Dashboard</button>
+            <button className={`sis-admin-nav-item ${activePage === 'funcionarios' ? 'active' : ''}`} onClick={() => setActivePage('funcionarios')}><User size={16} /> Funcionários</button>
+            <button className={`sis-admin-nav-item ${activePage === 'registros' ? 'active' : ''}`} onClick={() => setActivePage('registros')}><ChartNoAxesColumn size={16} /> Registros</button>
+            <button className={`sis-admin-nav-item ${activePage === 'calendario' ? 'active' : ''}`} onClick={() => setActivePage('calendario')}><CalendarDays size={16} /> Calendário</button>
+            <button className={`sis-admin-nav-item ${activePage === 'banco' ? 'active' : ''}`} onClick={() => setActivePage('banco')}><Clock3 size={16} /> Banco de horas</button>
+            <button className={`sis-admin-nav-item ${activePage === 'justificativas' ? 'active' : ''}`} onClick={() => setActivePage('justificativas')}><Files size={16} /> Justificativas</button>
+            <button className={`sis-admin-nav-item ${activePage === 'relatorios' ? 'active' : ''}`} onClick={() => setActivePage('relatorios')}><ChartNoAxesColumn size={16} /> Relatórios</button>
+            <button className={`sis-admin-nav-item ${activePage === 'configuracoes' ? 'active' : ''}`} onClick={() => setActivePage('configuracoes')}><X size={16} /> Configurações</button>
+          </nav>
+        </aside>
+
+        <section className="sis-admin-content">
+          <header>
+            <h1 className="sis-title">SIS Ponto</h1>
+            <p className="sis-subtitle">Acompanhe a jornada da sua equipe</p>
+          </header>
+
+          {activePage === 'dashboard' && <>
+          <section className="sis-metrics">
+            <div className="sis-metric-card total">
+              <span className="icon"><User size={22} /></span>
+              <div>
+                <div className="number">{funcionarios.length}</div>
+                <div className="label">Total de colaboradores</div>
+              </div>
+            </div>
+            <div className="sis-metric-card present">
+              <span className="icon"><CalendarDays size={22} /></span>
+              <div>
+                <div className="number">{presentes}</div>
+                <div className="label">Presentes</div>
+              </div>
+            </div>
+            <div className="sis-metric-card late">
+              <span className="icon"><Clock3 size={22} /></span>
+              <div>
+                <div className="number">{atrasados}</div>
+                <div className="label">Atrasados</div>
+              </div>
+            </div>
+            <div className="sis-metric-card absent">
+              <span className="icon"><X size={22} /></span>
+              <div>
+                <div className="number">{ausentes}</div>
+                <div className="label">Ausentes</div>
+              </div>
+            </div>
+          </section>
+
+          <section className="sis-filterbar">
+            <div className="sis-filter-group">
+              <CalendarDays size={16} color="#3177dd" />
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div className="sis-filter-group">
+              <User size={16} color="#3177dd" />
+              <select value={funcionarioFiltro} onChange={(e) => { setFuncionarioFiltro(e.target.value); const f = funcionarios.find((x) => x.nome === e.target.value); if (f) setFuncionarioSelecionado(f); }}>
+                <option>Todos os funcionários</option>
+                {funcionarios.map((f) => <option key={f.nome}>{f.nome}</option>)}
+              </select>
+            </div>
+            <div className="sis-filter-group">
+              <ChartNoAxesColumn size={16} color="#3177dd" />
+              <select value={setorFiltro} onChange={(e) => setSetorFiltro(e.target.value)}>
+                <option>Todos os setores</option>
+                {setores.map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="sis-filter-group">
+              <Clock3 size={16} color="#3177dd" />
+              <select value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)}>
+                <option>Todos os status</option>
+                <option>Normal</option>
+                <option>Atrasado</option>
+                <option>Ausente</option>
+                <option>Trabalhando</option>
+              </select>
+            </div>
+            <button className="sis-export-button" onClick={exportarRelatorio}>Exportar relatório</button>
+          </section>
+
+          <section className="sis-grid">
+            <section className="sis-table-card">
+              <div className="sis-table-head">
+                <span className="left">Funcionários</span>
+                <span className="right">{filtered.length} funcionários</span>
+              </div>
+              <table className="sis-table">
+                <thead>
+                  <tr>
+                    <th>Funcionário</th>
+                    <th>Entrada</th>
+                    <th>Intervalo</th>
+                    <th>Retorno</th>
+                    <th>Saída</th>
+                    <th>Total de horas</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((f, idx) => (
+                    <tr key={idx}>
+                      <td>
+                        <div className="sis-employee">
+                          <span className="sis-avatar">{f.nome.split(' ').map((n) => n[0]).slice(0,2).join('').toUpperCase()}</span>
+                          <span className="sis-person">
+                            <b>{f.nome}</b>
+                            <small>{f.cargo}</small>
+                          </span>
+                        </div>
+                      </td>
+                      <td>{f.entrada}</td>
+                      <td>{f.intervalo}</td>
+                      <td>{f.retorno}</td>
+                      <td>{f.saida}</td>
+                      <td>{f.total}</td>
+                      <td><span className={`sis-status ${f.status}`}>{f.status}</span></td>
+                      <td><button className="sis-arrow" onClick={() => { setFuncionarioSelecionado(f); setActiveTab('resumo'); }}>›</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+
+            <aside className="sis-detail-panel">
+              <div className="sis-person-detail">
+                <div className="sis-detail-head">
+                  <span className="sis-detail-avatar">{funcionarioSelecionado.nome.split(' ').map((n) => n[0]).slice(0,2).join('').toUpperCase()}</span>
+                  <div>
+                    <div className="sis-detail-person-name">{funcionarioSelecionado.nome}</div>
+                    <div className="sis-detail-person-setor">{funcionarioSelecionado.setor} · {funcionarioSelecionado.cargo}</div>
+                  </div>
+                </div>
+                <div className="sis-detail-tabs">
+                  <button className={activeTab === 'resumo' ? 'active' : ''} onClick={() => setActiveTab('resumo')}>Resumo</button>
+                  <button className={activeTab === 'historico' ? 'active' : ''} onClick={() => setActiveTab('historico')}>Histórico</button>
+                  <button className={activeTab === 'justificativas' ? 'active' : ''} onClick={() => setActiveTab('justificativas')}>Justificativas</button>
+                </div>
+
+                {activeTab === 'resumo' && (
+                  <>
+                    <div className="sis-detail-date">Hoje — {date}</div>
+                    <div className="sis-detail-list">
+                      <div className="sis-detail-row"><span className="label">Entrada</span><span className="value">{funcionarioSelecionado.entrada}</span></div>
+                      <div className="sis-detail-row"><span className="label">Intervalo</span><span className="value">{funcionarioSelecionado.intervalo}</span></div>
+                      <div className="sis-detail-row"><span className="label">Retorno</span><span className="value">{funcionarioSelecionado.retorno}</span></div>
+                      <div className="sis-detail-row"><span className="label">Saída</span><span className="value">{funcionarioSelecionado.saida}</span></div>
+                      <div className="sis-detail-row"><span className="label">Jornada prevista</span><span className="value">{funcionarioSelecionado.jornadaPrevista}</span></div>
+                      <div className="sis-detail-row"><span className="label">Jornada realizada</span><span className="value">{funcionarioSelecionado.jornadaRealizada}</span></div>
+                      <div className="sis-detail-row"><span className="label">Saldo banco</span><span className="value">{funcionarioSelecionado.banco}</span></div>
+                    </div>
+                    <div className="sis-detail-status">{funcionarioSelecionado.status}</div>
+                  </>
+                )}
+
+                {activeTab === 'historico' && (
+                  <>
+                    <div className="sis-detail-date">Histórico do mês</div>
+                    <div className="sis-detail-list">
+                      <div className="sis-detail-row"><span className="label">Semana 01</span><span className="value">40h</span></div>
+                      <div className="sis-detail-row"><span className="label">Semana 02</span><span className="value">42h</span></div>
+                      <div className="sis-detail-row"><span className="label">Semana 03</span><span className="value">39h</span></div>
+                      <div className="sis-detail-row"><span className="label">Semana 04</span><span className="value">41h</span></div>
+                    </div>
+                  </>
+                )}
+
+                {activeTab === 'justificativas' && (
+                  <>
+                    <div className="sis-detail-date">Justificativas</div>
+                    <div className="sis-detail-list">
+                      <div className="sis-detail-row"><span className="label">Atestado</span><span className="value">01 dia</span></div>
+                      <div className="sis-detail-row"><span className="label">Atraso</span><span className="value">02 ocorr.</span></div>
+                      <div className="sis-detail-row"><span className="label">Ausência</span><span className="value">Sem</span></div>
+                    </div>
+                  </>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+                  <button className="sis-arrow" onClick={() => {
+                    const idx = funcionarios.findIndex((f) => f.nome === funcionarioSelecionado.nome);
+                    const next = funcionarios[(idx + 1) % funcionarios.length];
+                    setFuncionarioSelecionado(next);
+                    setFuncionarioFiltro(next.nome);
+                  }}>›</button>
+                  <span style={{ color: '#718398', fontSize: 11, fontWeight: 800 }}>Detalhe do funcionário</span>
+                </div>
+              </div>
+            </aside>
+          </section>
+          </>}
+
+          {activePage === 'banco' && (
+            <section className="sis-banco-view">
+              {BancoHoras()}
+            </section>
+          )}
+
+          {activePage === 'justificativas' && (
+            <section className="sis-justificativas-view">
+              {Justificativas()}
+            </section>
+          )}
+
+          {activePage === 'relatorios' && (
+            <section className="sis-empty-view">
+              <Card style={{ padding: 26, minHeight: 280 }}><h2 style={{ margin: 0, fontSize: 20 }}>Relatórios</h2><p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Relatórios e exportações do SIS Ponto aparecerão aqui.</p><button onClick={exportarRelatorio} type="button" style={{ border: 0, borderRadius: 9, padding: '11px 15px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>Exportar relatório</button></Card>
+            </section>
+          )}
+
+          {activePage === 'configuracoes' && (
+            <section className="sis-empty-view">
+              <Card style={{ padding: 26, minHeight: 280 }}><h2 style={{ margin: 0, fontSize: 20 }}>Configurações</h2><p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Configuração de controle de ponto e regras da jornada.</p></Card>
+            </section>
+          )}
+
+          {activePage === 'funcionarios' && (
+            <section className="sis-empty-view">
+              <Card style={{ padding: 26, minHeight: 280 }}><h2 style={{ margin: 0, fontSize: 20 }}>Funcionários</h2><p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Painel de colaboradores com a visão do dia selecionado.</p><div className="sis-filterbar"><span style={{ fontSize: 12, fontWeight: 800, color: '#52637f' }}>{funcionarios.length} colaboradores</span></div></Card>
+            </section>
+          )}
+
+          {activePage === 'registros' && (
+            <section className="sis-empty-view">
+              <Card style={{ padding: 26, minHeight: 280 }}><h2 style={{ margin: 0, fontSize: 20 }}>Registros</h2><p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Acompanhe os registros legíveis do dia e do perfil.</p><button onClick={exportarRelatorio} type="button" style={{ border: 0, borderRadius: 9, padding: '11px 15px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>Exportar relatório</button></Card>
+            </section>
+          )}
+
+          {activePage === 'calendario' && (
+            <section className="sis-empty-view">
+              <Card style={{ padding: 26, minHeight: 280 }}><h2 style={{ margin: 0, fontSize: 20 }}>Calendário</h2><p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Calendário do SIS Ponto com a data escolhida: {date}</p><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Card>
+            </section>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
