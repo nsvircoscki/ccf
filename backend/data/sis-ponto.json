@@ -1,0 +1,126 @@
+{
+  "funcionarios": [
+    {
+      "id": "DES-1789579210783",
+      "nome": "Bianca",
+      "setor": "DES"
+    },
+    {
+      "id": "CRD-1789579255721",
+      "nome": "Renan",
+      "setor": "CRD"
+    },
+    {
+      "id": "DEV-1789579281577",
+      "nome": "João Pedro Costi",
+      "setor": "DEV"
+    },
+    {
+      "id": "DES-1789579301226",
+      "nome": "Nicolas",
+      "setor": "DES"
+    }
+  ],
+  "registros": {
+    "2026-09-16": {
+      "DES-1789146743741": [
+        "2026-09-16T17:14:46.316Z",
+        "2026-09-16T17:14:48.484Z"
+      ],
+      "DEV-1789578907141": [
+        "2026-09-16T17:15:17.845Z",
+        "2026-09-16T17:15:19.310Z"
+      ],
+      "DES-1789146749069": [
+        "2026-09-16T17:19:00.373Z",
+        "2026-09-16T17:19:02.125Z"
+      ],
+      "CRD-1789579255721": [
+        "2026-09-16T10:28:49.654Z",
+        "2026-09-16T15:02:23.526Z"
+      ],
+      "DES-1789579210783": [
+        "2026-09-16T10:29:42.488Z",
+        "2026-09-16T15:02:06.596Z",
+        "2026-09-16T16:01:10.137Z",
+        "2026-09-16T20:30:54.251Z"
+      ],
+      "DES-1789579301226": [
+        "2026-09-16T10:37:25.210Z",
+        "2026-09-16T14:49:15.207Z",
+        "2026-09-16T16:01:06.648Z",
+        "2026-09-16T20:30:57.227Z"
+      ],
+      "DEV-1789579281577": [
+        "2026-09-16T21:36:45.959Z",
+        "2026-09-16T21:36:47.647Z"
+      ]
+    }
+  },
+  "justificativas": [
+    {
+      "id": "just-1789594677705-wcca8q",
+      "funcionarioId": "DEV-1789579281577",
+      "nome": "João Pedro Costi",
+      "setor": "DEV",
+      "dia": "2026-09-16",
+      "horaInicio": "13:00",
+      "horaFim": "17:30",
+      "motivo": "dgfdgfdg",
+      "anexoNome": null,
+      "anexoTipo": null,
+      "anexoDataUrl": null,
+      "status": "Aceita",
+      "criadoEm": "2026-09-16T21:37:57.705Z",
+      "atualizadoEm": "2026-09-16T21:38:01.741Z"
+    },
+    {
+      "id": "just-1789594721642-vanv58",
+      "funcionarioId": "CRD-1789579255721",
+      "nome": "Renan",
+      "setor": "CRD",
+      "dia": "2026-09-16",
+      "horaInicio": "13:00",
+      "horaFim": "17:30",
+      "motivo": "atras",
+      "anexoNome": null,
+      "anexoTipo": null,
+      "anexoDataUrl": null,
+      "status": "Aceita",
+      "criadoEm": "2026-09-16T21:38:41.642Z",
+      "atualizadoEm": "2026-09-16T21:38:48.649Z"
+    },
+    {
+      "id": "just-1789596793964-bl59zz",
+      "funcionarioId": "DEV-1789579281577",
+      "nome": "João Pedro Costi",
+      "setor": "DEV",
+      "dia": "2026-09-15",
+      "horaInicio": "08:00",
+      "horaFim": "12:00",
+      "motivo": "965",
+      "anexoNome": null,
+      "anexoTipo": null,
+      "anexoDataUrl": null,
+      "status": "Aceita",
+      "criadoEm": "2026-09-16T22:13:13.980Z",
+      "atualizadoEm": "2026-09-16T22:13:18.941Z"
+    },
+    {
+      "id": "just-1789597407018-t1ab6g",
+      "funcionarioId": "CRD-1789579255721",
+      "nome": "Renan",
+      "setor": "CRD",
+      "dia": "2026-09-15",
+      "horaInicio": "08:00",
+      "horaFim": "12:00",
+      "motivo": "vgbn",
+      "anexoNome": null,
+      "anexoTipo": null,
+      "anexoDataUrl": null,
+      "status": "Inválida",
+      "criadoEm": "2026-09-16T22:23:27.018Z",
+      "atualizadoEm": "2026-09-16T22:23:33.740Z"
+    }
+  ]
+}

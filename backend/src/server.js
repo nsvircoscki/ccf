@@ -15,6 +15,7 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import cobrancaRoutes from './routes/cobrancaRoutes.js';
 import notaFiscalRoutes from './routes/notaFiscalRoutes.js';
 import tarefaRoutes from './routes/tarefaRoutes.js';
+import sisPontoRoutes from './routes/sisPontoRoutes.js';
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/notificacoes', notificationRoutes);
 app.use('/cobrancas', cobrancaRoutes);
 app.use('/notas-fiscais', notaFiscalRoutes);
 app.use('/tarefas', tarefaRoutes);
+app.use('/sis-ponto', sisPontoRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
