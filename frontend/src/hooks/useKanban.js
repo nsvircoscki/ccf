@@ -91,6 +91,22 @@ export function useKanban() {
     }
   };
 
+  const alterarStatusProcessoLocal = async (workflowId, status) => {
+    // Atualiza o array de workflows (para KanbanView)
+    setWorkflows(prev => prev.map(w => w.id === workflowId ? { ...w, status } : w));
+    // Atualiza o status dentro de cada ticket (para PesquisaView, que lê ticket.workflow.status)
+    setTickets(prev => prev.map(t =>
+      t.workflowId === workflowId ? { ...t, workflow: { ...t.workflow, status } } : t
+    ));
+    try {
+      const res = await api.alterarStatusProcesso(workflowId, status);
+      if (!res.ok) throw new Error();
+    } catch (error) {
+      alert("Erro ao alterar status.");
+      carregarDados();
+    }
+  };
+
   return {
     tickets,
     workflows,
@@ -102,6 +118,7 @@ export function useKanban() {
     excluirCartaoLocal,
     criarTicketLocal,
     atualizarDescricaoLocal,
-    atualizarDetalhesProjeto
+    atualizarDetalhesProjeto,
+    alterarStatusProcessoLocal
   };
 }

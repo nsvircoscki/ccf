@@ -8,7 +8,7 @@ async function listar({ setor, servicoId, status } = {}) {
       ...(status ? { status } : {}),
     },
     include: { servico: { select: { numeroServico: true, nomeCliente: true, caminhoPasta: true } } },
-    orderBy: { created_at: 'desc' },
+    orderBy: { ordem: 'asc' },
   });
 }
 
@@ -67,10 +67,18 @@ async function reabrir(id) {
   });
 }
 
+async function reordenar(ids) {
+  if (!Array.isArray(ids)) throw new Error('Lista de ids inválida.');
+
+  for (let i = 0; i < ids.length; i++) {
+    await prisma.tarefa.update({ where: { id: ids[i] }, data: { ordem: i } });
+  }
+}
+
 async function excluir(id) {
   const tarefa = await prisma.tarefa.findUnique({ where: { id } });
   if (!tarefa) throw new Error('Tarefa não encontrada.');
   await prisma.tarefa.delete({ where: { id } });
 }
 
-export const tarefaService = { listar, criar, atualizarObservacao, concluir, reabrir, excluir };
+export const tarefaService = { listar, criar, atualizarObservacao, concluir, reabrir, excluir, reordenar };

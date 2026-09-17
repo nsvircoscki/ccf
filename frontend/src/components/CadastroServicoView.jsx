@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Building2, Check, FileText, MessageSquare, Save, MapPin } from 'lucide-react';
+import { ArrowLeft, Building2, Check, FileText, MessageSquare, Save, MapPin, Plus, X } from 'lucide-react';
 import PlaceholderMapa from '../page/PlaceholderMapa.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { servicoService } from '../services/servicoService';
@@ -21,8 +21,12 @@ const SIGLA_POR_TIPO = {
   'Cadastral': 'Cad',
   'Locação': 'Loc',
   'Movimentação de Terra': 'Mov de Terra',
-  'Outros': 'Outros',
   'Extremação': 'Ext',
+  'Altimetria': 'Altim',
+  'DANC': 'DANC',
+  'Relatório de Usucapião': 'Rel. Usu',
+  'CCIR/ITR': 'CCIR/ITR',
+  'Outros': 'Outros',
 };
 
 
@@ -42,6 +46,10 @@ const initialServices = [
   { id: 12, nome: 'Loc', indice: 1.0, ativo: true, selecionado: false },
   { id: 13, nome: 'At', indice: 1.0, ativo: true, selecionado: false },
   { id: 14, nome: 'Ext', indice: 1.0, ativo: true, selecionado: false },
+  { id: 16, nome: 'DANC', indice: 1.0, ativo: true, selecionado: false },
+  { id: 17, nome: 'Rel. Usu', indice: 1.0, ativo: true, selecionado: false },
+  { id: 18, nome: 'CCIR/ITR', indice: 1.0, ativo: true, selecionado: false },
+  { id: 19, nome: 'Altim', indice: 1.0, ativo: true, selecionado: false },
   { id: 15, nome: 'Outros', indice: 1.0, ativo: true, selecionado: false }
 ];
 const formatIndex = (value) => value.toFixed(1).replace('.', ',');
@@ -91,7 +99,7 @@ function ServiceCard({ service, selected, onToggle }) {
       whileTap={{ scale: 0.985 }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', paddingRight: '24px' }}>
-        <div style={{ fontSize: '13px', fontWeight: 700, lineHeight: 1.25, color: selected ? '#FFFFFF' : '#1F2A44', maxWidth: '120px' }}>
+        <div style={{ fontSize: '13px', fontWeight: 700, lineHeight: 1.25, color: selected ? '#FFFFFF' : '#1F2A44', maxWidth: '120px', textTransform: 'uppercase' }}>
           {service.nome}
         </div>
         <div
@@ -187,8 +195,7 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
   const [confrontaCertificacao, setConfrontaCertificacao] = useState('');
   const [codRespTecnPossui, setCodRespTecnPossui] = useState('');
   const [respTecnPossui, setRespTecnPossui] = useState('');
-  const [codRespTecn, setCodRespTecn] = useState('');
-  const [respTecn, setRespTecn] = useState('');
+  const [confrontacoes, setConfrontacoes] = useState([{ codRespTecn: '', respTecn: '' }]);
   const [matricula, setMatricula] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [servicosSalvos, setServicosSalvos] = useState([]);
@@ -217,8 +224,7 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
     setConfrontaCertificacao('');
     setCodRespTecnPossui('');
     setRespTecnPossui('');
-    setCodRespTecn('');
-    setRespTecn('');
+    setConfrontacoes([{ codRespTecn: '', respTecn: '' }]);
     setNotas('');
     setArea('0,00');
     setMunicipio('Sao Bento do Sul');
@@ -249,8 +255,16 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
     setConfrontaCertificacao(servico.confrontaCertificacao || '');
     setCodRespTecnPossui(servico.codRespTecnPossui || '');
     setRespTecnPossui(servico.respTecnPossui || '');
-    setCodRespTecn(servico.codRespTecn || '');
-    setRespTecn(servico.respTecn || '');
+
+    const cods = servico.codRespTecn ? servico.codRespTecn.split(' | ') : [];
+    const resps = servico.respTecn ? servico.respTecn.split(' | ') : [];
+    const maxLen = Math.max(cods.length, resps.length, 1);
+    const novasConf = [];
+    for (let i = 0; i < maxLen; i++) {
+      novasConf.push({ codRespTecn: cods[i] || '', respTecn: resps[i] || '' });
+    }
+    setConfrontacoes(novasConf);
+
     setNotas(servico.notas || '');
     setArea(servico.area != null ? String(servico.area).replace('.', ',') : '0,00');
     setMunicipio(servico.municipio || 'Sao Bento do Sul');
@@ -337,8 +351,7 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
   useEffect(() => {
     if (confrontaCertificacao === 'Sim') return;
 
-    setCodRespTecn('');
-    setRespTecn('');
+    setConfrontacoes([{ codRespTecn: '', respTecn: '' }]);
   }, [confrontaCertificacao]);
 
   const toggleService = (id) => {
@@ -401,8 +414,8 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
         confrontaCertificacao,
         codRespTecnPossui,
         respTecnPossui,
-        codRespTecn,
-        respTecn,
+        codRespTecn: confrontacoes.map(c => c.codRespTecn).join(' | '),
+        respTecn: confrontacoes.map(c => c.respTecn).join(' | '),
         notas,
         area,
         municipio,
@@ -737,39 +750,90 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
                   </div>
                 </label>
 
-                {confrontaCertificacao === 'Sim' ? (
-                  <>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <span style={labelStyle}>Cód do Res Técn (Confronto)</span>
-                      <input
-                        value={codRespTecn}
-                        onChange={(e) => setCodRespTecn(e.target.value)}
-                        onFocus={() => setCampoAtivo('codRespTecn')}
-                        onBlur={() => setCampoAtivo(null)}
-                        placeholder="Código do Técnico"
-                        style={{
-                          ...baseFieldStyle,
-                          ...(campoAtivo === 'codRespTecn' ? activeFieldStyle : {}),
-                        }}
-                      />
-                    </label>
-
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <span style={labelStyle}>Resp Técn (Confronto)</span>
-                      <input
-                        value={respTecn}
-                        onChange={(e) => setRespTecn(e.target.value)}
-                        onFocus={() => setCampoAtivo('respTecn')}
-                        onBlur={() => setCampoAtivo(null)}
-                        placeholder="Nome do Técnico"
-                        style={{
-                          ...baseFieldStyle,
-                          ...(campoAtivo === 'respTecn' ? activeFieldStyle : {}),
-                        }}
-                      />
-                    </label>
-                  </>
-                ) : null}
+                {confrontaCertificacao === 'Sim' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {confrontacoes.map((conf, index) => (
+                      <div key={index} style={{ display: 'flex', gap: '16px', position: 'relative' }}>
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                          <span style={labelStyle}>Cód (Confronto {index + 1})</span>
+                          <input
+                            value={conf.codRespTecn}
+                            onChange={(e) => {
+                              const novas = [...confrontacoes];
+                              novas[index].codRespTecn = e.target.value;
+                              setConfrontacoes(novas);
+                            }}
+                            onFocus={() => setCampoAtivo(`codRespTecn${index}`)}
+                            onBlur={() => setCampoAtivo(null)}
+                            placeholder="Código"
+                            style={{
+                              ...baseFieldStyle,
+                              ...(campoAtivo === `codRespTecn${index}` ? activeFieldStyle : {}),
+                            }}
+                          />
+                        </label>
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                          <span style={labelStyle}>Resp Técn (Confronto {index + 1})</span>
+                          <input
+                            value={conf.respTecn}
+                            onChange={(e) => {
+                              const novas = [...confrontacoes];
+                              novas[index].respTecn = e.target.value;
+                              setConfrontacoes(novas);
+                            }}
+                            onFocus={() => setCampoAtivo(`respTecn${index}`)}
+                            onBlur={() => setCampoAtivo(null)}
+                            placeholder="Nome"
+                            style={{
+                              ...baseFieldStyle,
+                              ...(campoAtivo === `respTecn${index}` ? activeFieldStyle : {}),
+                            }}
+                          />
+                        </label>
+                        {confrontacoes.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setConfrontacoes(confrontacoes.filter((_, i) => i !== index))}
+                            style={{
+                              alignSelf: 'flex-end',
+                              marginBottom: '2px',
+                              padding: '8px',
+                              background: '#FEE2E2',
+                              color: '#EF4444',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              height: '42px',
+                            }}
+                            title="Remover"
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setConfrontacoes([...confrontacoes, { codRespTecn: '', respTecn: '' }])}
+                      style={{
+                        padding: '8px 12px',
+                        background: '#EEF2FF',
+                        color: '#6366F1',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: '13px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Plus size={16} /> Adicionar nova confrontação
+                    </button>
+                  </div>
+                )}
               </div>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

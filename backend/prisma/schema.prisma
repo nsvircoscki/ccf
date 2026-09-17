@@ -179,6 +179,8 @@ model Workflow {
   endereco    String?
   details     String?
   terreno     String?  @default("Urbano")
+  status      String   @default("ATIVO")
+
 
   servicoId   String?
   servico     Servico? @relation(fields: [servicoId], references: [id])
@@ -486,6 +488,7 @@ model Tarefa {
   criadoPor    String?   // setor de quem lançou (usuarioLogado no momento da criação)
   concluidoPor String?
   concluido_em DateTime?
+  ordem        Int       @default(0)
 
   created_at  DateTime  @default(now())
   updated_at  DateTime  @updatedAt

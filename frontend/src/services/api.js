@@ -20,6 +20,15 @@ export const api = {
         return { data: await res.json(), ok: res.ok };
     },
 
+    alterarStatusProcesso: async(id, status) => {
+        const res = await fetch(`${BASE_URL}/workflows/${id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
     updateWorkflow: async (id, types, terreno) => {
         await fetch(`${BASE_URL}/workflows/${id}`, {
             method: 'PUT',
@@ -416,6 +425,15 @@ export const api = {
         return { data: await res.json(), ok: res.ok };
     },
 
+    reordenarTarefas: async (ids) => {
+        const res = await fetch(`${BASE_URL}/tarefas/reordenar`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids }),
+        });
+        return { ok: res.ok };
+    },
+
     concluirTarefa: async (id, setor) => {
         const res = await fetch(`${BASE_URL}/tarefas/${id}/concluir`, {
             method: 'POST',
@@ -444,12 +462,15 @@ export const api = {
         return { data: await res.json(), ok: res.ok };
     },
 
-    abrirPastaTarefa: async (caminho) => {
-        const res = await fetch(`${BASE_URL}/tarefas/abrir-pasta`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ caminho }),
-        });
-        return { data: await res.json(), ok: res.ok };
+    // O DELETE responde 204 sem corpo quando dá certo; o motivo da recusa
+    // (ex.: parcela de boleto já emitido) só vem no corpo do erro.
+    excluirCobranca: async (id) => {
+        const res = await fetch(`${BASE_URL}/cobrancas/${id}`, { method: 'DELETE' });
+        return { ok: res.ok, data: res.ok ? null : await res.json().catch(() => null) };
+    },
+
+    excluirNotaFiscal: async (id) => {
+        const res = await fetch(`${BASE_URL}/notas-fiscais/${id}`, { method: 'DELETE' });
+        return { ok: res.ok, data: res.ok ? null : await res.json().catch(() => null) };
     },
 };

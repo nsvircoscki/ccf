@@ -9,5 +9,6 @@ router.post('/', workflowController.criar);
 router.put('/:id', workflowController.editar);
 router.put('/:id/details', workflowController.detalhes);
 router.delete('/:id', workflowController.excluir);
+router.patch('/:id/status', workflowController.alterarStatus);
 
 export default router;

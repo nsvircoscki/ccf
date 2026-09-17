@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FiClock, FiEdit, FiTrash2, FiPrinter } from 'react-icons/fi';
+import { FiClock, FiEdit, FiTrash2, FiPrinter, FiPower } from 'react-icons/fi';
 import { TicketCard } from './TicketCard';
 import { AddCard } from './AddCard';
 import { AnimatedDropdown } from './AnimatedDropdown';
@@ -34,13 +34,15 @@ export function KanbanView({
   onAbrirDetalhes,
   onImprimirProjeto
 }) {
-  const { tickets, workflows, workflowAtivo, setWorkflowAtivo, moverTicketOtimista } = kanban;
-
+  const { tickets, workflows, workflowAtivo, setWorkflowAtivo, moverTicketOtimista, alterarStatusProcessoLocal } = kanban;
+  
+  const ticketsAtivos = tickets.filter(t => t.workflow?.status !== 'SUSPENSO');
   const [filtroResponsavel, setFiltroResponsavel] = useState('Todos');
   const [buscaEtapaKanban, setBuscaEtapaKanban] = useState('');
   const [ticketArrastado, setTicketArrastado] = useState(null);
   const [modalImpressaoAberto, setModalImpressaoAberto] = useState(false);
   const [workflowImpressao, setWorkflowImpressao] = useState(null);
+  const [modalSuspensaoAberto, setModalSuspensaoAberto] = useState(false);
 
   const etapaTerm = normalize(buscaEtapaKanban.trim());
 
@@ -119,20 +121,54 @@ export function KanbanView({
                 </div>
               )}
 
-              {projeto && (
+              {workflowAtivo && (
+                <span style={{ 
+                  background: '#e0e7ff', color: '#4f46e5', padding: '6px 12px', 
+                  borderRadius: '8px', fontSize: '14px', fontWeight: 'bold' 
+                }}>
+                  {(() => {
+                    const proj = workflows.find(w => w.id === workflowAtivo);
+                    return proj ? proj.name : '';
+                  })()}
+                </span>
+              )}
+
+              {workflowAtivo && projeto && (
+                <button
+                  onClick={() => {
+                    if (projeto.status === 'SUSPENSO') {
+                      alterarStatusProcessoLocal(projeto.id, 'ATIVO');
+                    } else {
+                      setModalSuspensaoAberto(true);
+                    }
+                  }}
+                  style={{ 
+                    marginLeft: '10px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px',
+                    background: projeto.status === 'SUSPENSO' ? '#ffebee' : '#f0f0f0',
+                    color: projeto.status === 'SUSPENSO' ? '#e53935' : '#555',
+                    border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s'
+                  }}
+                  title={projeto.status === 'SUSPENSO' ? 'Reativar Processo' : 'Suspender Processo'}
+                >
+                  <FiPower size={14} />
+                  {projeto.status === 'SUSPENSO' ? 'Suspenso' : 'Desativar'}
+                </button>
+              )}
+
+              {workflowAtivo && (
                 <button
                   onClick={onAbrirDetalhes}
-                  style={{ padding: '6px 14px', background: projeto.details ? '#333' : '#EAEAEA', color: projeto.details ? '#FFF' : '#333', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                  style={{ padding: '6px 14px', background: projeto?.details ? '#333' : '#EAEAEA', color: projeto?.details ? '#FFF' : '#333', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
                 >
-                  {projeto.matricula || projeto.endereco || projeto.details ? 'Editar Informações' : '+ Informações'}
+                  {projeto?.matricula || projeto?.endereco || projeto?.details ? 'Editar Informações' : '+ Informações'}
                 </button>
               )}
             </div>
 
             {/* BARRA DE PROGRESSÃO LINEAR DO PROJETO SELECIONADO */}
             {projeto && (() => {
-              const totalProj = tickets.filter(t => t.workflowId === workflowAtivo).length;
-              const concluidasProj = tickets.filter(t => t.workflowId === workflowAtivo && (t.currentStep?.step_name || 'Iniciar') === 'Concluído').length;
+              const totalProj = ticketsAtivos.filter(t => t.workflowId === workflowAtivo).length;
+              const concluidasProj = ticketsAtivos.filter(t => t.workflowId === workflowAtivo && (t.currentStep?.step_name || 'Iniciar') === 'Concluído').length;
               const progProj = totalProj === 0 ? 0 : Math.round((concluidasProj / totalProj) * 100);
               return (
                 <div style={{ marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '400px' }}>
@@ -205,7 +241,7 @@ export function KanbanView({
               </div>
               
               <div className="scroll" style={{ padding: '15px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {tickets
+                {ticketsAtivos
                   .filter(t => t.workflowId === workflowAtivo)
                   .filter(t => {
                     const statusNome = t.currentStep?.step_name || 'Iniciar';
@@ -284,6 +320,30 @@ export function KanbanView({
                 style={{ padding: '12px 25px', borderRadius: '10px', border: 'none', background: workflowImpressao ? '#4A90E2' : '#CCC', color: 'white', cursor: workflowImpressao ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}
               >
                 Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalSuspensaoAberto && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 200 }}>
+          <div style={{ background: '#FFF', padding: '35px', borderRadius: '20px', width: '450px', boxShadow: '0px 10px 40px rgba(0,0,0,0.2)' }}>
+            <h2 style={{ margin: '0 0 15px', color: '#e53935' }}>Suspender Processo</h2>
+            <p style={{ margin: '0 0 25px', color: '#555', fontSize: '15px', lineHeight: '1.5' }}>
+              Tem certeza que deseja suspender este processo? Ele deixará de aparecer nas colunas do quadro e será movido para a aba de Suspensos.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px' }}>
+              <button onClick={() => setModalSuspensaoAberto(false)} style={{ padding: '12px 25px', borderRadius: '10px', border: 'none', background: '#F0F0F0', color: '#777', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+              <button
+                onClick={() => {
+                  alterarStatusProcessoLocal(projeto.id, 'SUSPENSO');
+                  setModalSuspensaoAberto(false);
+                }}
+                style={{ padding: '12px 25px', borderRadius: '10px', border: 'none', background: '#e53935', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                Sim, Suspender
               </button>
             </div>
           </div>

@@ -49,4 +49,13 @@ export const cobrancaController = {
       res.status(404).json({ error: error.message });
     }
   },
+  
+  async excluir(req, res) {
+    try {
+      await cobrancaService.excluir(req.params.id);
+      res.status(204).end();
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
 };

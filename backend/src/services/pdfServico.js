@@ -163,6 +163,26 @@ function resumoPagamento(servico) {
   return partes.length ? `Pagamento: ${partes.join(' + ')}.` : null;
 }
 
+// respTecn e codRespTecn guardam listas paralelas unidas por ' | ' (uma entrada
+// por confrontação — ver o array confrontacoes no Cadastro de Serviço e no
+// Orçamento). Imprimir os dois campos inteiros sairia "João | Maria (111 | 222)";
+// aqui cada nome volta a andar junto do seu código.
+function responsaveisConfronto(servico) {
+  const nomes = String(servico.respTecn || '').split(' | ');
+  const codigos = String(servico.codRespTecn || '').split(' | ');
+  const total = Math.max(nomes.length, codigos.length);
+
+  const pares = [];
+  for (let i = 0; i < total; i++) {
+    const nome = (nomes[i] || '').trim();
+    const codigo = (codigos[i] || '').trim();
+    if (!nome && !codigo) continue;
+    pares.push(`${nome || 's/ nome'} (${codigo || 's/ código'})`);
+  }
+
+  return pares.join(' | ');
+}
+
 function criarDocumento(servico) {
   return new PDFDocument({
     size: 'A4',
@@ -294,7 +314,7 @@ function desenharFicha(doc, servico, caminhoImagem) {
       : null,
     servico.confrontaCertificacao ? `Confronta com certificação: ${servico.confrontaCertificacao}` : null,
     servico.confrontaCertificacao && (servico.respTecn || servico.codRespTecn)
-      ? `Resp. técnico do confronto: ${servico.respTecn || 's/ nome'} (${servico.codRespTecn || 's/ código'})`
+      ? `Resp. técnico do confronto: ${responsaveisConfronto(servico)}`
       : null,
     pagamento,
     '',

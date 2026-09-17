@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { tarefaService } from '../services/tarefaService';
 import { servicoService } from '../services/servicoService';
 import {
@@ -51,7 +53,6 @@ const SETORES = [
 
 const PRIORIDADES = ['BAIXA', 'MEDIA', 'ALTA'];
 
-const PESO_PRIORIDADE = { ALTA: 1, MEDIA: 2, BAIXA: 3 };
 const CORES_PRIORIDADE = { BAIXA: '#16a34a', MEDIA: '#ea580c', ALTA: '#dc2626' };
 const LABEL_PRIORIDADE = { BAIXA: 'Baixa', MEDIA: 'Média', ALTA: 'Alta' };
 
@@ -228,7 +229,7 @@ function CelulaDescricao({ descricao }) {
 }
 
 // Largura fixa (tableLayout: fixed) + quebra de texto no título/descrição
-function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabrir, onExcluir, onAbrirPasta, onSalvarObservacao }) {
+function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabrir, onExcluir, onAbrirPasta, onSalvarObservacao, onReordenar }) {
   const [colWidths, setColWidths] = useState(LARGURAS_INICIAIS);
 
   const resetarLargura = (colKey) => {
@@ -302,181 +303,157 @@ function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabri
   const totalWidth = Object.values(colWidths).reduce((a, b) => a + b, 0);
 
   return (
-    <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${C.borderSoft}`, overflowX: 'auto' }}>
-      <table style={{ width: totalWidth, minWidth: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontFamily: '"Open Sans", sans-serif', fontSize: 13 }}>
-        <colgroup>
-          <col style={{ width: colWidths.pasta }} />
-          <col style={{ width: colWidths.tarefa }} />
-          <col style={{ width: colWidths.descricao }} />
-          <col style={{ width: colWidths.prioridade }} />
-          <col style={{ width: colWidths.servico }} />
-          <col style={{ width: colWidths.prazo }} />
-          <col style={{ width: colWidths.observacoes }} />
-          <col style={{ width: colWidths.acoes }} />
-        </colgroup>
-        <thead>
-          <tr style={{ textAlign: 'left', color: C.muted, fontSize: 11, textTransform: 'uppercase', background: C.bg }}>
-            <th style={{ padding: '10px 8px', width: colWidths.pasta, position: 'relative', borderRight: '1px solid rgba(226, 232, 240, 0.8)' }}>
-              <div
-                onMouseDown={(e) => iniciarRedimensionamento('pasta', e)}
-                onDoubleClick={() => resetarLargura('pasta')}
-                title="Arraste para redimensionar | Clique duplo para restaurar"
-                style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 9, cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(45, 122, 253, 0.2)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              >
-                <div style={{ width: 2, height: 14, background: '#94A3B8', borderRadius: 1 }} />
-              </div>
-            </th>
-            {renderHeader('tarefa', 'Tarefa')}
-            {renderHeader('descricao', 'Descrição')}
-            {renderHeader('prioridade', 'Prioridade')}
-            {renderHeader('servico', 'Serviço')}
-            {renderHeader('prazo', aba === 'pendentes' ? 'Prazo' : 'Concluída')}
-            {renderHeader('observacoes', 'Observações')}
-            <th style={{ padding: '10px 14px', width: colWidths.acoes }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {tarefas.map((t) => {
-            const pastaDestino = t.linkPasta || t.servico?.caminhoPasta;
-            return (
-              <tr key={t.id} style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-                <td style={{ padding: '12px 6px 12px 12px', textAlign: 'center', width: colWidths.pasta }}>
-                  {pastaDestino ? (
-                    <button
-                      type="button"
-                      onClick={() => onAbrirPasta(pastaDestino)}
-                      title={`Abrir pasta: ${pastaDestino}`}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: 28,
-                        height: 28,
-                        borderRadius: 8,
-                        border: `1.5px solid ${accent}44`,
-                        background: `${accent}12`,
-                        color: accent,
-                        cursor: 'pointer',
-                        flexShrink: 0,
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      <Icon name="folder" size={15} />
-                    </button>
-                  ) : null}
-                </td>
-                <td style={{ padding: '12px 14px', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                  <div style={{ fontWeight: 700, color: C.text, fontSize: 13.5, lineHeight: 1.3 }}>
-                    {t.titulo}
-                  </div>
-                </td>
-                <td style={{ padding: '12px 14px' }}>
-                  <CelulaDescricao descricao={t.descricao} />
-                </td>
-                <td style={{ padding: '12px 14px' }}><BadgePrioridade prioridade={t.prioridade} /></td>
-                <td style={{ padding: '12px 14px', color: C.muted, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                  {t.servico ? `${t.servico.numeroServico} — ${t.servico.nomeCliente}` : '—'}
-                </td>
-                <td style={{ padding: '12px 14px', color: C.muted, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                  {aba === 'pendentes'
-                    ? (t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : '—')
-                    : (t.concluido_em ? `${t.concluidoPor || '—'} em ${new Date(t.concluido_em).toLocaleDateString('pt-BR')}` : '—')}
-                </td>
-                <td style={{ padding: '12px 14px' }}>
-                  <CampoObservacao
-                    tarefaId={t.id}
-                    observacaoInicial={t.observacoes}
-                    onSalvarObservacao={onSalvarObservacao}
-                  />
-                </td>
-                <td style={{ padding: '12px 14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-                    {aba === 'pendentes' ? (
-                      <button
-                        type="button"
-                        onClick={() => onConcluir(t.id)}
-                        disabled={processando === t.id}
-                        title="Concluir tarefa"
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 8,
-                          border: `1.5px solid ${C.green}44`,
-                          background: '#fff',
-                          color: C.green,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: processando === t.id ? 'default' : 'pointer',
-                          opacity: processando === t.id ? 0.6 : 1,
-                          transition: 'all 0.15s ease',
-                        }}
-                      >
-                        <Icon name="check" size={16} />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => onReabrir(t.id)}
-                        disabled={processando === t.id}
-                        title="Reabrir tarefa"
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 8,
-                          border: `1.5px solid ${accent}`,
-                          background: '#fff',
-                          color: accent,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: processando === t.id ? 'default' : 'pointer',
-                          opacity: processando === t.id ? 0.6 : 1,
-                          transition: 'all 0.15s ease',
-                        }}
-                      >
-                        <Icon name="hash" size={15} />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => onExcluir(t.id)}
-                      disabled={processando === t.id}
-                      title="Excluir tarefa"
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 8,
-                        border: `1.5px solid ${C.danger}33`,
-                        background: '#fff',
-                        color: C.danger,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: processando === t.id ? 'default' : 'pointer',
-                        opacity: processando === t.id ? 0.6 : 1,
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      <Icon name="trash" size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-          {tarefas.length === 0 && (
-            <tr>
-              <td colSpan={8} style={{ padding: '20px 14px', textAlign: 'center', color: C.muted }}>
-                {aba === 'pendentes' ? 'Nenhuma tarefa pendente.' : 'Nenhuma tarefa concluída ainda.'}
-              </td>
+    <DragDropContext onDragEnd={onReordenar}>
+      <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${C.borderSoft}`, overflowX: 'auto' }}>
+        <table style={{ width: totalWidth, minWidth: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontFamily: '"Open Sans", sans-serif', fontSize: 13 }}>
+          <colgroup>
+            <col style={{ width: 32 }} />
+            <col style={{ width: colWidths.pasta }} />
+            <col style={{ width: colWidths.tarefa }} />
+            <col style={{ width: colWidths.descricao }} />
+            <col style={{ width: colWidths.prioridade }} />
+            <col style={{ width: colWidths.servico }} />
+            <col style={{ width: colWidths.prazo }} />
+            <col style={{ width: colWidths.observacoes }} />
+            <col style={{ width: colWidths.acoes }} />
+          </colgroup>
+          <thead>
+            <tr style={{ textAlign: 'left', color: C.muted, fontSize: 11, textTransform: 'uppercase', background: C.bg }}>
+              <th style={{ width: 32 }} />
+              <th style={{ padding: '10px 8px', width: colWidths.pasta, position: 'relative', borderRight: '1px solid rgba(226, 232, 240, 0.8)' }}>
+                <div
+                  onMouseDown={(e) => iniciarRedimensionamento('pasta', e)}
+                  onDoubleClick={() => resetarLargura('pasta')}
+                  title="Arraste para redimensionar | Clique duplo para restaurar"
+                  style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 9, cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(45, 122, 253, 0.2)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <div style={{ width: 2, height: 14, background: '#94A3B8', borderRadius: 1 }} />
+                </div>
+              </th>
+              {renderHeader('tarefa', 'Tarefa')}
+              {renderHeader('descricao', 'Descrição')}
+              {renderHeader('prioridade', 'Prioridade')}
+              {renderHeader('servico', 'Serviço')}
+              {renderHeader('prazo', aba === 'pendentes' ? 'Prazo' : 'Concluída')}
+              {renderHeader('observacoes', 'Observações')}
+              <th style={{ padding: '10px 14px', width: colWidths.acoes }} />
             </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+
+          <Droppable droppableId="tarefas">
+            {(provided) => (
+              <tbody ref={provided.innerRef} {...provided.droppableProps}>
+                {tarefas.map((t, index) => {
+                  const pastaDestino = t.linkPasta || t.servico?.caminhoPasta;
+                  return (
+                    <Draggable key={t.id} draggableId={String(t.id)} index={index}>
+                      {(provided, snapshot) => {
+                        const row = (
+                          <tr
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            style={{
+                              borderTop: `1px solid ${C.borderSoft}`,
+                              cursor: 'grab',
+                              display: snapshot.isDragging ? 'table' : undefined,
+                              background: snapshot.isDragging ? '#fff' : undefined,
+                              boxShadow: snapshot.isDragging ? '0 6px 24px rgba(0,0,0,0.13)' : undefined,
+                              borderRadius: snapshot.isDragging ? 10 : undefined,
+                              ...provided.draggableProps.style,
+                            }}
+                          >
+                            <td
+                              title="Arraste para reordenar"
+                              style={{ padding: '12px 6px', textAlign: 'center', color: C.muted, fontSize: 14, userSelect: 'none', width: 32 }}
+                            >
+                              {'||'}
+                            </td>
+                            <td style={{ padding: '12px 6px 12px 12px', textAlign: 'center', width: colWidths.pasta }}>
+                              {pastaDestino ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onAbrirPasta(pastaDestino)}
+                                  title={`Abrir pasta: ${pastaDestino}`}
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 28, height: 28, borderRadius: 8,
+                                    border: `1.5px solid ${accent}44`, background: `${accent}12`,
+                                    color: accent, cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s ease',
+                                  }}
+                                >
+                                  <Icon name="folder" size={15} />
+                                </button>
+                              ) : null}
+                            </td>
+                            <td style={{ padding: '12px 14px', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                              <div style={{ fontWeight: 700, color: C.text, fontSize: 13.5, lineHeight: 1.3 }}>{t.titulo}</div>
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <CelulaDescricao descricao={t.descricao} />
+                            </td>
+                            <td style={{ padding: '12px 14px' }}><BadgePrioridade prioridade={t.prioridade} /></td>
+                            <td style={{ padding: '12px 14px', color: C.muted, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                              {t.servico ? `${t.servico.numeroServico} \u2014 ${t.servico.nomeCliente}` : '\u2014'}
+                            </td>
+                            <td style={{ padding: '12px 14px', color: C.muted, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                              {aba === 'pendentes'
+                                ? (t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : '\u2014')
+                                : (t.concluido_em ? `${t.concluidoPor || '\u2014'} em ${new Date(t.concluido_em).toLocaleDateString('pt-BR')}` : '\u2014')}
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <CampoObservacao
+                                tarefaId={t.id}
+                                observacaoInicial={t.observacoes}
+                                onSalvarObservacao={onSalvarObservacao}
+                              />
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                                {aba === 'pendentes' ? (
+                                  <button type="button" onClick={() => onConcluir(t.id)} disabled={processando === t.id} title="Concluir tarefa"
+                                    style={{ width: 32, height: 32, borderRadius: 8, border: `1.5px solid ${C.green}44`, background: '#fff', color: C.green, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: processando === t.id ? 'default' : 'pointer', opacity: processando === t.id ? 0.6 : 1, transition: 'all 0.15s ease' }}>
+                                    <Icon name="check" size={16} />
+                                  </button>
+                                ) : (
+                                  <button type="button" onClick={() => onReabrir(t.id)} disabled={processando === t.id} title="Reabrir tarefa"
+                                    style={{ width: 32, height: 32, borderRadius: 8, border: `1.5px solid ${accent}`, background: '#fff', color: accent, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: processando === t.id ? 'default' : 'pointer', opacity: processando === t.id ? 0.6 : 1, transition: 'all 0.15s ease' }}>
+                                    <Icon name="hash" size={15} />
+                                  </button>
+                                )}
+                                <button type="button" onClick={() => onExcluir(t.id)} disabled={processando === t.id} title="Excluir tarefa"
+                                  style={{ width: 32, height: 32, borderRadius: 8, border: `1.5px solid ${C.danger}33`, background: '#fff', color: C.danger, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: processando === t.id ? 'default' : 'pointer', opacity: processando === t.id ? 0.6 : 1, transition: 'all 0.15s ease' }}>
+                                  <Icon name="trash" size={16} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+
+                        return snapshot.isDragging
+                          ? ReactDOM.createPortal(row, document.body)
+                          : row;
+                      }}
+                    </Draggable>
+                  );
+                })}
+                {provided.placeholder}
+                {tarefas.length === 0 && (
+                  <tr>
+                    <td colSpan={9} style={{ padding: '20px 14px', textAlign: 'center', color: C.muted }}>
+                      {aba === 'pendentes' ? 'Nenhuma tarefa pendente.' : 'Nenhuma tarefa concluída ainda.'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            )}
+          </Droppable>
+
+        </table>
+      </div>
+    </DragDropContext>
   );
 }
 
@@ -494,6 +471,7 @@ export default function TarefasView({ onBack, usuarioLogado }) {
   const [aba, setAba] = useState('pendentes'); // 'pendentes' | 'concluidas'
   const [tarefas, setTarefas] = useState([]);
   const [tarefaParaExcluir, setTarefaParaExcluir] = useState(null);
+  const reorderingRef = useRef(false); // bloqueia o interval durante/após reordenamento
 
   useEffect(() => {
     servicoService.listarTodos()
@@ -502,6 +480,7 @@ export default function TarefasView({ onBack, usuarioLogado }) {
   }, []);
 
   const carregarTarefas = async () => {
+    if (reorderingRef.current) return; // não sobrescreve se acabou de reordenar
     try {
       const filtros = { status: aba === 'pendentes' ? 'PENDENTE' : 'CONCLUIDA' };
       if (setorFiltro !== 'TODOS') {
@@ -509,12 +488,7 @@ export default function TarefasView({ onBack, usuarioLogado }) {
       }
       const lista = await tarefaService.listar(filtros);
       if (Array.isArray(lista)) {
-        const ordenadas = [...lista].sort((a, b) => {
-          const pesoA = PESO_PRIORIDADE[a.prioridade] || 99;
-          const pesoB = PESO_PRIORIDADE[b.prioridade] || 99;
-          if (pesoA !== pesoB) return pesoA - pesoB;
-          return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-        });
+        const ordenadas = [...lista].sort((a, b) => a.ordem - b.ordem);
         setTarefas(ordenadas);
       }
     } catch (erro) {
@@ -611,24 +585,37 @@ export default function TarefasView({ onBack, usuarioLogado }) {
     }
   };
 
+  const handleReordenar = async (result) => {
+    if (!result.destination) return;
+    if (result.source.index === result.destination.index) return;
+
+    const novaOrdem = [...tarefas];
+    const [removida] = novaOrdem.splice(result.source.index, 1);
+    novaOrdem.splice(result.destination.index, 0, removida);
+    setTarefas(novaOrdem);
+
+    reorderingRef.current = true; // pausa o interval
+    const ids = novaOrdem.map(t => t.id);
+    try {
+      const res = await tarefaService.reordenar(ids);
+      if (!res || !res.ok) show('Não foi possível salvar a nova ordem.', 'err');
+    } catch (e) {
+      console.error('Erro ao salvar ordem:', e);
+      show('Não foi possível salvar a nova ordem.', 'err');
+    } finally {
+      // libera o interval 2s depois, tempo suficiente para o banco confirmar
+      setTimeout(() => { reorderingRef.current = false; }, 2000);
+    }
+  };
+
+  // Só copia o caminho: quem abre a pasta é o usuário, no Explorador da própria
+  // máquina. Abrir pelo backend abriria a pasta no servidor, não no PC de quem
+  // clicou — e o navegador bloqueia navegação file:// vinda de uma página http.
   const abrirPasta = async (caminho) => {
     if (!caminho) return;
 
-    // 1. Copia o caminho para a área de transferência com fallback robusto
     const copiado = await copiarParaAreaDeTransferencia(caminho);
 
-    // 2. Chama o backend para abrir a pasta diretamente no Windows Explorer
-    try {
-      const res = await tarefaService.abrirPasta(caminho);
-      if (res && res.ok) {
-        show(copiado ? 'Pasta aberta no Windows Explorer e caminho copiado!' : 'Pasta aberta no Windows Explorer!', 'ok');
-        return;
-      }
-    } catch (e) {
-      console.warn('Erro ao abrir pasta via backend:', e);
-    }
-
-    // 3. Fallback se não for possível abrir no backend
     if (copiado) {
       show('Caminho copiado com sucesso! Pressione Win+E e cole no Explorador de Arquivos.', 'ok');
     } else {
@@ -726,6 +713,7 @@ export default function TarefasView({ onBack, usuarioLogado }) {
             onExcluir={setTarefaParaExcluir}
             onAbrirPasta={abrirPasta}
             onSalvarObservacao={salvarObservacao}
+            onReordenar={handleReordenar}
           />
         </>
       )}

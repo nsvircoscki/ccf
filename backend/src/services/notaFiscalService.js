@@ -13,6 +13,13 @@ function pastaNotas() {
   return caminho;
 }
 
+async function excluir(id) {
+  const nota = await prisma.notaFiscal.findUnique({ where: { id } });
+  if (!nota) throw new Error('Nota fiscal não encontrada.');
+  if (nota.status === 'EMITIDO') throw new Error('Não é possível excluir uma nota já emitida.');
+  await prisma.notaFiscal.delete({ where: { id } });
+}
+
 async function listar({ status, servicoId } = {}) {
   return prisma.notaFiscal.findMany({
     where: {
@@ -107,4 +114,4 @@ async function caminhoArquivoPdf(id) {
   return { caminho: notaFiscal.caminhoPdf, nome: `nf-${id}.pdf` };
 }
 
-export const notaFiscalService = { listar, criar, emitir, tentarBaixarPdf, caminhoArquivoPdf };
+export const notaFiscalService = { listar, criar, emitir, tentarBaixarPdf, caminhoArquivoPdf, excluir };

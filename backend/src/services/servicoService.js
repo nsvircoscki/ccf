@@ -32,6 +32,14 @@ const MAPA_TIPOS_ABREVIADOS = {
   'Cad': 'Cadastral',
   'Loc': 'Locação',
   'Mov de Terra': 'Movimentação de Terra',
+  'Altim': 'Altimetria',
+  'DANC': 'DANC',
+  // O frontend grava 'Rel. Usu' (com espaço); 'Rel.Usu' fica por compatibilidade
+  // com registros antigos. Sem a chave certa, mapearTiposSolicitados descarta o
+  // tipo em silêncio (.filter(Boolean)) e o projeto nunca é criado no Kanban.
+  'Rel. Usu': 'Relatório de Usucapião',
+  'Rel.Usu': 'Relatório de Usucapião',
+  'CCIR/ITR' : 'CCIR/ITR',
   // Mapeia para si mesmo: precisa entrar em tiposSolicitados para aparecer na
   // ficha em PDF, mesmo sem virar projeto no Kanban (não há tipo "Outros"
   // cadastrado em TipoProcessoEtapa — ver o filtro antes de fabricarProjeto,
@@ -547,8 +555,6 @@ export const servicoService = {
       };
     }
 
-    if (servico.statusOrcamento === "APROVADO") throw new Error("Este orçamento já foi aprovado.");
-
     // Os tipos que viram projeto vêm do orçamento (itensOrcamento.selecionado),
     // não de tiposSolicitados — esse último fica travado no que foi marcado no
     // cadastro e não acompanha o que o usuário de fato selecionou/ajustou na
@@ -562,31 +568,67 @@ export const servicoService = {
 
     const [ano, sequencialGlobal] = servico.numeroServico.split('-');
 
+    // Se já aprovado, só fabrica projetos para tipos que ainda NÃO têm workflow.
+    // Isso permite adicionar novos serviços ao orçamento após a aprovação inicial
+    // sem duplicar projetos que já existem no Kanban.
+    // Workflow não guarda o tipo num campo próprio: fabricarProjeto grava
+    // types.join(', ') em description (ver workflowService.js). É de lá que os
+    // tipos já fabricados precisam ser lidos — usar um campo inexistente faria
+    // o Set virar {undefined} e reaprovar duplicaria todos os projetos.
+    const tiposJaExistentes = new Set(
+      servico.workflows.flatMap((w) => (w.description || '').split(', ').map((t) => t.trim()).filter(Boolean))
+    );
+    const tiposNovos = servico.statusOrcamento === 'APROVADO'
+      ? tiposParaFabricar.filter((t) => !tiposJaExistentes.has(t))
+      : tiposParaFabricar;
+
+    if (servico.statusOrcamento === 'APROVADO' && tiposNovos.length === 0) {
+      // Nenhum tipo novo selecionado — apenas atualiza os dados do serviço
+      const atualizado = await prisma.servico.update({
+        where: { id: servicoId },
+        data: { statusOrcamento: 'APROVADO' },
+      });
+      return {
+        message: 'Orçamento atualizado. Nenhum projeto novo (serviços já existiam no Kanban).',
+        servico: atualizado,
+        projetos: [],
+      };
+    }
+
+    // Calcula o próximo número de sequência de processo para não sobrescrever
+    // os que já existem (ex.: se já há 2 workflows, o novo começa em 3).
+    const proximoNumero = servico.workflows.length;
+
     const { servicoAprovado, projetosGerados } = await prisma.$transaction(async (tx) => {
       const gerados = [];
+      const temRetificacao = tiposNovos.includes('Retificação');
 
-      for (let i = 0; i < tiposParaFabricar.length; i++) {
-        const tipoProcesso = tiposParaFabricar[i];
-        const numeroDoProcesso = i + 1;
+      for (let i = 0; i < tiposNovos.length; i++) {
+        const tipoProcesso = tiposNovos[i];
+        const numeroDoProcesso = proximoNumero + i + 1;
         const nomeProjeto = `${ano}-${sequencialGlobal}-${numeroDoProcesso}`;
+        const removerDossie = temRetificacao && tipoProcesso !== 'Retificação';
         const projeto = await workflowService.fabricarProjeto(
-          nomeProjeto, [tipoProcesso], servico.terreno || 'Urbano', servico.id, servico.matricula, tx,
+          nomeProjeto, [tipoProcesso], servico.terreno || 'Urbano', servico.id, servico.matricula, tx, removerDossie
         );
         gerados.push(projeto);
       }
 
       const atualizado = await tx.servico.update({
         where: { id: servicoId },
-        data: { statusOrcamento: "APROVADO" }
+        data: { statusOrcamento: 'APROVADO' },
       });
 
       return { servicoAprovado: atualizado, projetosGerados: gerados };
     }, { timeout: 30000 });
 
+    const jaAprovado = servico.statusOrcamento === 'APROVADO';
     return {
-      message: `Orçamento aprovado! ${projetosGerados.length} projeto(s) no Kanban.`,
+      message: jaAprovado
+        ? `${projetosGerados.length} novo(s) projeto(s) adicionado(s) ao Kanban!`
+        : `Orçamento aprovado! ${projetosGerados.length} projeto(s) no Kanban.`,
       servico: servicoAprovado,
-      projetos: projetosGerados
+      projetos: projetosGerados,
     };
   }
 };

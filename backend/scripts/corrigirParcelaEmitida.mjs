@@ -6,6 +6,9 @@
 // verdade no banco — confirmado via scripts/consultarCobrancasInter.mjs — e
 // NÃO chama a API do Inter (não cria nada, não duplica nada).
 //
+// Os IDs abaixo são desse caso específico; não reaproveite o script pra outra
+// parcela sem trocá-los.
+//
 // Rode no servidor de produção, dentro de backend/:
 //   node scripts/corrigirParcelaEmitida.mjs
 import 'dotenv/config';

@@ -33,7 +33,7 @@ export const imovelService = {
     const imovel = await prisma.imovel.findUnique({ where: { id } });
     if (!imovel) throw new Error('Imóvel não encontrado.');
 
-    const { idsProprietarios, idsUsufrutuarios, ...data } = await montarDados(dados);
+    const { idsProprietarios, idsUsufrutuarios, ...data } = await montarDados(dados, id);
     await cartorioService.salvar(data.cns, { cartorio: data.cartorio, comarca: data.comarca });
     return prisma.imovel.update({
       where: { id },
@@ -68,7 +68,7 @@ function parseArea(valor) {
 // proprietarioIds/usufrutuarioIds: tanto o imóvel quanto o usufruto sobre ele
 // podem ter mais de uma pessoa (casal, herdeiros em condomínio...) — todos
 // entram na qualificação dos documentos.
-async function montarDados(dados) {
+async function montarDados(dados, idImovelAtual = null) {
   const {
     proprietarioIds, cartorio, matricula, cns, incra, cib, logradouro, municipio, estado, area, descricao,
     tipoTitulo, comarca, zoneamento, usufruto, usufrutuarioIds,
@@ -93,6 +93,29 @@ async function montarDados(dados) {
     }
   }
   const idsUsufrutuarios = usufruto ? idsUsufrutuariosBrutos : [];
+
+  // Verificação de duplicidade: checa se já existe imóvel com a mesma Matrícula no mesmo Cartório/CNS
+  const matriculaLimpa = matricula ? String(matricula).trim() : '';
+  const cnsLimpo = cns ? String(cns).trim() : '';
+  const cartorioLimpo = cartorio ? String(cartorio).trim() : '';
+
+  if (matriculaLimpa && (cnsLimpo || cartorioLimpo)) {
+    const condicoesOR = [];
+    if (cnsLimpo) condicoesOR.push({ cns: cnsLimpo });
+    if (cartorioLimpo) condicoesOR.push({ cartorio: cartorioLimpo });
+
+    const imovelExistente = await prisma.imovel.findFirst({
+      where: {
+        matricula: matriculaLimpa,
+        OR: condicoesOR,
+        ...(idImovelAtual ? { NOT: { id: idImovelAtual } } : {}),
+      },
+    });
+
+    if (imovelExistente) {
+      throw new Error(`Já existe um imóvel cadastrado com a Matrícula ${matriculaLimpa} neste cartório.`);
+    }
+  }
 
   return {
     idsProprietarios,

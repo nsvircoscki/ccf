@@ -23,6 +23,16 @@ export const tarefaController = {
     }
   },
 
+  async reordenar(req, res) {
+    try {
+      const { ids } = req.body;
+      await tarefaService.reordenar(ids);
+      res.status(200).json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
   async atualizarObservacao(req, res) {
     try {
       const tarefa = await tarefaService.atualizarObservacao(req.params.id, req.body.observacoes);
@@ -56,27 +66,6 @@ export const tarefaController = {
       res.status(204).send();
     } catch (error) {
       res.status(404).json({ error: error.message });
-    }
-  },
-
-  async abrirPasta(req, res) {
-    try {
-      const { caminho } = req.body;
-      if (!caminho) return res.status(400).json({ error: 'Caminho não informado.' });
-
-      const { exec } = await import('child_process');
-      const command = process.platform === 'win32' ? `start "" "${caminho}"` : `open "${caminho}"`;
-
-      exec(command, (err) => {
-        if (err) {
-          console.error('Erro ao abrir pasta:', err);
-          return res.status(500).json({ error: 'Não foi possível abrir a pasta automaticamente.' });
-        }
-        res.json({ ok: true });
-      });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'Erro interno ao abrir a pasta.' });
     }
   },
 };

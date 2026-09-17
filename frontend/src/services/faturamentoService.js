@@ -9,6 +9,12 @@ export const faturamentoService = {
   async criarCobranca(dados) {
     return api.criarCobranca(dados);
   },
+  async excluirCobranca(id) {
+    return api.excluirCobranca(id);
+  },
+  async excluirNotaFiscal(id) {
+    return api.excluirNotaFiscal(id);
+  },
   async emitirParcelaCobranca(cobrancaId, numeroParcela) {
     return api.emitirParcelaCobranca(cobrancaId, numeroParcela);
   },

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { FiSearch, FiList, FiTrello, FiX, FiBriefcase } from 'react-icons/fi';
+import { FiSearch, FiList, FiTrello, FiX, FiBriefcase, FiPower } from 'react-icons/fi';
 import { AnimatedDropdown } from './AnimatedDropdown';
 import { servicoService } from '../services/servicoService';
 
-const TIPOS_PROCESSO = ["Retificação", "Desmembramento", "Unificação", "Usucapião", "Alteração de Divisas", "CAR", "Certificação INCRA", "Escritura", "Conferência", "Cadastral", "Locação", "Movimentação de Terra", "Danc"];
+const TIPOS_PROCESSO = ["Retificação", "Desmembramento", "Unificação", "Usucapião", "Alteração de Divisas", "CAR", "Certificação INCRA", "Escritura", "Conferência", "Cadastral", "Locação", "Movimentação de Terra", "Extremação", "Altimetria", "DANC", "Relatório de Usucapião", "CCIR/ITR"];
 
 // Mesmo mapa usado no Orçamento/Cadastro de Serviço — aqui serve só pra
 // mostrar o tipo de forma compacta nos resultados da busca.
@@ -20,8 +20,12 @@ const SIGLA_POR_TIPO = {
   'Cadastral': 'Cad',
   'Locação': 'Loc',
   'Movimentação de Terra': 'Mov de Terra',
-  'Outros': 'Outros',
   'Extremação': 'Ext',
+  'Altimetria': 'Altim',
+  'DANC': 'DANC',
+  'Relatório de Usucapião': 'Rel. Usu',
+  'CCIR/ITR': 'CCIR/ITR',
+  'Outros': 'Outros',
 };
 
 const siglasDoTipo = (description) =>
@@ -29,7 +33,7 @@ const siglasDoTipo = (description) =>
     .split(',')
     .map(s => s.trim())
     .filter(Boolean)
-    .map(tipo => SIGLA_POR_TIPO[tipo] || tipo)
+    .map(tipo => (SIGLA_POR_TIPO[tipo] || tipo).toUpperCase())
     .join(', ');
 
 const getCorStatus = (status) => {
@@ -49,10 +53,9 @@ const contarEtapas = (projeto) =>
     return acc;
   }, {});
 
-// Um anel por etapa. Iniciar/Em Andamento recebem "total" já sem as tarefas
-// concluídas (ver totalAtivasGlobal), então os dois somam 100% entre si;
-// Concluído recebe o total geral, porque a dele é a taxa de conclusão
-// histórica, não uma fatia do que ainda está ativo.
+// Um anel por etapa, os três sobre o MESMO total (ver totalTarefas): como cada
+// tarefa está em exatamente uma das três colunas, as porcentagens são fatias de
+// um só bolo e somam 100%.
 function CardEtapaGlobal({ label, cor, count, total }) {
   const percentual = total === 0 ? 0 : Math.round((count / total) * 100);
   const raio = 36;
@@ -93,7 +96,7 @@ export function PesquisaView({
   setTelaAtiva,
   onAbrirAuditoria,
 }) {
-  const { tickets, workflows, setWorkflowAtivo } = kanban;
+  const { tickets, workflows, setWorkflowAtivo, alterarStatusProcessoLocal } = kanban;
 
   // Tudo abaixo persiste em localStorage — a tela é desmontada toda vez que
   // o usuário troca de aba (App.jsx só renderiza com `telaAtiva === 'dashboard'`),
@@ -110,6 +113,7 @@ export function PesquisaView({
   // etapas do próprio setor de quem estiver logado, sem perder a visão geral
   // (fica só um clique de distância).
   const [somenteMinhasEtapas, setSomenteMinhasEtapas] = useState(() => localStorage.getItem('pesquisa:somenteMinhasEtapas') === 'true');
+  const [modalSuspensao, setModalSuspensao] = useState(null); // null | { id, nome, acao: 'SUSPENSO'|'ATIVO' }
   // Lista completa de Serviço (tabela Servico, não os projetos do Kanban
   // usados no restante desta tela) — guarda a lista, não só o total, porque o
   // contador exibido precisa descontar os serviços já inativados (ver
@@ -158,19 +162,13 @@ export function PesquisaView({
 
   const etapaTerm = normalize(buscaEtapa.trim());
 
-  // "Minhas Etapas" restringe às tarefas do próprio setor do usuário logado —
-  // mesmo toggle pra todo mundo agora, não só o ENG. Sem o toggle, cada
-  // usuário via só as próprias etapas sem opção de ver o resto.
-  let tarefas = tickets;
-  if (somenteMinhasEtapas) {
-    tarefas = tarefas.filter(t => (t.currentStep?.requiredRole?.name || 'CRD') === usuarioLogado);
-  }
-
-  // Agrupamento por projeto ANTES de filtrar por status/tipo/etapa — cada
-  // projeto precisa manter a lista completa de tarefas (dentro do escopo do
-  // usuário) pra progresso e setores baterem certo, mesmo quando o filtro só
-  // combina com parte dos setores dele.
-  const todosProjetos = tarefas.reduce((acc, ticket) => {
+  // O agrupamento usa SEMPRE todos os tickets, nunca a lista já filtrada por
+  // setor. Filtrar antes fazia statusDoProjeto enxergar só as etapas do setor
+  // logado e concluir que o projeto inteiro tinha acabado quando só aquele
+  // setor tinha — o projeto sumia da aba Ativos e ainda distorcia os cards
+  // globais. Cada projeto carrega as duas listas: a completa (verdade sobre o
+  // projeto) e a do setor do usuário (base das contagens quando ele pede).
+  const todosProjetos = tickets.reduce((acc, ticket) => {
     if (!ticket.workflow) return acc;
     let projeto = acc.find(p => p.id === ticket.workflowId);
     if (!projeto) {
@@ -180,13 +178,22 @@ export function PesquisaView({
         description: ticket.workflow.description,
         matricula: ticket.workflow.matricula,
         nomeCliente: ticket.workflow.servico?.nomeCliente,
+        status: ticket.workflow.status || 'ATIVO',
         tasks: [],
+        minhasTasks: [],
       };
       acc.push(projeto);
     }
     projeto.tasks.push(ticket);
+    if ((ticket.currentStep?.requiredRole?.name || 'CRD') === usuarioLogado) {
+      projeto.minhasTasks.push(ticket);
+    }
     return acc;
   }, []);
+
+  // "Minhas Etapas" é escopo de CONTAGEM: muda o que as porcentagens somam,
+  // nunca quais projetos existem nem se o projeto está concluído.
+  const tarefasNoEscopo = (projeto) => (somenteMinhasEtapas ? projeto.minhasTasks : projeto.tasks);
 
   // Status do PROJETO como um todo, não de uma etapa isolada: só "Concluído"
   // se todos os setores terminaram, só "Iniciar" se nenhum começou — qualquer
@@ -225,9 +232,16 @@ export function PesquisaView({
   // Aba "Ativos": projetos com pelo menos uma etapa não concluída. Aba
   // "Inativos": só os 100% Concluído — assim que a última etapa fecha, o
   // projeto some da busca principal e só aparece ali.
-  let projetos = todosProjetos.filter(p => (
-    abaProjetos === 'inativos' ? statusDoProjeto(p) === 'Concluído' : statusDoProjeto(p) !== 'Concluído'
-  ));
+  let projetos = todosProjetos.filter(p => {
+    if (abaProjetos === 'suspensos') return p.status === 'SUSPENSO';
+    if (abaProjetos === 'inativos') return statusDoProjeto(p) === 'Concluído' && p.status !== 'SUSPENSO';
+    return statusDoProjeto(p) !== 'Concluído' && p.status !== 'SUSPENSO';
+  });
+  // Projeto sem nenhuma etapa do seu setor não interessa no modo "Minhas
+  // Etapas" — antes ele sumia por efeito colateral do filtro nos tickets.
+  if (somenteMinhasEtapas) {
+    projetos = projetos.filter(p => p.minhasTasks.length > 0);
+  }
   if (abaProjetos === 'ativos' && filtroStatus !== 'Todas') {
     projetos = projetos.filter(p => statusDoProjeto(p) === filtroStatus);
   }
@@ -239,7 +253,7 @@ export function PesquisaView({
   // selecionaram — senão um projeto aparecia pela etapa buscada mesmo com
   // ela já concluída (ou fora do Iniciar/Em Andamento escolhido ao lado).
   if (etapaTerm !== '') {
-    projetos = projetos.filter(p => p.tasks.some(t => {
+    projetos = projetos.filter(p => tarefasNoEscopo(p).some(t => {
       if (!normalize(t.title).includes(etapaTerm)) return false;
       const statusDaTarefa = t.currentStep?.step_name || 'Iniciar';
       if (abaProjetos === 'inativos') return statusDaTarefa === 'Concluído';
@@ -248,23 +262,22 @@ export function PesquisaView({
     }));
   }
 
-  // Progresso global: só sobre projetos Ativos, independente da aba/filtro
-  // que a pessoa escolheu ver — projeto que já foi pra Inativos (100%
-  // Concluído) não entra na conta nenhuma das três, senão "Concluído" fica
-  // inflado por trabalho antigo e arquivado em vez de refletir o que está em
-  // andamento agora. Cada tarefa tem exatamente um step_name, então as três
-  // nunca se sobrepõem entre si.
-  const projetosAtivosGlobal = todosProjetos.filter(p => statusDoProjeto(p) !== 'Concluído');
-  const tarefasGlobais = projetosAtivosGlobal.flatMap(p => p.tasks);
+  // Progresso global: sempre sobre os projetos em andamento (nem Concluído nem
+  // Suspenso), independente da aba e dos filtros que a pessoa escolheu ver.
+  // Projeto arquivado não entra, senão "Concluído" ficaria inflado por trabalho
+  // antigo em vez de refletir o que está em andamento agora.
+  //
+  // Os TRÊS dividem pelo MESMO total. Cada tarefa tem exatamente um step_name
+  // entre os três, então as porcentagens são fatias de um só bolo e somam 100%
+  // — que é como três anéis idênticos lado a lado pedem pra ser lidos. Antes
+  // Iniciar/Em Andamento dividiam por um total e Concluído por outro, e os três
+  // somavam 135%.
+  const projetosAtivosGlobal = todosProjetos.filter(p => statusDoProjeto(p) !== 'Concluído' && p.status !== 'SUSPENSO');
+  const tarefasGlobais = projetosAtivosGlobal.flatMap(tarefasNoEscopo);
   const totalTarefas = tarefasGlobais.length;
   const iniciarGlobal = tarefasGlobais.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Iniciar').length;
   const andamentoGlobal = tarefasGlobais.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Em Andamento').length;
   const concluidasGlobal = tarefasGlobais.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Concluído').length;
-  // Iniciar/Em Andamento têm que somar 100% ENTRE ELAS, não junto com quem já
-  // terminou — senão a % de "Iniciar" fica artificialmente alta só porque o
-  // total inclui tarefa concluída há meses. Concluído continua sobre o total
-  // geral (é a taxa de conclusão histórica, não faz sentido excluir a si mesma).
-  const totalAtivasGlobal = totalTarefas - concluidasGlobal;
 
   const q = query.trim().toLowerCase();
   const resultados = q
@@ -275,11 +288,22 @@ export function PesquisaView({
     : projetos;
 
   const ativo = resultados.find(p => p.id === selectedId) || resultados[0] || null;
+  // O painel de detalhe fala do PROJETO: progresso, total de tarefas, setores e
+  // contadores saem sempre da lista completa, mesmo em "Minhas Etapas" — senão
+  // a barra rotulada "Progresso do Projeto" marcaria 100% com o projeto longe
+  // de acabar, só porque o seu setor terminou a parte dele.
   const etapasAtivo = ativo ? contarEtapas(ativo) : null;
   const totalAtivo = ativo ? ativo.tasks.length : 0;
   const concluidasAtivo = etapasAtivo ? etapasAtivo['Concluído'] : 0;
   const progressoAtivo = totalAtivo === 0 ? 0 : Math.round((concluidasAtivo / totalAtivo) * 100);
   const setoresAtivo = ativo ? [...new Set(ativo.tasks.map(t => t.currentStep?.requiredRole?.name || 'CRD'))] : [];
+
+  // O avanço só das suas etapas ganha barra própria, ao lado da do projeto.
+  const totalMinhas = ativo ? ativo.minhasTasks.length : 0;
+  const concluidasMinhas = ativo
+    ? ativo.minhasTasks.filter(t => (t.currentStep?.step_name || 'Iniciar') === 'Concluído').length
+    : 0;
+  const progressoMinhas = totalMinhas === 0 ? 0 : Math.round((concluidasMinhas / totalMinhas) * 100);
 
   // Sem "Concluído"/"Pendentes" aqui — quem já concluiu 100% foi pra aba
   // Inativos (abaProjetos), então dentro de Ativos só cabe Iniciar/Andamento.
@@ -299,6 +323,9 @@ export function PesquisaView({
           <div>
             <h1 style={{ margin: '0 0 8px 0', color: '#333', fontSize: '32px' }}>Pesquisar Serviços</h1>
             <p style={{ margin: 0, color: '#777' }}>Busque por matrícula, cliente, projeto ou etapa.</p>
+            <p style={{ margin: '6px 0 0', color: '#9aabcc', fontSize: '12.5px' }}>
+              Os três anéis somam 100% e contam {somenteMinhasEtapas ? `as etapas do setor ${usuarioLogado}` : 'todas as etapas'} dos projetos em andamento.
+            </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
@@ -364,8 +391,8 @@ export function PesquisaView({
               </div>
             </div>
 
-            <CardEtapaGlobal label="Iniciar" cor={getCorStatus('Iniciar')} count={iniciarGlobal} total={totalAtivasGlobal} />
-            <CardEtapaGlobal label="Em Andamento" cor={getCorStatus('Em Andamento')} count={andamentoGlobal} total={totalAtivasGlobal} />
+            <CardEtapaGlobal label="Iniciar" cor={getCorStatus('Iniciar')} count={iniciarGlobal} total={totalTarefas} />
+            <CardEtapaGlobal label="Em Andamento" cor={getCorStatus('Em Andamento')} count={andamentoGlobal} total={totalTarefas} />
             <CardEtapaGlobal label="Concluído" cor={getCorStatus('Concluído')} count={concluidasGlobal} total={totalTarefas} />
           </div>
         </div>
@@ -387,8 +414,7 @@ export function PesquisaView({
           </button>
           <button
             type="button"
-            onClick={() => { setAbaProjetos('inativos'); setSelectedId(null); }}
-            title="Projetos com todas as etapas concluídas"
+            onClick={() => { setAbaProjetos('inativos'); setFiltroStatus('Todas'); setSelectedId(null); }}
             style={{
               padding: '8px 18px', borderRadius: '16px', border: 'none', cursor: 'pointer',
               fontWeight: 'bold', fontSize: '13px',
@@ -398,6 +424,19 @@ export function PesquisaView({
             }}
           >
             Inativos
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAbaProjetos('suspensos'); setFiltroStatus('Todas'); setSelectedId(null); }}
+            style={{
+              padding: '8px 18px', borderRadius: '16px', border: 'none', cursor: 'pointer',
+              fontWeight: 'bold', fontSize: '13px',
+              background: abaProjetos === 'suspensos' ? '#e53935' : 'transparent',
+              color: abaProjetos === 'suspensos' ? '#FFF' : '#787373',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            Suspensos
           </button>
         </div>
 
@@ -534,15 +573,31 @@ export function PesquisaView({
                 </div>
 
                 <div style={{ padding: '28px 32px' }}>
-                  {/* Barra de progresso do projeto selecionado */}
-                  <div style={{ marginBottom: '26px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 'bold', color: '#555', marginBottom: '6px' }}>
-                      <span>Progresso do Projeto</span>
-                      <span style={{ color: progressoAtivo === 100 ? '#22C55E' : '#1a3a8a' }}>{progressoAtivo}%</span>
+                  {/* Progresso do projeto inteiro e, logo abaixo, o das etapas
+                      do setor de quem está logado — dois números diferentes que
+                      antes eram o mesmo (e por isso enganavam). */}
+                  <div style={{ marginBottom: '26px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 'bold', color: '#555', marginBottom: '6px' }}>
+                        <span>Progresso do Projeto <span style={{ color: '#9aabcc', fontWeight: 600 }}>({concluidasAtivo} de {totalAtivo})</span></span>
+                        <span style={{ color: progressoAtivo === 100 ? '#22C55E' : '#1a3a8a' }}>{progressoAtivo}%</span>
+                      </div>
+                      <div style={{ width: '100%', height: '10px', background: '#EEF2F8', borderRadius: '10px', overflow: 'hidden' }}>
+                        <div style={{ width: `${progressoAtivo}%`, height: '100%', background: progressoAtivo === 100 ? '#22C55E' : 'linear-gradient(90deg, #1a3a8a, #2e8b2e)', transition: 'width 0.5s' }} />
+                      </div>
                     </div>
-                    <div style={{ width: '100%', height: '10px', background: '#EEF2F8', borderRadius: '10px', overflow: 'hidden' }}>
-                      <div style={{ width: `${progressoAtivo}%`, height: '100%', background: progressoAtivo === 100 ? '#22C55E' : 'linear-gradient(90deg, #1a3a8a, #2e8b2e)', transition: 'width 0.5s' }} />
-                    </div>
+
+                    {totalMinhas > 0 && (
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 'bold', color: '#555', marginBottom: '6px' }}>
+                          <span>Minhas Etapas ({usuarioLogado}) <span style={{ color: '#9aabcc', fontWeight: 600 }}>({concluidasMinhas} de {totalMinhas})</span></span>
+                          <span style={{ color: progressoMinhas === 100 ? '#22C55E' : '#2D7AFD' }}>{progressoMinhas}%</span>
+                        </div>
+                        <div style={{ width: '100%', height: '10px', background: '#EEF2F8', borderRadius: '10px', overflow: 'hidden' }}>
+                          <div style={{ width: `${progressoMinhas}%`, height: '100%', background: progressoMinhas === 100 ? '#22C55E' : '#2D7AFD', transition: 'width 0.5s' }} />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Grid de campos, estilo Figma */}
@@ -573,16 +628,39 @@ export function PesquisaView({
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <button
                       onClick={() => { setWorkflowAtivo(ativo.id); setTelaAtiva('kanban'); }}
-                      style={{ padding: '12px 20px', borderRadius: '10px', border: 'none', background: '#2D7AFD', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(45,122,253,0.4)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+                      style={{ padding: '12px 20px', borderRadius: '10px', border: 'none', background: '#2D7AFD', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', transition: 'transform 0.18s ease, box-shadow 0.18s ease' }}
                     >
                       <FiTrello size={16} /> Abrir Quadro
                     </button>
                     <button
                       onClick={() => onAbrirAuditoria(workflows.find(w => w.id === ativo.id) || ativo)}
-                      style={{ padding: '12px 20px', borderRadius: '10px', border: '1px solid #DDE5F2', background: '#fff', color: '#2D7AFD', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = '#f0f5ff'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(45,122,253,0.15)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = '#fff'; e.currentTarget.style.boxShadow = 'none'; }}
+                      style={{ padding: '12px 20px', borderRadius: '10px', border: '1px solid #DDE5F2', background: '#fff', color: '#2D7AFD', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', transition: 'transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease' }}
                     >
                       <FiList size={16} /> Ver Histórico
                     </button>
+                    {ativo.status === 'SUSPENSO' ? (
+                      <button
+                        onClick={() => setModalSuspensao({ id: ativo.id, nome: ativo.name, acao: 'ATIVO' })}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = '#c8e6c9'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(67,160,71,0.25)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = '#e8f5e9'; e.currentTarget.style.boxShadow = 'none'; }}
+                        style={{ padding: '12px 20px', borderRadius: '10px', border: '1px solid #43A047', background: '#e8f5e9', color: '#43A047', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', transition: 'transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease' }}
+                      >
+                        <FiPower size={15} /> Reativar Processo
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setModalSuspensao({ id: ativo.id, nome: ativo.name, acao: 'SUSPENSO' })}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = '#ffcdd2'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(229,57,53,0.25)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = '#ffebee'; e.currentTarget.style.boxShadow = 'none'; }}
+                        style={{ padding: '12px 20px', borderRadius: '10px', border: '1px solid #e53935', background: '#ffebee', color: '#e53935', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', transition: 'transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease' }}
+                      >
+                        <FiPower size={15} /> Suspender Processo
+                      </button>
+                    )}
                   </div>
                 </div>
               </>
@@ -595,6 +673,46 @@ export function PesquisaView({
           </div>
         </div>
       </div>
+
+      {/* Modal de confirmação de suspensão/reativação */}
+      {modalSuspensao && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 300 }}>
+          <div style={{ background: '#FFF', padding: '35px', borderRadius: '20px', width: '450px', boxShadow: '0px 10px 40px rgba(0,0,0,0.2)' }}>
+            <h2 style={{ margin: '0 0 15px', color: modalSuspensao.acao === 'SUSPENSO' ? '#e53935' : '#43A047' }}>
+              {modalSuspensao.acao === 'SUSPENSO' ? 'Suspender Processo' : 'Reativar Processo'}
+            </h2>
+            <p style={{ margin: '0 0 8px', color: '#888', fontSize: '13px', fontWeight: 'bold' }}>
+              {modalSuspensao.nome}
+            </p>
+            <p style={{ margin: '0 0 28px', color: '#555', fontSize: '15px', lineHeight: '1.5' }}>
+              {modalSuspensao.acao === 'SUSPENSO'
+                ? 'Tem certeza que deseja suspender este processo? Ele deixará de aparecer nos gráficos e no quadro Kanban.'
+                : 'Deseja reativar este processo? Ele voltará a aparecer na aba de Ativos e nos gráficos.'}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button
+                onClick={() => setModalSuspensao(null)}
+                style={{ padding: '12px 24px', borderRadius: '10px', border: 'none', background: '#F0F0F0', color: '#777', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  alterarStatusProcessoLocal(modalSuspensao.id, modalSuspensao.acao);
+                  setModalSuspensao(null);
+                }}
+                style={{
+                  padding: '12px 24px', borderRadius: '10px', border: 'none', fontWeight: 'bold', cursor: 'pointer',
+                  background: modalSuspensao.acao === 'SUSPENSO' ? '#e53935' : '#43A047',
+                  color: '#fff'
+                }}
+              >
+                {modalSuspensao.acao === 'SUSPENSO' ? 'Sim, Suspender' : 'Sim, Reativar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

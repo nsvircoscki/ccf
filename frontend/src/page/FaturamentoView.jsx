@@ -4,7 +4,7 @@ import { clienteService } from '../services/clienteService';
 import { servicoService } from '../services/servicoService';
 import { formatarCEP, formatarTelefone, formatarMoeda, desformatarMoeda, numeroParaMoeda } from '../utils/mascaras';
 import {
-  Actions, Field, Icon, SearchableSelect, SelectField, Section, Switch, Shell, Toast, useToast, C,
+  Actions, ConfirmModal, Field, Icon, SearchableSelect, SelectField, Section, Switch, Shell, Toast, useToast, C,
 } from '../components/cadastros/CadastroKit.jsx';
 
 const cobrancaVazia = {
@@ -51,12 +51,24 @@ const parseDecimal = (valor) => {
   return Number.isFinite(numero) ? numero : 0;
 };
 
+// Aritmética toda em UTC: misturar new Date(ano, mes, dia) (local) com
+// toISOString() (UTC) desloca a data em um dia dependendo do fuso.
 const somarDias = (dataBase, dias) => {
   if (!dataBase) return '';
   const [ano, mes, dia] = dataBase.split('-').map(Number);
-  const data = new Date(ano, mes - 1, dia);
-  data.setDate(data.getDate() + dias);
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  data.setUTCDate(data.getUTCDate() + dias);
   return data.toISOString().slice(0, 10);
+};
+
+// A data vem do banco em ISO (2026-09-15T12:00:00.000Z). Passar isso por
+// new Date(...).toLocaleDateString('pt-BR') converte pro fuso local e, no
+// Brasil, joga a data pro dia anterior — então formatamos direto do trecho
+// AAAA-MM-DD, sem envolver fuso nenhum.
+const formatarDataBr = (valor) => {
+  if (!valor) return '—';
+  const [ano, mes, dia] = String(valor).slice(0, 10).split('-');
+  return ano && mes && dia ? `${dia}/${mes}/${ano}` : '—';
 };
 
 // Divide o valor total em N parcelas iguais (a última absorve o resto do
@@ -142,7 +154,7 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
 
   const [tipo, setTipo] = useState(null); // null | 'boleto' | 'nota'
   const [historicoAberto, setHistoricoAberto] = useState(false);
-
+  const [abaHistorico, setAbaHistorico] = useState('emitir');
   const [clientes, setClientes] = useState([]);
   const [servicos, setServicos] = useState([]);
 
@@ -155,6 +167,33 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
 
   const [cobrancas, setCobrancas] = useState([]);
   const [notasFiscais, setNotasFiscais] = useState([]);
+
+  // { tipo: 'cobranca' | 'nota', id, titulo, mensagem } — null quando não há
+  // nada pendente de confirmação.
+  const [itemParaExcluir, setItemParaExcluir] = useState(null);
+
+  const confirmarExclusao = async () => {
+    if (!itemParaExcluir) return;
+    const { tipo, id } = itemParaExcluir;
+    setItemParaExcluir(null);
+    try {
+      const { ok, data } = tipo === 'cobranca'
+        ? await faturamentoService.excluirCobranca(id)
+        : await faturamentoService.excluirNotaFiscal(id);
+
+      if (ok) {
+        show(tipo === 'cobranca' ? 'Boletos excluídos!' : 'Nota fiscal excluída!', 'ok');
+        carregarHistorico();
+      } else {
+        // O backend recusa com o motivo (ex.: parcela já emitida) — mostrar ele,
+        // não um "Erro ao excluir" genérico.
+        show(data?.error || 'Erro ao excluir.', 'err');
+      }
+    } catch (e) {
+      console.error(e);
+      show('Erro ao conectar com o servidor.', 'err');
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -378,6 +417,15 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
     <Shell user={usuarioLogado} title="Faturamento" subtitle={tipo ? (tipo === 'boleto' ? 'Boletos' : 'Notas Fiscais') : 'Boletos e notas fiscais'} onBack={onBack} accent={accent} wide>
       {toast && <Toast msg={toast.msg} kind={toast.kind} />}
 
+      {itemParaExcluir && (
+        <ConfirmModal
+          title={itemParaExcluir.titulo}
+          message={itemParaExcluir.mensagem}
+          onConfirm={confirmarExclusao}
+          onCancel={() => setItemParaExcluir(null)}
+        />
+      )}
+
       {!tipo && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, animation: 'fadeUp 0.3s ease both' }}>
           {[['boleto', 'scale', 'Boleto', 'Emitir boletos bancários, com uma ou mais parcelas'], ['nota', 'doc', 'Nota Fiscal', 'Emitir NFS-e pra TOPOGRAFIA ou CONSULTORES']].map(([t, ic, tt, ds]) => (
@@ -416,7 +464,7 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
                 fontSize: 12, color: C.muted, textDecoration: 'underline',
               }}>trocar tipo</button>
             </div>
-            <button type="button" onClick={() => setHistoricoAberto(true)} style={{
+            <button type="button" onClick={() => { setAbaHistorico('emitir'); setHistoricoAberto(true); }} style={{
               display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 10,
               border: `1.5px solid ${C.border}`, background: '#fff', color: C.label, cursor: 'pointer',
               fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 12.5,
@@ -512,77 +560,121 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
       )}
 
       {historicoAberto && tipo === 'boleto' && (
-        <ModalHistorico titulo="Histórico de boletos" onClose={() => setHistoricoAberto(false)}>
-          {cobrancas.length === 0 && (
-            <p style={{ textAlign: 'center', color: C.muted, fontFamily: '"Open Sans", sans-serif' }}>Nenhum boleto lançado ainda.</p>
-          )}
-          {cobrancas.map((c) => (
-            <div key={c.id} style={{ background: '#fff', borderRadius: 14, border: `1px solid ${C.borderSoft}`, padding: 16, marginBottom: 14 }}>
-              <div style={{ fontFamily: '"Montserrat", sans-serif', fontWeight: 700, color: C.text, marginBottom: 2 }}>{c.nomeCliente}</div>
-              {c.descricao && <div style={{ fontFamily: '"Open Sans", sans-serif', fontSize: 12.5, color: C.muted, marginBottom: 10 }}>{c.descricao}</div>}
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Open Sans", sans-serif', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ textAlign: 'left', color: C.muted, fontSize: 11, textTransform: 'uppercase' }}>
-                    <th style={{ padding: '6px 8px' }}>Parcela</th>
-                    <th style={{ padding: '6px 8px' }}>Valor</th>
-                    <th style={{ padding: '6px 8px' }}>Vencimento</th>
-                    <th style={{ padding: '6px 8px' }}>Status</th>
-                    <th style={{ padding: '6px 8px' }}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {c.parcelas.map((p) => {
-                    const chave = `${c.id}-${p.numero}`;
-                    return (
-                      <tr key={p.id} style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-                        <td style={{ padding: '8px' }}>{p.numero}/{c.parcelas.length}</td>
-                        <td style={{ padding: '8px' }}>{moeda(p.valor)}</td>
-                        <td style={{ padding: '8px' }}>{new Date(p.vencimento).toLocaleDateString('pt-BR')}</td>
-                        <td style={{ padding: '8px' }}>
-                          <BadgeStatus status={p.status} />
-                          {p.erroMensagem && (
-                            <div style={{ color: p.status === 'ERRO' ? C.danger : '#b45309', fontSize: 11, marginTop: 4, maxWidth: 260 }}>{p.erroMensagem}</div>
-                          )}
-                        </td>
-                        <td style={{ padding: '8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          {p.status === 'EMITIDO' && p.caminhoPdf && (
-                            <a href={faturamentoService.urlPdfParcelaCobranca(c.id, p.numero)} target="_blank" rel="noreferrer"
-                              style={{ color: accent, fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>
-                              Baixar PDF
-                            </a>
-                          )}
-                          {p.status === 'EMITIDO' && !p.caminhoPdf && (
-                            // Boleto já existe no banco (não reemite) — só o PDF que não veio ainda.
-                            <button onClick={() => tentarBaixarPdfParcela(c.id, p.numero)} disabled={emitindo === chave} style={{
-                              padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${accent}`, cursor: 'pointer',
-                              background: '#fff', color: accent, fontFamily: '"Montserrat", sans-serif',
-                              fontWeight: 700, fontSize: 11.5, opacity: emitindo === chave ? 0.6 : 1,
-                            }}>
-                              {emitindo === chave ? 'Buscando…' : 'Tentar baixar PDF'}
-                            </button>
-                          )}
-                          {p.status !== 'EMITIDO' && (
-                            <button onClick={() => emitirParcela(c.id, p.numero)} disabled={emitindo === chave} style={{
-                              padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                              background: accent, color: '#fff', fontFamily: '"Montserrat", sans-serif',
-                              fontWeight: 700, fontSize: 11.5, opacity: emitindo === chave ? 0.6 : 1,
-                            }}>
-                              {emitindo === chave ? 'Emitindo…' : 'Emitir'}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ))}
+        <ModalHistorico titulo={abaHistorico === 'emitir' ? 'Boletos para emitir' : 'Histórico de boletos'} onClose={() => setHistoricoAberto(false)}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            {['emitir', 'historico'].map(aba => (
+              <button key={aba} onClick={() => setAbaHistorico(aba)} style={{
+                padding: '7px 18px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                background: abaHistorico === aba ? accent : '#f0f0f0',
+                color: abaHistorico === aba ? '#fff' : '#666', fontWeight: 700, fontSize: 13
+              }}>
+                {aba === 'emitir' ? 'Para Emitir' : 'Histórico'}
+              </button>
+            ))}
+          </div>
+          {(() => {
+            const cobrancasFiltradas = abaHistorico === 'emitir'
+              ? cobrancas.filter(c => c.parcelas.some(p => p.status !== 'EMITIDO'))
+              : cobrancas.filter(c => c.parcelas.every(p => p.status === 'EMITIDO'));
+
+            if (cobrancasFiltradas.length === 0) {
+              return <p style={{ textAlign: 'center', color: C.muted, fontFamily: '"Open Sans", sans-serif' }}>Nenhum boleto encontrado.</p>;
+            }
+            return cobrancasFiltradas.map((c) => (
+              <div key={c.id} style={{ background: '#fff', borderRadius: 14, border: `1px solid ${C.borderSoft}`, padding: 16, marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
+                  <div>
+                    <div style={{ fontFamily: '"Montserrat", sans-serif', fontWeight: 700, color: C.text }}>{c.nomeCliente}</div>
+                    {c.descricao && <div style={{ fontFamily: '"Open Sans", sans-serif', fontSize: 12.5, color: C.muted, marginTop: 2, marginBottom: 10 }}>{c.descricao}</div>}
+                  </div>
+                  {abaHistorico === 'emitir' && (
+                    <button onClick={() => setItemParaExcluir({
+                      tipo: 'cobranca',
+                      id: c.id,
+                      titulo: 'Excluir boletos?',
+                      mensagem: `Todos os boletos do lançamento de ${c.nomeCliente} serão excluídos. Essa ação não pode ser desfeita.`,
+                    })} style={{
+                      padding: '6px 12px', borderRadius: 8, border: '1px solid #e53935',
+                      background: '#ffebee', color: '#e53935', fontWeight: 700, fontSize: 12, cursor: 'pointer'
+                    }}>
+                      Excluir
+                    </button>
+                  )}
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Open Sans", sans-serif', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', color: C.muted, fontSize: 11, textTransform: 'uppercase' }}>
+                      <th style={{ padding: '6px 8px' }}>Parcela</th>
+                      <th style={{ padding: '6px 8px' }}>Valor</th>
+                      <th style={{ padding: '6px 8px' }}>Vencimento</th>
+                      <th style={{ padding: '6px 8px' }}>Status</th>
+                      <th style={{ padding: '6px 8px' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {c.parcelas.map((p) => {
+                      const chave = `${c.id}-${p.numero}`;
+                      return (
+                        <tr key={p.id} style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+                          <td style={{ padding: '8px' }}>{p.numero}/{c.parcelas.length}</td>
+                          <td style={{ padding: '8px' }}>{moeda(p.valor)}</td>
+                          <td style={{ padding: '8px' }}>{formatarDataBr(p.vencimento)}</td>
+                          <td style={{ padding: '8px' }}>
+                            <BadgeStatus status={p.status} />
+                            {p.erroMensagem && (
+                              <div style={{ color: p.status === 'ERRO' ? C.danger : '#b45309', fontSize: 11, marginTop: 4, maxWidth: 260 }}>{p.erroMensagem}</div>
+                            )}
+                          </td>
+                          <td style={{ padding: '8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            {p.status === 'EMITIDO' && p.caminhoPdf && (
+                              <a href={faturamentoService.urlPdfParcelaCobranca(c.id, p.numero)} target="_blank" rel="noreferrer"
+                                style={{ color: accent, fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>
+                                Baixar PDF
+                              </a>
+                            )}
+                            {p.status === 'EMITIDO' && !p.caminhoPdf && (
+                              <button onClick={() => tentarBaixarPdfParcela(c.id, p.numero)} disabled={emitindo === chave} style={{
+                                padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${accent}`, cursor: 'pointer',
+                                background: '#fff', color: accent, fontFamily: '"Montserrat", sans-serif',
+                                fontWeight: 700, fontSize: 11.5, opacity: emitindo === chave ? 0.6 : 1,
+                              }}>
+                                {emitindo === chave ? 'Buscando…' : 'Tentar baixar PDF'}
+                              </button>
+                            )}
+                            {p.status !== 'EMITIDO' && (
+                              <button onClick={() => emitirParcela(c.id, p.numero)} disabled={emitindo === chave} style={{
+                                padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                                background: accent, color: '#fff', fontFamily: '"Montserrat", sans-serif',
+                                fontWeight: 700, fontSize: 11.5, opacity: emitindo === chave ? 0.6 : 1,
+                              }}>
+                                {emitindo === chave ? 'Emitindo…' : 'Emitir'}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ));
+          })()}
         </ModalHistorico>
       )}
 
       {historicoAberto && tipo === 'nota' && (
-        <ModalHistorico titulo="Histórico de notas fiscais" onClose={() => setHistoricoAberto(false)}>
+        <ModalHistorico titulo={abaHistorico === 'emitir' ? 'Notas para emitir' : 'Histórico de notas fiscais'} onClose={() => setHistoricoAberto(false)}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            {['emitir', 'historico'].map(aba => (
+              <button key={aba} onClick={() => setAbaHistorico(aba)} style={{
+                padding: '7px 18px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                background: abaHistorico === aba ? accent : '#f0f0f0',
+                color: abaHistorico === aba ? '#fff' : '#666', fontWeight: 700, fontSize: 13
+              }}>
+                {aba === 'emitir' ? 'Para Emitir' : 'Histórico'}
+              </button>
+            ))}
+          </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: '"Open Sans", sans-serif', fontSize: 13 }}>
             <thead>
               <tr style={{ textAlign: 'left', color: C.muted, fontSize: 11, textTransform: 'uppercase' }}>
@@ -594,48 +686,69 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
               </tr>
             </thead>
             <tbody>
-              {notasFiscais.map((n) => (
-                <tr key={n.id} style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-                  <td style={{ padding: '10px' }}>{n.empresa}</td>
-                  <td style={{ padding: '10px' }}>{n.nomeCliente}</td>
-                  <td style={{ padding: '10px' }}>{moeda(n.valor)}</td>
-                  <td style={{ padding: '10px' }}>
-                    <BadgeStatus status={n.status} />
-                    {n.erroMensagem && (
-                      <div style={{ color: n.status === 'ERRO' ? C.danger : '#b45309', fontSize: 11, marginTop: 4, maxWidth: 260 }}>{n.erroMensagem}</div>
-                    )}
-                  </td>
-                  <td style={{ padding: '10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {n.status === 'EMITIDO' && n.caminhoPdf && (
-                      <a href={faturamentoService.urlPdfNotaFiscal(n.id)} target="_blank" rel="noreferrer"
-                        style={{ color: accent, fontWeight: 700, fontSize: 12.5, textDecoration: 'none' }}>
-                        Baixar PDF
-                      </a>
-                    )}
-                    {n.status === 'EMITIDO' && !n.caminhoPdf && (
-                      <button onClick={() => tentarBaixarPdfNota(n.id)} disabled={emitindo === n.id} style={{
-                        padding: '7px 14px', borderRadius: 9, border: `1.5px solid ${accent}`, cursor: 'pointer',
-                        background: '#fff', color: accent, fontFamily: '"Montserrat", sans-serif',
-                        fontWeight: 700, fontSize: 12, opacity: emitindo === n.id ? 0.6 : 1,
-                      }}>
-                        {emitindo === n.id ? 'Buscando…' : 'Tentar baixar PDF'}
-                      </button>
-                    )}
-                    {n.status !== 'EMITIDO' && (
-                      <button onClick={() => emitirNota(n.id)} disabled={emitindo === n.id} style={{
-                        padding: '7px 14px', borderRadius: 9, border: 'none', cursor: 'pointer',
-                        background: accent, color: '#fff', fontFamily: '"Montserrat", sans-serif',
-                        fontWeight: 700, fontSize: 12, opacity: emitindo === n.id ? 0.6 : 1,
-                      }}>
-                        {emitindo === n.id ? 'Emitindo…' : 'Emitir'}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {notasFiscais.length === 0 && (
-                <tr><td colSpan={5} style={{ padding: '18px 10px', textAlign: 'center', color: C.muted }}>Nenhuma nota fiscal lançada ainda.</td></tr>
-              )}
+              {(() => {
+                const notasFiltradas = abaHistorico === 'emitir'
+                  ? notasFiscais.filter(n => n.status !== 'EMITIDO')
+                  : notasFiscais.filter(n => n.status === 'EMITIDO');
+
+                if (notasFiltradas.length === 0) {
+                  return <tr><td colSpan={5} style={{ padding: '18px 10px', textAlign: 'center', color: C.muted }}>Nenhuma nota fiscal encontrada.</td></tr>;
+                }
+
+                return notasFiltradas.map((n) => (
+                  <tr key={n.id} style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+                    <td style={{ padding: '10px' }}>{n.empresa}</td>
+                    <td style={{ padding: '10px' }}>{n.nomeCliente}</td>
+                    <td style={{ padding: '10px' }}>{moeda(n.valor)}</td>
+                    <td style={{ padding: '10px' }}>
+                      <BadgeStatus status={n.status} />
+                      {n.erroMensagem && (
+                        <div style={{ color: n.status === 'ERRO' ? C.danger : '#b45309', fontSize: 11, marginTop: 4, maxWidth: 260 }}>{n.erroMensagem}</div>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {n.status === 'EMITIDO' && n.caminhoPdf && (
+                        <a href={faturamentoService.urlPdfNotaFiscal(n.id)} target="_blank" rel="noreferrer"
+                          style={{ color: accent, fontWeight: 700, fontSize: 12.5, textDecoration: 'none' }}>
+                          Baixar PDF
+                        </a>
+                      )}
+                      {n.status === 'EMITIDO' && !n.caminhoPdf && (
+                        <button onClick={() => tentarBaixarPdfNota(n.id)} disabled={emitindo === n.id} style={{
+                          padding: '7px 14px', borderRadius: 9, border: `1.5px solid ${accent}`, cursor: 'pointer',
+                          background: '#fff', color: accent, fontFamily: '"Montserrat", sans-serif',
+                          fontWeight: 700, fontSize: 12, opacity: emitindo === n.id ? 0.6 : 1,
+                        }}>
+                          {emitindo === n.id ? 'Buscando…' : 'Tentar baixar PDF'}
+                        </button>
+                      )}
+                      {n.status !== 'EMITIDO' && (
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                          <button onClick={() => setItemParaExcluir({
+                            tipo: 'nota',
+                            id: n.id,
+                            titulo: 'Excluir nota fiscal?',
+                            mensagem: `A nota de ${n.nomeCliente || 'cliente'} será excluída. Essa ação não pode ser desfeita.`,
+                          })} style={{
+                            padding: '7px 14px', borderRadius: 9, border: '1px solid #e53935', cursor: 'pointer',
+                            background: '#ffebee', color: '#e53935', fontFamily: '"Montserrat", sans-serif',
+                            fontWeight: 700, fontSize: 12
+                          }}>
+                            Excluir
+                          </button>
+                          <button onClick={() => emitirNota(n.id)} disabled={emitindo === n.id} style={{
+                            padding: '7px 14px', borderRadius: 9, border: 'none', cursor: 'pointer',
+                            background: accent, color: '#fff', fontFamily: '"Montserrat", sans-serif',
+                            fontWeight: 700, fontSize: 12, opacity: emitindo === n.id ? 0.6 : 1,
+                          }}>
+                            {emitindo === n.id ? 'Emitindo…' : 'Emitir'}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ));
+              })()}
             </tbody>
           </table>
         </ModalHistorico>
