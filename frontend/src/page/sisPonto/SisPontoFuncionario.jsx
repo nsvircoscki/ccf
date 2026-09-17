@@ -75,9 +75,19 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
     const chave = chaveData(momento);
     const tempoIso = momento.toISOString();
     const idAtual = funcionarioAtual?.id || usuarioLogado;
+
+    const [tipo, horarioEsperadoStr] = proximoEsperado;
+    const [horaEsperada, minutoEsperado] = horarioEsperadoStr.split(':').map(Number);
+    const diferenca = (momento.getHours() * 60 + momento.getMinutes()) - (horaEsperada * 60 + minutoEsperado);
+    const atrasado = (tipo === 'Entrada' && diferenca >= 5) || (tipo === 'Saída' && diferenca <= -5);
+
     setRegistros((atuais) => ({ ...atuais, [chave]: [...(atuais[chave] || []), tempoIso] }));
     setConfirmacao(null);
-    api.registrarSispontoPonto({ funcionarioId: idAtual, data: chave, tempo: tempoIso }).catch(() => {
+    if (atrasado) {
+      setErroPonto('Esse registro ficou fora do horário. Não esqueça de enviar uma justificativa na aba Justificativas.');
+      window.setTimeout(() => setErroPonto(null), 6000);
+    }
+    api.registrarSispontoPonto({ funcionarioId: idAtual, data: chave, tempo: tempoIso, atrasado, minutosAtraso: Math.abs(diferenca), tipo }).catch(() => {
       carregarRegistros();
     });
   };

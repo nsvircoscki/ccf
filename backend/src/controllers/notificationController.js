@@ -32,4 +32,13 @@ export const notificationController = {
       res.status(400).json({ error: error.message });
     }
   },
+
+  async excluir(req, res) {
+    try {
+      await notificationService.excluir(req.params.id);
+      res.status(200).json({ message: 'ok' });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
 };

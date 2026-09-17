@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, KeyRound, ListChecks, Bell,
+  ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, KeyRound, ListChecks, Bell, X,
   Wallet, BookOpen, FileSpreadsheet, Table, Receipt, ClipboardCheck, Clock3,
 } from 'lucide-react';
 import { AlterarSenhaModal } from '../modals/AlterarSenhaModal.jsx';
@@ -112,6 +112,7 @@ export function Navbar({
   setUsuarioLogado,
   onVoltarModulos,
   kanban,
+  onIrParaSisPonto,
 }) {
   const [alterarSenhaAberto, setAlterarSenhaAberto] = useState(false);
   const [configMenuAberto, setConfigMenuAberto] = useState(false);
@@ -189,10 +190,32 @@ export function Navbar({
         console.error('Erro ao marcar notificação como lida:', erro);
       }
     }
+    if (notificacao.tipo === 'sis-ponto-justificativa') {
+      setTelaAtiva('sis-ponto');
+      onIrParaSisPonto?.('justificativas');
+      return;
+    }
+    if (notificacao.tipo === 'sis-ponto') {
+      setTelaAtiva('sis-ponto');
+      return;
+    }
     if (notificacao.workflowId && kanban?.setWorkflowAtivo) {
       kanban.setWorkflowAtivo(notificacao.workflowId);
     }
     setTelaAtiva('kanban');
+  };
+
+  const excluirNotificacao = async (evento, notificacao) => {
+    evento.stopPropagation();
+    const eraNaoLida = !notificacao.lida;
+    setNotificacoes((prev) => prev.filter((n) => n.id !== notificacao.id));
+    if (eraNaoLida) setNaoLidas((prev) => Math.max(0, prev - 1));
+    try {
+      await api.excluirNotificacao(notificacao.id);
+    } catch (erro) {
+      console.error('Erro ao excluir notificação:', erro);
+      carregarNotificacoes();
+    }
   };
 
   const marcarTodasComoLidas = async () => {
@@ -415,10 +438,12 @@ export function Navbar({
                   </div>
                 ) : (
                   notificacoes.map((notificacao) => (
-                    <button
+                    <div
                       key={notificacao.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => clicarNotificacao(notificacao)}
+                      onKeyDown={(evento) => { if (evento.key === 'Enter' || evento.key === ' ') clicarNotificacao(notificacao); }}
                       style={{
                         width: '100%', display: 'flex', alignItems: 'flex-start', gap: '8px', textAlign: 'left',
                         padding: '12px 14px', border: 'none', borderBottom: '1px solid rgba(15,23,42,0.06)',
@@ -428,10 +453,24 @@ export function Navbar({
                       {!notificacao.lida && (
                         <span style={{ width: '7px', height: '7px', borderRadius: '999px', background: '#1a3a8a', marginTop: '5px', flexShrink: 0 }} />
                       )}
-                      <span style={{ fontSize: '12.5px', color: '#334155', fontWeight: notificacao.lida ? 500 : 700, lineHeight: 1.4 }}>
+                      <span style={{ flex: 1, fontSize: '12.5px', color: '#334155', fontWeight: notificacao.lida ? 500 : 700, lineHeight: 1.4 }}>
                         {notificacao.mensagem}
                       </span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={(evento) => excluirNotificacao(evento, notificacao)}
+                        title="Excluir notificação"
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                          width: '20px', height: '20px', border: 'none', borderRadius: '6px',
+                          background: 'transparent', color: '#94A3B8', cursor: 'pointer',
+                        }}
+                        onMouseEnter={(evento) => { evento.currentTarget.style.background = 'rgba(148,163,184,0.18)'; evento.currentTarget.style.color = '#475569'; }}
+                        onMouseLeave={(evento) => { evento.currentTarget.style.background = 'transparent'; evento.currentTarget.style.color = '#94A3B8'; }}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
                   ))
                 )}
               </div>

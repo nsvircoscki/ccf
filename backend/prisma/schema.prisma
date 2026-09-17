@@ -228,6 +228,9 @@ model Notification {
   mensagem   String
   lida       Boolean  @default(false)
   created_at DateTime @default(now())
+  // Destino ao clicar: "kanban" (padrão, comportamento antigo) | "sis-ponto"
+  // | "sis-ponto-justificativa" (abre direto a aba Justificativas do ENG).
+  tipo       String   @default("kanban")
 
   roleId     String
   role       Role     @relation(fields: [roleId], references: [id])

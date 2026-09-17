@@ -7,8 +7,14 @@ import { chaveData, hora, horariosDoDia, buildEngFuncionariosFromStorage, extrai
 import { BancoHoras, Card, ConfirmacaoPonto, FormularioModal } from './SisPontoComponents.jsx';
 import './sisPonto.css';
 
-export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG' }) {
+export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino }) {
   const [activePage, setActivePage] = useState('dashboard');
+  // Redireciona pra aba certa quando a navbar manda o admin pra cá a partir
+  // de uma notificação (ex.: justificativa nova). O "ts" no destino garante
+  // que o efeito roda de novo mesmo se a página pedida for repetida.
+  useEffect(() => {
+    if (destino?.pagina) setActivePage(destino.pagina);
+  }, [destino?.pagina, destino?.ts]);
   const [date, setDate] = useState(chaveData(new Date()));
   const [mes, setMes] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [mesesAberto, setMesesAberto] = useState(false);

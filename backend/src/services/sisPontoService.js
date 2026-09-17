@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { notificationService } from './notificationService.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DATA_FILE = path.resolve(DATA_DIR, 'sis-ponto.json');
@@ -120,6 +121,20 @@ export async function registrarPonto(data) {
   registros[chave] = registrosDia;
   store.registros = registros;
   await writeStore(store);
+
+  // O horário padrão só existe no front (localStorage), então quem decide se
+  // o registro ficou fora do horário é ele; aqui só disparamos o aviso.
+  if (data.atrasado) {
+    const funcionario = (store.funcionarios || []).find((item) => item.id === id);
+    if (funcionario) {
+      const direcao = data.tipo === 'Saída' ? 'antes do' : 'após o';
+      const mensagem = `"${funcionario.nome}" bateu o ponto ${data.minutosAtraso ?? ''} min ${direcao} horário em ${chave}. Envie uma justificativa.`;
+      notificationService.notificarSetor(funcionario.setor, mensagem, 'sis-ponto').catch((erro) => {
+        console.error('Erro ao notificar atraso de ponto:', erro);
+      });
+    }
+  }
+
   return { ok: true };
 }
 
@@ -179,6 +194,12 @@ export async function criarJustificativa(dados) {
 
   store.justificativas = [...(store.justificativas || []), nova];
   await writeStore(store);
+
+  const mensagem = `"${nova.nome}" (${nova.setor}) enviou uma justificativa de ponto para ${nova.dia}.`;
+  notificationService.notificarSetor('ENG', mensagem, 'sis-ponto-justificativa').catch((erro) => {
+    console.error('Erro ao notificar justificativa de ponto:', erro);
+  });
+
   return nova;
 }
 

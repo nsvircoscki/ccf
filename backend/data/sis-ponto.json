@@ -55,6 +55,12 @@
         "2026-09-16T21:36:45.959Z",
         "2026-09-16T21:36:47.647Z"
       ]
+    },
+    "2026-09-17": {
+      "DEV-1789579281577": [
+        "2026-09-17T17:28:21.217Z",
+        "2026-09-17T17:35:26.262Z"
+      ]
     }
   },
   "justificativas": [
@@ -121,6 +127,22 @@
       "status": "Inválida",
       "criadoEm": "2026-09-16T22:23:27.018Z",
       "atualizadoEm": "2026-09-16T22:23:33.740Z"
+    },
+    {
+      "id": "just-1789666115810-11y0rh",
+      "funcionarioId": "DEV-1789579281577",
+      "nome": "João Pedro Costi",
+      "setor": "DEV",
+      "dia": "2026-09-17",
+      "horaInicio": "08:00",
+      "horaFim": "12:00",
+      "motivo": "fdsfs",
+      "anexoNome": null,
+      "anexoTipo": null,
+      "anexoDataUrl": null,
+      "status": "Em análise",
+      "criadoEm": "2026-09-17T17:28:35.821Z",
+      "atualizadoEm": "2026-09-17T17:28:35.822Z"
     }
   ]
 }

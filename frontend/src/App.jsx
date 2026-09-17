@@ -43,6 +43,11 @@ export default function App() {
   const [moduloEscolhido, setModuloEscolhido] = useState(false);
   const [telaAtiva, setTelaAtiva] = useState('dashboard');
   const [workflowParaImpressao, setWorkflowParaImpressao] = useState(null);
+  // Destino dentro do SIS Ponto quando a navbar redireciona pra lá a partir
+  // de uma notificação (ex.: justificativa nova → abre direto a aba certa no
+  // painel do ENG). O "ts" força o efeito a rodar de novo mesmo clicando em
+  // duas notificações seguidas com a mesma página de destino.
+  const [sisPontoDestino, setSisPontoDestino] = useState(null);
 
   const [modais, setModais] = useState({
     editarProjeto: false,
@@ -162,6 +167,7 @@ export default function App() {
           setUsuarioLogado={handleLogout}
           onVoltarModulos={() => setModuloEscolhido(false)}
           kanban={kanban}
+          onIrParaSisPonto={(pagina) => setSisPontoDestino({ pagina, ts: Date.now() })}
         />
 
         <div className="flex-1 flex flex-col min-h-0" style={{ minHeight: 0, overflow: 'hidden' }}>
@@ -241,7 +247,7 @@ export default function App() {
             <TarefasView onBack={() => setModuloEscolhido(false)} usuarioLogado={usuarioLogado} />
           )}
 
-          {telaAtiva === 'sis-ponto' && <SisPontoView usuarioLogado={usuarioLogado} />}
+          {telaAtiva === 'sis-ponto' && <SisPontoView usuarioLogado={usuarioLogado} destino={sisPontoDestino} />}
         </div>
 
 

@@ -435,6 +435,11 @@ export const api = {
         return res.json();
     },
 
+    excluirNotificacao: async (id) => {
+        const res = await fetch(`${BASE_URL}/notificacoes/${id}`, { method: 'DELETE' });
+        return res.json();
+    },
+
     // ---- FATURAMENTO: COBRANÇAS (boletos) ----
     getCobrancas: async () => {
         const res = await fetch(`${BASE_URL}/cobrancas`);
