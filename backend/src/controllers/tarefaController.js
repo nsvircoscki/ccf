@@ -60,6 +60,24 @@ export const tarefaController = {
     }
   },
 
+  async colocarEmAguardo(req, res) {
+    try {
+      const tarefa = await tarefaService.colocarEmAguardo(req.params.id, req.body.motivo);
+      res.status(200).json(tarefa);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+
+  async retomar(req, res) {
+    try {
+      const tarefa = await tarefaService.retomar(req.params.id);
+      res.status(200).json(tarefa);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+
   async excluir(req, res) {
     try {
       await tarefaService.excluir(req.params.id);

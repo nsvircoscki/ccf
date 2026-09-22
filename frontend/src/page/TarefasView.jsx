@@ -4,7 +4,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { tarefaService } from '../services/tarefaService';
 import { servicoService } from '../services/servicoService';
 import {
-  Actions, ConfirmModal, Field, Icon, SearchableSelect, SelectField, Section, Shell, Toast, useToast, C,
+  Actions, ConfirmModal, Field, Icon, MONT, SANS, SearchableSelect, SelectField, Section, Shell, Toast, useToast, C,
 } from '../components/cadastros/CadastroKit.jsx';
 
 async function copiarParaAreaDeTransferencia(texto) {
@@ -64,7 +64,7 @@ const LARGURAS_INICIAIS = {
   servico: 160,
   prazo: 120,
   observacoes: 180,
-  acoes: 100,
+  acoes: 140,
 };
 
 const tarefaVazia = {
@@ -228,8 +228,61 @@ function CelulaDescricao({ descricao }) {
   );
 }
 
+// Modal pra registrar o que falta antes de pausar a tarefa — mesmo visual do
+// ConfirmModal (CadastroKit), mas com um campo de texto no lugar da mensagem
+// fixa, já que aqui o motivo é o que dá sentido ao aguardo na tabela.
+function ModalAguardo({ onConfirm, onCancel, salvando }) {
+  const [motivo, setMotivo] = useState('');
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(14,37,73,0.45)', zIndex: 400,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }} onClick={onCancel}>
+      <div style={{
+        background: '#fff', borderRadius: 18, width: 420, maxWidth: '100%', padding: '28px 26px',
+        boxShadow: '0 20px 60px rgba(14,37,73,0.25)', animation: 'fadeUp 0.22s ease both', textAlign: 'center',
+      }} onClick={(e) => e.stopPropagation()}>
+        <div style={{
+          width: 52, height: 52, borderRadius: '50%', margin: '0 auto 16px',
+          background: '#f59e0b15', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Icon name="clock" size={26} />
+        </div>
+        <h3 style={{ fontFamily: MONT, fontWeight: 700, fontSize: 16, color: C.text, margin: '0 0 8px' }}>Colocar tarefa em aguardo</h3>
+        <p style={{ fontFamily: SANS, fontSize: 13.5, color: C.muted, margin: '0 0 16px', lineHeight: 1.5 }}>
+          O que falta para concluir essa tarefa? (opcional)
+        </p>
+        <textarea
+          rows={3}
+          autoFocus
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          placeholder="Ex: Aguardando documento do cliente"
+          style={{
+            width: '100%', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${C.border}`,
+            fontSize: 13, outline: 'none', color: C.text, fontFamily: 'inherit', resize: 'vertical',
+            boxSizing: 'border-box', textAlign: 'left',
+          }}
+        />
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20 }}>
+          <button onClick={onCancel} style={{
+            padding: '11px 22px', borderRadius: 11, border: `1.5px solid ${C.border}`, background: '#fff',
+            color: C.label, fontFamily: MONT, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+          }}>Cancelar</button>
+          <button onClick={() => onConfirm(motivo)} disabled={salvando} style={{
+            padding: '11px 22px', borderRadius: 11, border: 'none', background: '#f59e0b',
+            color: '#fff', fontFamily: MONT, fontWeight: 700, fontSize: 13, cursor: salvando ? 'default' : 'pointer',
+            opacity: salvando ? 0.7 : 1, boxShadow: '0 8px 20px #f59e0b44',
+          }}>{salvando ? 'Salvando…' : 'Colocar em aguardo'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Largura fixa (tableLayout: fixed) + quebra de texto no título/descrição
-function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabrir, onExcluir, onAbrirPasta, onSalvarObservacao, onReordenar }) {
+function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabrir, onAguardar, onRetomar, onExcluir, onAbrirPasta, onSalvarObservacao, onReordenar }) {
   const [colWidths, setColWidths] = useState(LARGURAS_INICIAIS);
 
   const resetarLargura = (colKey) => {
@@ -336,7 +389,7 @@ function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabri
               {renderHeader('descricao', 'Descrição')}
               {renderHeader('prioridade', 'Prioridade')}
               {renderHeader('servico', 'Serviço')}
-              {renderHeader('prazo', aba === 'pendentes' ? 'Prazo' : 'Concluída')}
+              {renderHeader('prazo', aba === 'pendentes' ? 'Prazo' : aba === 'aguardo' ? 'Motivo do Aguardo' : 'Concluída')}
               {renderHeader('observacoes', 'Observações')}
               <th style={{ padding: '10px 14px', width: colWidths.acoes }} />
             </tr>
@@ -399,9 +452,13 @@ function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabri
                               {t.servico ? `${t.servico.numeroServico} \u2014 ${t.servico.nomeCliente}` : '\u2014'}
                             </td>
                             <td style={{ padding: '12px 14px', color: C.muted, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                              {aba === 'pendentes'
-                                ? (t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : '\u2014')
-                                : (t.concluido_em ? `${t.concluidoPor || '\u2014'} em ${new Date(t.concluido_em).toLocaleDateString('pt-BR')}` : '\u2014')}
+                              {aba === 'pendentes' ? (
+                                t.prazo ? new Date(t.prazo).toLocaleDateString('pt-BR') : '\u2014'
+                              ) : aba === 'aguardo' ? (
+                                <CelulaDescricao descricao={t.motivoAguardo} />
+                              ) : (
+                                t.concluido_em ? `${t.concluidoPor || '\u2014'} em ${new Date(t.concluido_em).toLocaleDateString('pt-BR')}` : '\u2014'
+                              )}
                             </td>
                             <td style={{ padding: '12px 14px' }}>
                               <CampoObservacao
@@ -412,12 +469,25 @@ function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabri
                             </td>
                             <td style={{ padding: '12px 14px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-                                {aba === 'pendentes' ? (
+                                {aba === 'pendentes' && (
+                                  <button type="button" onClick={() => onAguardar(t.id)} disabled={processando === t.id} title="Colocar em aguardo"
+                                    style={{ width: 32, height: 32, borderRadius: 8, border: '1.5px solid #f59e0b44', background: '#fff', color: '#f59e0b', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: processando === t.id ? 'default' : 'pointer', opacity: processando === t.id ? 0.6 : 1, transition: 'all 0.15s ease' }}>
+                                    <Icon name="clock" size={15} />
+                                  </button>
+                                )}
+                                {aba === 'aguardo' && (
+                                  <button type="button" onClick={() => onRetomar(t.id)} disabled={processando === t.id} title="Retomar tarefa"
+                                    style={{ width: 32, height: 32, borderRadius: 8, border: `1.5px solid ${accent}`, background: '#fff', color: accent, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: processando === t.id ? 'default' : 'pointer', opacity: processando === t.id ? 0.6 : 1, transition: 'all 0.15s ease' }}>
+                                    <Icon name="hash" size={15} />
+                                  </button>
+                                )}
+                                {(aba === 'pendentes' || aba === 'aguardo') && (
                                   <button type="button" onClick={() => onConcluir(t.id)} disabled={processando === t.id} title="Concluir tarefa"
                                     style={{ width: 32, height: 32, borderRadius: 8, border: `1.5px solid ${C.green}44`, background: '#fff', color: C.green, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: processando === t.id ? 'default' : 'pointer', opacity: processando === t.id ? 0.6 : 1, transition: 'all 0.15s ease' }}>
                                     <Icon name="check" size={16} />
                                   </button>
-                                ) : (
+                                )}
+                                {aba === 'concluidas' && (
                                   <button type="button" onClick={() => onReabrir(t.id)} disabled={processando === t.id} title="Reabrir tarefa"
                                     style={{ width: 32, height: 32, borderRadius: 8, border: `1.5px solid ${accent}`, background: '#fff', color: accent, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: processando === t.id ? 'default' : 'pointer', opacity: processando === t.id ? 0.6 : 1, transition: 'all 0.15s ease' }}>
                                     <Icon name="hash" size={15} />
@@ -443,7 +513,7 @@ function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabri
                 {tarefas.length === 0 && (
                   <tr>
                     <td colSpan={9} style={{ padding: '20px 14px', textAlign: 'center', color: C.muted }}>
-                      {aba === 'pendentes' ? 'Nenhuma tarefa pendente.' : 'Nenhuma tarefa concluída ainda.'}
+                      {aba === 'pendentes' ? 'Nenhuma tarefa pendente.' : aba === 'aguardo' ? 'Nenhuma tarefa em aguardo.' : 'Nenhuma tarefa concluída ainda.'}
                     </td>
                   </tr>
                 )}
@@ -468,9 +538,10 @@ export default function TarefasView({ onBack, usuarioLogado }) {
 
   const [secao, setSecao] = useState('cadastro'); // 'cadastro' | 'tabelas'
   const [setorFiltro, setSetorFiltro] = useState('DES_1'); // 'DES_1' | 'DES_2' | 'TODOS'
-  const [aba, setAba] = useState('pendentes'); // 'pendentes' | 'concluidas'
+  const [aba, setAba] = useState('pendentes'); // 'pendentes' | 'aguardo' | 'concluidas'
   const [tarefas, setTarefas] = useState([]);
   const [tarefaParaExcluir, setTarefaParaExcluir] = useState(null);
+  const [tarefaParaAguardar, setTarefaParaAguardar] = useState(null);
   const reorderingRef = useRef(false); // bloqueia o interval durante/após reordenamento
 
   useEffect(() => {
@@ -482,7 +553,8 @@ export default function TarefasView({ onBack, usuarioLogado }) {
   const carregarTarefas = async () => {
     if (reorderingRef.current) return; // não sobrescreve se acabou de reordenar
     try {
-      const filtros = { status: aba === 'pendentes' ? 'PENDENTE' : 'CONCLUIDA' };
+      const statusPorAba = { pendentes: 'PENDENTE', aguardo: 'AGUARDO', concluidas: 'CONCLUIDA' };
+      const filtros = { status: statusPorAba[aba] };
       if (setorFiltro !== 'TODOS') {
         filtros.setor = setorFiltro;
       }
@@ -570,6 +642,37 @@ export default function TarefasView({ onBack, usuarioLogado }) {
     }
   };
 
+  const confirmarAguardo = async (motivo) => {
+    const id = tarefaParaAguardar;
+    if (!id) return;
+    setProcessando(id);
+    try {
+      const { data, ok } = await tarefaService.colocarEmAguardo(id, motivo);
+      show(ok ? 'Tarefa em aguardo.' : (data?.error || 'Erro ao colocar em aguardo.'), ok ? 'ok' : 'err');
+      carregarTarefas();
+    } catch (erro) {
+      console.error(erro);
+      show('Erro ao conectar com o servidor.', 'err');
+    } finally {
+      setProcessando(null);
+      setTarefaParaAguardar(null);
+    }
+  };
+
+  const retomarTarefa = async (id) => {
+    setProcessando(id);
+    try {
+      const { data, ok } = await tarefaService.retomar(id);
+      show(ok ? 'Tarefa retomada.' : (data?.error || 'Erro ao retomar.'), ok ? 'ok' : 'err');
+      carregarTarefas();
+    } catch (erro) {
+      console.error(erro);
+      show('Erro ao conectar com o servidor.', 'err');
+    } finally {
+      setProcessando(null);
+    }
+  };
+
   const excluirTarefa = async (id) => {
     setProcessando(id);
     try {
@@ -598,7 +701,9 @@ export default function TarefasView({ onBack, usuarioLogado }) {
     const ids = novaOrdem.map(t => t.id);
     try {
       const res = await tarefaService.reordenar(ids);
-      if (!res || !res.ok) show('Não foi possível salvar a nova ordem.', 'err');
+      if (!res || !res.ok) {
+        show(res?.data?.error || 'Não foi possível salvar a nova ordem.', 'err');
+      }
     } catch (e) {
       console.error('Erro ao salvar ordem:', e);
       show('Não foi possível salvar a nova ordem.', 'err');
@@ -688,9 +793,9 @@ export default function TarefasView({ onBack, usuarioLogado }) {
               ))}
             </div>
 
-            {/* Filtro de Status (Pendentes / Concluídas) */}
+            {/* Filtro de Status (Pendentes / Em Aguardo / Concluídas) */}
             <div style={{ display: 'flex', background: '#EAEAEA', borderRadius: 20, padding: 4, width: 'fit-content' }}>
-              {[['pendentes', 'Pendentes'], ['concluidas', 'Concluídas']].map(([valor, rotulo]) => (
+              {[['pendentes', 'Pendentes'], ['aguardo', 'Em Aguardo'], ['concluidas', 'Concluídas']].map(([valor, rotulo]) => (
                 <button key={valor} type="button" onClick={() => setAba(valor)} style={{
                   padding: '8px 18px', borderRadius: 16, border: 'none', cursor: 'pointer',
                   fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 12.5,
@@ -710,6 +815,8 @@ export default function TarefasView({ onBack, usuarioLogado }) {
             processando={processando}
             onConcluir={concluirTarefa}
             onReabrir={reabrirTarefa}
+            onAguardar={setTarefaParaAguardar}
+            onRetomar={retomarTarefa}
             onExcluir={setTarefaParaExcluir}
             onAbrirPasta={abrirPasta}
             onSalvarObservacao={salvarObservacao}
@@ -725,6 +832,14 @@ export default function TarefasView({ onBack, usuarioLogado }) {
           confirmLabel="Excluir"
           onConfirm={() => excluirTarefa(tarefaParaExcluir)}
           onCancel={() => setTarefaParaExcluir(null)}
+        />
+      )}
+
+      {tarefaParaAguardar && (
+        <ModalAguardo
+          salvando={processando === tarefaParaAguardar}
+          onConfirm={confirmarAguardo}
+          onCancel={() => setTarefaParaAguardar(null)}
         />
       )}
     </Shell>

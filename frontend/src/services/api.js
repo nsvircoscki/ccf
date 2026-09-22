@@ -431,7 +431,10 @@ export const api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ids }),
         });
-        return { ok: res.ok };
+        // O controller devolve o motivo real em { error } quando falha — sem
+        // isso o toast só consegue dizer "não foi possível", que não ajuda
+        // ninguém a descobrir o que aconteceu.
+        return { ok: res.ok, data: res.ok ? null : await res.json().catch(() => null) };
     },
 
     concluirTarefa: async (id, setor) => {
@@ -445,6 +448,20 @@ export const api = {
 
     reabrirTarefa: async (id) => {
         const res = await fetch(`${BASE_URL}/tarefas/${id}/reabrir`, { method: 'POST' });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    colocarTarefaEmAguardo: async (id, motivo) => {
+        const res = await fetch(`${BASE_URL}/tarefas/${id}/aguardar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ motivo }),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    retomarTarefa: async (id) => {
+        const res = await fetch(`${BASE_URL}/tarefas/${id}/retomar`, { method: 'POST' });
         return { data: await res.json(), ok: res.ok };
     },
 

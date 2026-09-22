@@ -208,6 +208,19 @@ export function PesquisaView({
     return 'Em Andamento';
   };
 
+  // Status das SUAS etapas — usada pelos filtros Iniciar/Em Andamento/Todas
+  // quando "Minhas Etapas" está ligado. Diferente de statusDoProjeto: aqui
+  // "Em Andamento" exige uma tarefa LITERALMENTE na coluna Em Andamento, não
+  // qualquer mistura de Iniciar/Concluído — um setor com uma tarefa concluída
+  // e outra ainda não iniciada não tem nada realmente em andamento agora; é
+  // trabalho pendente pra começar, então cai em "Iniciar".
+  const statusNoEscopo = (projeto) => {
+    const etapas = tarefasNoEscopo(projeto).map(t => t.currentStep?.step_name || 'Iniciar');
+    if (etapas.every(e => e === 'Concluído')) return 'Concluído';
+    if (etapas.some(e => e === 'Em Andamento')) return 'Em Andamento';
+    return 'Iniciar';
+  };
+
   // Serviço "ativo" pro contador: tem pelo menos um projeto no Kanban que
   // ainda não terminou (ou nenhum projeto fabricado ainda). Ignora o escopo
   // de "Minhas Etapas" de propósito — usa os tickets brutos, porque essa é
@@ -242,8 +255,19 @@ export function PesquisaView({
   if (somenteMinhasEtapas) {
     projetos = projetos.filter(p => p.minhasTasks.length > 0);
   }
-  if (abaProjetos === 'ativos' && filtroStatus !== 'Todas') {
-    projetos = projetos.filter(p => statusDoProjeto(p) === filtroStatus);
+  if (abaProjetos === 'ativos') {
+    if (somenteMinhasEtapas) {
+      // Dentro de "Minhas Etapas" o status considerado é o das SUAS etapas,
+      // não o do projeto inteiro: "Todas" tira quem você já concluiu (mesmo
+      // que o projeto como um todo continue aberto), e Iniciar/Em Andamento
+      // filtram pelo que está de fato acontecendo na sua parte.
+      projetos = projetos.filter(p => statusNoEscopo(p) !== 'Concluído');
+      if (filtroStatus !== 'Todas') {
+        projetos = projetos.filter(p => statusNoEscopo(p) === filtroStatus);
+      }
+    } else if (filtroStatus !== 'Todas') {
+      projetos = projetos.filter(p => statusDoProjeto(p) === filtroStatus);
+    }
   }
   if (filtroTipo !== 'Todos') {
     projetos = projetos.filter(p => p.description?.includes(filtroTipo));

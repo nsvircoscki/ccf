@@ -9,6 +9,8 @@ router.put('/reordenar', tarefaController.reordenar);
 router.put('/:id/observacao', tarefaController.atualizarObservacao);
 router.post('/:id/concluir', tarefaController.concluir);
 router.post('/:id/reabrir', tarefaController.reabrir);
+router.post('/:id/aguardar', tarefaController.colocarEmAguardo);
+router.post('/:id/retomar', tarefaController.retomar);
 router.delete('/:id', tarefaController.excluir);
 
 export default router;

@@ -484,7 +484,8 @@ model Tarefa {
   observacoes String?
   linkPasta   String?   // caminho de rede/local da pasta do serviço (ex.: \\SERVIDOR\Pasta)
 
-  status       String    @default("PENDENTE") // PENDENTE | CONCLUIDA
+  status       String    @default("PENDENTE") // PENDENTE | AGUARDO | CONCLUIDA
+  motivoAguardo String?  // o que falta pra concluir, preenchido ao colocar em aguardo
   criadoPor    String?   // setor de quem lançou (usuarioLogado no momento da criação)
   concluidoPor String?
   concluido_em DateTime?
