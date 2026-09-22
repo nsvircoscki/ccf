@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChartNoAxesColumn, CircleAlert, Clock3, Files, FileText, LogIn, TimerReset, Trash2, User, X } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChartNoAxesColumn, CircleAlert, Clock3, Files, FileText, LogIn, TimerReset, User, X } from 'lucide-react';
 import { api } from '../../services/api';
-import { meses, diasSemana, HORARIOS_PADRAO, JUSTIFICATIVA_CORES } from './sisPontoData.js';
-import { chaveData, hora, horariosDoDia, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, calcularHistoricoSemanal, encontrarJustificativaAceita, statusJustificativaSlotsFaltantes, statusCalendarioDoDia } from './sisPontoUtils.js';
+import { meses, diasSemana, PADROES_HORARIO_INFO, PADROES_HORARIO_PADRAO } from './sisPontoData.js';
+import { chaveData, hora, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, calcularHistoricoSemanal, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, ehHorista } from './sisPontoUtils.js';
 import { BancoHoras, Card, ConfirmacaoPonto, FormularioModal } from './SisPontoComponents.jsx';
+import SisPontoJustificativasAdmin from './SisPontoJustificativasAdmin.jsx';
+import SisPontoJornadaAdmin from './SisPontoJornadaAdmin.jsx';
 import './sisPonto.css';
 
-export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino }) {
+export default function SisPontoEngAdminScreen({ destino }) {
   const [activePage, setActivePage] = useState('dashboard');
   // Redireciona pra aba certa quando a navbar manda o admin pra cá a partir
   // de uma notificação (ex.: justificativa nova). O "ts" no destino garante
@@ -18,9 +20,7 @@ export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino 
   const [date, setDate] = useState(chaveData(new Date()));
   const [mes, setMes] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [mesesAberto, setMesesAberto] = useState(false);
-  const [configuracao, setConfiguracao] = useState(() => {
-    try { return { ...HORARIOS_PADRAO, ...JSON.parse(localStorage.getItem('ccf-sis-ponto-horarios-ENG') || '{}') }; } catch { return HORARIOS_PADRAO; }
-  });
+  const [padroesHorario, setPadroesHorario] = useState(PADROES_HORARIO_PADRAO);
   const [cadastroFuncionarios, setCadastroFuncionarios] = useState(() => {
     try {
       return Array.from(new Set(Object.keys(localStorage).filter((key) => key.startsWith('ccf-sis-ponto-funcionarios-')).flatMap((key) => {
@@ -36,6 +36,7 @@ export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino 
   const [registrosBackend, setRegistrosBackend] = useState({});
   const [confirmacaoModal, setConfirmacaoModal] = useState(null);
   const [novoFuncionarioModal, setNovoFuncionarioModal] = useState(false);
+  const [renomeacaoModal, setRenomeacaoModal] = useState(null);
 
   const carregarJustificativas = () => {
     setCarregandoJustificativas(true);
@@ -55,24 +56,28 @@ export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino 
     return extrairRegistrosFuncionario(registrosBackend, selecionado.id);
   }, [cadastroFuncionarios, calendarioFuncionarioId, registrosBackend]);
 
-  const horarioEsperadoEng = (indice, registrosDoDia = []) => {
-    const dataRegistro = registrosDoDia[indice] ? new Date(registrosDoDia[indice]) : new Date(`${date}T12:00:00`);
-    return horariosDoDia(dataRegistro, configuracao)[indice % 4];
+  const funcionarioCalendario = cadastroFuncionarios.find((funcionario) => funcionario.id === calendarioFuncionarioId);
+
+  const statusRegistroEng = (registro, indice, _registrosDoDia, chaveDia = date) => {
+    const expectativas = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, new Date(`${chaveDia}T12:00:00`)) || [];
+    return statusRegistroComExpectativa(registro, indice, expectativas, justificativas, calendarioFuncionarioId, chaveDia);
   };
 
-  const statusRegistroEng = (registro, indice, registrosDoDia = [], chaveDia = date) => {
-    const [horaEsperada, minutoEsperado] = horarioEsperadoEng(indice, registrosDoDia)[1].split(':').map(Number);
-    const instante = new Date(registro);
-    const diferenca = (instante.getHours() * 60 + instante.getMinutes()) - (horaEsperada * 60 + minutoEsperado);
-    const tipo = horarioEsperadoEng(indice, registrosDoDia)[0];
-    const foraDoHorario = (tipo === 'Entrada' && diferenca >= 5) || (tipo === 'Saída' && diferenca <= -5);
-    if (!foraDoHorario) return 'Normal';
-    if (encontrarJustificativaAceita(justificativas, calendarioFuncionarioId, chaveDia, hora(instante))) return 'Justificado';
-    return 'Atrasado/Saída Antecipada';
-  };
+  const carregarHorarios = () => api.getSispontoPadroesHorario()
+    .then((dados) => setPadroesHorario({ ...PADROES_HORARIO_PADRAO, ...(dados && typeof dados === 'object' ? dados : {}) }))
+    .catch(() => {});
 
   useEffect(() => { carregarJustificativas(); }, [activePage]);
   useEffect(() => { carregarRegistros(); }, [activePage]);
+  useEffect(() => { carregarHorarios(); }, [activePage]);
+  // O banco de horas depende de batidas feitas em outra sessão (o funcionário
+  // batendo ponto), então, enquanto o admin estiver nessa aba, buscamos de
+  // novo periodicamente pra não depender de um F5 manual.
+  useEffect(() => {
+    if (activePage !== 'banco') return;
+    const intervalo = window.setInterval(() => { carregarRegistros(); }, 20000);
+    return () => window.clearInterval(intervalo);
+  }, [activePage]);
   useEffect(() => {
     let cancelado = false;
     api.getSispontoFuncionarios().then((lista) => {
@@ -90,9 +95,9 @@ export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino 
       setCalendarioFuncionarioId(cadastroFuncionarios[0].id);
     }
   }, [cadastroFuncionarios, calendarioFuncionarioId]);
-  useEffect(() => localStorage.setItem('ccf-sis-ponto-horarios-ENG', JSON.stringify(configuracao)), [configuracao]);
-  const funcionarios = useMemo(() => buildEngFuncionariosFromStorage(date, configuracao, cadastroFuncionarios, justificativas, registrosBackend), [date, configuracao, cadastroFuncionarios, justificativas, registrosBackend]);
+  const funcionarios = useMemo(() => buildEngFuncionariosFromStorage(date, padroesHorario, cadastroFuncionarios, justificativas, registrosBackend), [date, padroesHorario, cadastroFuncionarios, justificativas, registrosBackend]);
   const setores = Array.from(new Set(funcionarios.map((f) => f.setor))).sort();
+  const justificativasPendentes = justificativas.filter((justificativa) => justificativa.status === 'Em análise').length;
   const [funcionarioFiltro, setFuncionarioFiltro] = useState('Todos os funcionários');
   const [setorFiltro, setSetorFiltro] = useState('Todos os setores');
   const [statusFiltro, setStatusFiltro] = useState('Todos os status');
@@ -150,10 +155,10 @@ export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino 
   };
 
   const adicionarFuncionarioEng = () => setNovoFuncionarioModal(true);
-  const criarFuncionarioEng = ({ nome, setor }) => {
+  const criarFuncionarioEng = ({ nome, setor, horista }) => {
     setNovoFuncionarioModal(false);
     if (!nome?.trim() || !setor?.trim()) return;
-    const funcionario = { id: `${setor.trim().toUpperCase()}-${Date.now()}`, nome: nome.trim(), setor: setor.trim().toUpperCase() };
+    const funcionario = { id: `${setor.trim().toUpperCase()}-${Date.now()}`, nome: nome.trim(), setor: setor.trim().toUpperCase(), horista: Boolean(horista) };
     api.createSispontoFuncionario(funcionario).then((novo) => {
       setCadastroFuncionarios((atuais) => [...atuais, novo]);
     }).catch(() => {
@@ -162,10 +167,12 @@ export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino 
     });
   };
 
-  const renomearFuncionarioEng = (funcionario) => {
-    const novoNome = window.prompt('Novo nome do funcionário', funcionario.nome);
-    if (!novoNome?.trim()) return;
-    const proximoNome = novoNome.trim();
+  const renomearFuncionarioEng = (funcionario) => setRenomeacaoModal(funcionario);
+  const confirmarRenomeacaoEng = ({ nome }) => {
+    const funcionario = renomeacaoModal;
+    setRenomeacaoModal(null);
+    if (!funcionario || !nome?.trim()) return;
+    const proximoNome = nome.trim();
     api.updateSispontoFuncionario(funcionario.id, { nome: proximoNome }).then((atualizado) => {
       setCadastroFuncionarios((atuais) => atuais.map((item) => item.id === funcionario.id ? { ...item, nome: atualizado.nome } : item));
     }).catch(() => {
@@ -197,12 +204,18 @@ export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino 
           <nav className="sis-admin-nav">
             <button className={`sis-admin-nav-item ${activePage === 'dashboard' ? 'active' : ''}`} onClick={() => setActivePage('dashboard')}><CalendarDays size={16} /> Dashboard</button>
             <button className={`sis-admin-nav-item ${activePage === 'funcionarios' ? 'active' : ''}`} onClick={() => setActivePage('funcionarios')}><User size={16} /> Funcionários</button>
-            <button className={`sis-admin-nav-item ${activePage === 'registros' ? 'active' : ''}`} onClick={() => setActivePage('registros')}><ChartNoAxesColumn size={16} /> Registros</button>
             <button className={`sis-admin-nav-item ${activePage === 'calendario' ? 'active' : ''}`} onClick={() => setActivePage('calendario')}><CalendarDays size={16} /> Calendário</button>
             <button className={`sis-admin-nav-item ${activePage === 'banco' ? 'active' : ''}`} onClick={() => setActivePage('banco')}><Clock3 size={16} /> Banco de horas</button>
-            <button className={`sis-admin-nav-item ${activePage === 'justificativas' ? 'active' : ''}`} onClick={() => setActivePage('justificativas')}><Files size={16} /> Justificativas</button>
+            <button className={`sis-admin-nav-item ${activePage === 'justificativas' ? 'active' : ''}`} onClick={() => setActivePage('justificativas')}>
+              <Files size={16} /> Justificativas
+              {justificativasPendentes > 0 && (
+                <span style={{ marginLeft: 'auto', minWidth: 20, height: 20, padding: '0 5px', borderRadius: 999, background: '#e5484d', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: activePage === 'justificativas' ? '0 0 0 2px #1767e8' : '0 0 0 2px #fff' }}>
+                  {justificativasPendentes > 99 ? '99+' : justificativasPendentes}
+                </span>
+              )}
+            </button>
             <button className={`sis-admin-nav-item ${activePage === 'relatorios' ? 'active' : ''}`} onClick={() => setActivePage('relatorios')}><ChartNoAxesColumn size={16} /> Relatórios</button>
-            <button className={`sis-admin-nav-item ${activePage === 'configuracoes' ? 'active' : ''}`} onClick={() => setActivePage('configuracoes')}><X size={16} /> Configurações</button>
+            <button className={`sis-admin-nav-item ${activePage === 'configuracoes' ? 'active' : ''}`} onClick={() => setActivePage('configuracoes')}><Clock3 size={16} /> Jornada</button>
           </nav>
         </aside>
 
@@ -409,30 +422,13 @@ export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino 
           )}
 
           {activePage === 'configuracoes' && (
-            <section className="sis-empty-view">
-              <Card style={{ padding: 26, minHeight: 280 }}>
-                <h2 style={{ margin: 0, fontSize: 20 }}>Configurações de jornada</h2>
-                <p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Horários-base usados para classificar atrasos, saídas antecipadas e ausências.</p>
-                <div style={{ display: 'grid', gap: 12 }}>
-                  {['segunda', 'terca', 'quarta', 'quinta', 'sexta'].map((dia) => (
-                    <div key={dia} style={{ display: 'grid', gridTemplateColumns: '110px repeat(4, minmax(100px, 1fr))', gap: 8, alignItems: 'center' }}>
-                      <strong style={{ color: '#405371', textTransform: 'capitalize', fontSize: 12 }}>{dia}</strong>
-                      {[
-                        ['entradaManha', 'Entrada manhã'],
-                        ['saidaManha', 'Saída manhã'],
-                        ['entradaTarde', 'Entrada tarde'],
-                        ['saidaTarde', 'Saída tarde'],
-                      ].map(([campo, rotulo]) => (
-                        <label key={campo} style={{ display: 'grid', gap: 4, color: '#718398', fontSize: 10, fontWeight: 800 }}>
-                          {rotulo}
-                          <input aria-label={`${dia} - ${rotulo}`} type="time" value={configuracao[dia][campo]} onChange={(event) => setConfiguracao((atual) => ({ ...atual, [dia]: { ...atual[dia], [campo]: event.target.value } }))} />
-                        </label>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </section>
+            <SisPontoJornadaAdmin
+              cadastroFuncionarios={cadastroFuncionarios}
+              setCadastroFuncionarios={setCadastroFuncionarios}
+              padroesHorario={padroesHorario}
+              setPadroesHorario={setPadroesHorario}
+              carregarHorarios={carregarHorarios}
+            />
           )}
 
           {activePage === 'funcionarios' && (
@@ -456,15 +452,12 @@ export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino 
                       <span style={{ padding: '9px', borderRadius: 8, background: '#eef4ff', color: '#244c91', fontSize: 11 }}>Horas: <b>{dados.total}</b></span>
                       <span style={{ padding: '9px', borderRadius: 8, background: '#eefaf6', color: '#2b8761', fontSize: 11 }}>Status: <b>{dados.status}</b></span>
                     </span>
+                    <span style={{ padding: '9px', borderRadius: 8, background: ehHorista(funcionario) ? '#fff8ee' : funcionario.padraoHorarioId ? '#eef4ff' : '#f1f4f9', color: ehHorista(funcionario) ? '#b9770e' : funcionario.padraoHorarioId ? '#244c91' : '#7183a3', fontSize: 11, textAlign: 'center' }}>
+                      {ehHorista(funcionario) ? 'Horista' : funcionario.padraoHorarioId ? PADROES_HORARIO_INFO[funcionario.padraoHorarioId]?.nome : 'Sem horário assinalado'} <span style={{ fontWeight: 600, opacity: .8 }}>· defina na aba Jornada</span>
+                    </span>
                   </div>;
                 })}</div>
               </Card>
-            </section>
-          )}
-
-          {activePage === 'registros' && (
-            <section className="sis-empty-view">
-              <Card style={{ padding: 26, minHeight: 280 }}><h2 style={{ margin: 0, fontSize: 20 }}>Registros</h2><p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Acompanhe os registros legíveis do dia e do perfil.</p><button onClick={exportarRelatorio} type="button" style={{ border: 0, borderRadius: 9, padding: '11px 15px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>Exportar relatório</button></Card>
             </section>
           )}
 
@@ -517,7 +510,7 @@ export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino 
                             const chave = chaveData(dia);
                             const itens = Array.isArray(calendarioRegistros[chave]) ? calendarioRegistros[chave].map((registro) => new Date(registro)).sort((a, b) => a - b) : [];
                             const statusItens = itens.map((registro, registroIndex) => statusRegistroEng(registro, registroIndex, itens, chave));
-                            const horariosDia = horariosDoDia(dia);
+                            const horariosDia = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, dia) || [];
                             const { temAtraso, temJustificado, temJustificadoPendente, horariosPreenchidos } = statusCalendarioDoDia(itens, statusItens, horariosDia, justificativas, calendarioFuncionarioId, chave);
                             const pertenceAoMes = dia.getMonth() === mes.getMonth();
                             const ehHoje = chave === chaveData(new Date());
@@ -551,7 +544,8 @@ export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino 
                           const registrosDia = Array.isArray(calendarioRegistros[chaveDia]) ? calendarioRegistros[chaveDia] : [];
                           const temJustificadoPorPonto = registrosDia.some((registro, indice, lista) => statusRegistroEng(new Date(registro), indice, lista, chaveDia) === 'Justificado');
                           if (temJustificadoPorPonto) return true;
-                          return statusJustificativaSlotsFaltantes(justificativas, calendarioFuncionarioId, chaveDia, horariosDoDia(dia), registrosDia.length) === 'Aceita';
+                          const expectativasDia = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, dia) || [];
+                          return statusJustificativaSlotsFaltantes(justificativas, calendarioFuncionarioId, chaveDia, expectativasDia, registrosDia.length) === 'Aceita';
                         }).length;
                       return <motion.div className="sis-eng-calendar-summary-card" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .3 }}>
                         <div className="sis-eng-calendar-summary-head"><h2>Resumo do mês</h2><span>Seus registros em {meses[mes.getMonth()].toLowerCase()}</span></div>
@@ -574,117 +568,13 @@ export default function SisPontoEngAdminScreen({ usuarioLogado = 'ENG', destino 
         </section>
       </div>
       {confirmacaoModal && <ConfirmacaoPonto {...confirmacaoModal} onClose={() => setConfirmacaoModal(null)} />}
-      {novoFuncionarioModal && <FormularioModal titulo="Novo funcionário" campos={[{ nome: 'nome', label: 'Nome completo', obrigatorio: true }, { nome: 'setor', label: 'Setor', obrigatorio: true, valorInicial: 'ENG' }]} textoConfirmar="Adicionar" confirmar={criarFuncionarioEng} onClose={() => setNovoFuncionarioModal(false)} />}
+      {novoFuncionarioModal && <FormularioModal titulo="Novo funcionário" campos={[
+        { nome: 'nome', label: 'Nome completo', obrigatorio: true },
+        { nome: 'setor', label: 'Setor', obrigatorio: true, valorInicial: 'ENG' },
+        { nome: 'horista', tipo: 'switch', label: 'Tipo de contrato', descricao: 'Arraste para a direita se for horista (recebe por hora, sem horário fixo).', rotuloDesligado: 'Mensalista', rotuloLigado: 'Horista' },
+      ]} textoConfirmar="Adicionar" confirmar={criarFuncionarioEng} onClose={() => setNovoFuncionarioModal(false)} />}
+      {renomeacaoModal && <FormularioModal titulo="Renomear funcionário" campos={[{ nome: 'nome', label: 'Nome completo', obrigatorio: true, valorInicial: renomeacaoModal.nome }]} textoConfirmar="Salvar" confirmar={confirmarRenomeacaoEng} onClose={() => setRenomeacaoModal(null)} />}
     </main>
   );
 }
 
-const ORDEM_STATUS_JUSTIFICATIVA = { 'Em análise': 0, Aceita: 1, Inválida: 2, Recusada: 3 };
-
-function SisPontoJustificativasAdmin({ justificativas, carregando, onAtualizado }) {
-  const [processandoId, setProcessandoId] = useState(null);
-  const [imagemAmpliada, setImagemAmpliada] = useState(null);
-  const [confirmacaoExclusao, setConfirmacaoExclusao] = useState(null);
-
-  const decidir = async (id, status) => {
-    setProcessandoId(id);
-    try {
-      await api.updateSispontoJustificativa(id, { status });
-      onAtualizado();
-    } catch {
-      // mantém a lista como está; o admin pode tentar novamente.
-    } finally {
-      setProcessandoId(null);
-    }
-  };
-
-  const excluir = (justificativa) => setConfirmacaoExclusao({
-    titulo: 'Excluir justificativa',
-    mensagem: `Excluir a justificativa de ${justificativa.nome} (${justificativa.dia})? Essa ação não pode ser desfeita.`,
-    destrutivo: true,
-    confirmar: async () => {
-      setConfirmacaoExclusao(null);
-      setProcessandoId(justificativa.id);
-      try {
-        await api.deleteSispontoJustificativa(justificativa.id);
-        onAtualizado();
-      } catch {
-        // mantém a lista como está; o admin pode tentar novamente.
-      } finally {
-        setProcessandoId(null);
-      }
-    },
-  });
-
-  const ordenadas = [...justificativas].sort((a, b) => {
-    const porStatus = (ORDEM_STATUS_JUSTIFICATIVA[a.status] ?? 9) - (ORDEM_STATUS_JUSTIFICATIVA[b.status] ?? 9);
-    if (porStatus !== 0) return porStatus;
-    return new Date(b.criadoEm) - new Date(a.criadoEm);
-  });
-
-  if (carregando) {
-    return <Card style={{ padding: 26, minHeight: 200 }}><p style={{ color: '#7183a3', fontSize: 13 }}>Carregando justificativas...</p></Card>;
-  }
-
-  if (!ordenadas.length) {
-    return <Card style={{ padding: 26, minHeight: 200 }}>
-      <h2 style={{ margin: 0, fontSize: 20 }}>Justificativas</h2>
-      <p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Nenhuma solicitação enviada pelos funcionários até o momento.</p>
-    </Card>;
-  }
-
-  return (
-    <>
-    <div style={{ display: 'grid', gap: 12 }}>
-      {ordenadas.map((justificativa) => {
-        const cor = JUSTIFICATIVA_CORES[justificativa.status] || JUSTIFICATIVA_CORES['Em análise'];
-        const processando = processandoId === justificativa.id;
-        return (
-          <motion.div key={justificativa.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ background: '#fff', border: `1px solid ${cor.borda}`, borderRadius: 14, boxShadow: '0 4px 14px rgba(15,35,70,.05)', padding: 18, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 900, color: '#1d3156', fontSize: 14 }}><User size={14} /> {justificativa.nome}</span>
-                <span style={{ color: '#7183a3', fontSize: 11, fontWeight: 800 }}>{justificativa.setor}</span>
-                <span style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 99, background: cor.texto, color: '#fff', fontSize: 10, fontWeight: 900 }}>{justificativa.status}</span>
-              </div>
-              <div style={{ marginTop: 8, color: '#243755', fontSize: 12, fontWeight: 800 }}>
-                {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', weekday: 'long' }).format(new Date(`${justificativa.dia}T12:00:00`))} · {justificativa.horaInicio}–{justificativa.horaFim}
-              </div>
-              <p style={{ margin: '8px 0 0', color: '#405371', fontSize: 12, fontWeight: 600, lineHeight: 1.5 }}>{justificativa.motivo}</p>
-              {justificativa.anexoDataUrl && (
-                <button type="button" onClick={() => setImagemAmpliada(justificativa.anexoDataUrl)} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, border: 0, background: 'transparent', padding: 0, cursor: 'pointer' }}>
-                  <span style={{ display: 'block', width: 56, height: 56, borderRadius: 8, overflow: 'hidden', border: '1px solid #e5edf8', flexShrink: 0 }}>
-                    <img src={justificativa.anexoDataUrl} alt="Atestado anexado" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  </span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#1767e8', fontSize: 11, fontWeight: 800 }}><FileText size={13} /> Ver atestado anexado</span>
-                </button>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: '0 0 auto', justifyContent: 'center', alignItems: 'stretch' }}>
-              {justificativa.status === 'Em análise' ? (
-                <>
-                  <button type="button" disabled={processando} onClick={() => decidir(justificativa.id, 'Aceita')} style={{ border: 0, borderRadius: 8, padding: '9px 16px', background: '#2aba72', color: '#fff', fontWeight: 800, fontSize: 12, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Aceitar justificativa</button>
-                  <button type="button" disabled={processando} onClick={() => decidir(justificativa.id, 'Inválida')} style={{ border: 0, borderRadius: 8, padding: '9px 16px', background: '#ff9c2e', color: '#fff', fontWeight: 800, fontSize: 12, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Justificativa inválida</button>
-                  <button type="button" disabled={processando} onClick={() => decidir(justificativa.id, 'Recusada')} style={{ border: 0, borderRadius: 8, padding: '9px 16px', background: '#e4544e', color: '#fff', fontWeight: 800, fontSize: 12, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Recusar justificativa</button>
-                </>
-              ) : (
-                <div style={{ color: '#7183a3', fontSize: 11, fontWeight: 700, textAlign: 'right' }}>
-                  Decidida em {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(justificativa.atualizadoEm))}
-                </div>
-              )}
-              <button type="button" disabled={processando} onClick={() => excluir(justificativa)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, border: '1px solid #f0d3d3', borderRadius: 8, padding: '8px 16px', background: '#fff', color: '#8a4a4f', fontWeight: 800, fontSize: 12, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}><Trash2 size={13} /> Excluir</button>
-            </div>
-          </motion.div>
-        );
-      })}
-    </div>
-    {imagemAmpliada && (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} role="presentation" onMouseDown={() => setImagemAmpliada(null)} style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(15, 30, 55, .72)' }}>
-        <motion.img initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} src={imagemAmpliada} alt="Atestado anexado em tamanho ampliado" onMouseDown={(event) => event.stopPropagation()} style={{ maxWidth: 'min(720px, 92vw)', maxHeight: '86vh', borderRadius: 12, boxShadow: '0 24px 70px rgba(0,0,0,.4)' }} />
-      </motion.div>
-    )}
-    {confirmacaoExclusao && <ConfirmacaoPonto {...confirmacaoExclusao} onClose={() => setConfirmacaoExclusao(null)} />}
-    </>
-  );
-}

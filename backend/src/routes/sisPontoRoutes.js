@@ -1,5 +1,5 @@
 import express from 'express';
-import { listarFuncionarios, listarRegistros, criarFuncionario, atualizarFuncionario, excluirFuncionario, registrarPonto, excluirRegistro, listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa } from '../services/sisPontoService.js';
+import { listarFuncionarios, listarRegistros, criarFuncionario, atualizarFuncionario, excluirFuncionario, registrarPonto, excluirRegistro, listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario } from '../services/sisPontoService.js';
 
 const router = express.Router();
 
@@ -104,6 +104,24 @@ router.delete('/justificativas/:id', async (req, res) => {
     res.json({ ok: true });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Erro ao excluir justificativa.' });
+  }
+});
+
+router.get('/padroes-horario', async (_req, res) => {
+  try {
+    const padroes = await listarPadroesHorario();
+    res.json(padroes);
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao listar padrões de horário.' });
+  }
+});
+
+router.put('/padroes-horario/:id', async (req, res) => {
+  try {
+    const padrao = await atualizarPadraoHorario(req.params.id, req.body.dias);
+    res.json(padrao);
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao atualizar padrão de horário.' });
   }
 });
 

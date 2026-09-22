@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, FileText, Hourglass, Image as ImageIcon, LogIn, Pencil, TimerReset, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
-import { meses, diasSemana, JUSTIFICATIVA_CORES } from './sisPontoData.js';
-import { chaveData, hora, horariosDoDia, encontrarJustificativaAceita, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia } from './sisPontoUtils.js';
+import { meses, diasSemana, JUSTIFICATIVA_CORES, PADROES_HORARIO_PADRAO } from './sisPontoData.js';
+import { chaveData, hora, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, ehHorista } from './sisPontoUtils.js';
 import { Card, ConfirmacaoPonto, FormularioModal, BancoHoras, Legenda, MenuPonto, ModalRegistros, Resumo, navButton } from './SisPontoComponents.jsx';
 import './sisPonto.css';
 
@@ -28,6 +28,17 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
   const [funcionarioId, setFuncionarioId] = useState(usuarioLogado);
   const funcionarioAtual = funcionariosSetor.find((funcionario) => funcionario.id === funcionarioId) || funcionariosSetor[0];
   const [registros, setRegistros] = useState({});
+  // Mesma fonte que o admin (SisPontoEngAdmin) usa pra alocar cada funcionário
+  // num padrão de horário, agora vinda do backend — sem isso, este painel
+  // sempre usava o horário padrão de fábrica e ignorava a alocação feita lá.
+  const [padroesHorario, setPadroesHorario] = useState(PADROES_HORARIO_PADRAO);
+  useEffect(() => {
+    api.getSispontoPadroesHorario().then((dados) => {
+      setPadroesHorario({ ...PADROES_HORARIO_PADRAO, ...(dados && typeof dados === 'object' ? dados : {}) });
+    }).catch(() => {});
+  }, [usuarioLogado, aba]);
+  const expectativasHoje = expectativasDoFuncionario(funcionarioAtual, padroesHorario, agora) || [];
+  const funcionarioEhHorista = ehHorista(funcionarioAtual);
 
   useEffect(() => {
     const timer = setInterval(() => setAgora(new Date()), 1000);
@@ -76,10 +87,16 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
     const tempoIso = momento.toISOString();
     const idAtual = funcionarioAtual?.id || usuarioLogado;
 
-    const [tipo, horarioEsperadoStr] = proximoEsperado;
-    const [horaEsperada, minutoEsperado] = horarioEsperadoStr.split(':').map(Number);
-    const diferenca = (momento.getHours() * 60 + momento.getMinutes()) - (horaEsperada * 60 + minutoEsperado);
-    const atrasado = (tipo === 'Entrada' && diferenca >= 5) || (tipo === 'Saída' && diferenca <= -5);
+    const [tipo] = proximoEsperado;
+    let atrasado = false;
+    let minutosAtraso = 0;
+    if (expectativasHoje.length) {
+      const [, horarioEsperadoStr] = proximoEsperado;
+      const [horaEsperada, minutoEsperado] = horarioEsperadoStr.split(':').map(Number);
+      const diferenca = (momento.getHours() * 60 + momento.getMinutes()) - (horaEsperada * 60 + minutoEsperado);
+      atrasado = (tipo === 'Entrada' && diferenca >= 5) || (tipo === 'Saída' && diferenca <= -5);
+      minutosAtraso = Math.abs(diferenca);
+    }
 
     setRegistros((atuais) => ({ ...atuais, [chave]: [...(atuais[chave] || []), tempoIso] }));
     setConfirmacao(null);
@@ -87,7 +104,7 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
       setErroPonto('Esse registro ficou fora do horário. Não esqueça de enviar uma justificativa na aba Justificativas.');
       window.setTimeout(() => setErroPonto(null), 6000);
     }
-    api.registrarSispontoPonto({ funcionarioId: idAtual, data: chave, tempo: tempoIso, atrasado, minutosAtraso: Math.abs(diferenca), tipo }).catch(() => {
+    api.registrarSispontoPonto({ funcionarioId: idAtual, data: chave, tempo: tempoIso, atrasado, minutosAtraso, tipo }).catch(() => {
       carregarRegistros();
     });
   };
@@ -130,18 +147,15 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
   };
   const horarioEsperado = (indice, registrosDoDia = []) => {
     const dataRegistro = registrosDoDia[indice] ? new Date(registrosDoDia[indice]) : agora;
-    return horariosDoDia(dataRegistro)[indice % 4];
+    const expectativas = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dataRegistro) || [];
+    if (!expectativas.length) return [indice % 2 === 0 ? 'Entrada' : 'Saída', null];
+    return expectativas[indice % expectativas.length];
   };
   const proximoEsperado = horarioEsperado(registrosHoje.length, registrosHoje);
   const statusRegistro = (registro, indice, registrosDoDia = [], chaveDia = hoje) => {
-    const [horaEsperada, minutoEsperado] = horarioEsperado(indice, registrosDoDia)[1].split(':').map(Number);
-    const instante = new Date(registro);
-    const diferenca = (instante.getHours() * 60 + instante.getMinutes()) - (horaEsperada * 60 + minutoEsperado);
-    const tipo = horarioEsperado(indice, registrosDoDia)[0];
-    const foraDoHorario = (tipo === 'Entrada' && diferenca >= 5) || (tipo === 'Saída' && diferenca <= -5);
-    if (!foraDoHorario) return 'Normal';
-    if (encontrarJustificativaAceita(justificativas, funcionarioAtual?.id, chaveDia, hora(instante))) return 'Justificado';
-    return 'Atrasado/Saída Antecipada';
+    const dataRegistro = registrosDoDia[indice] ? new Date(registrosDoDia[indice]) : new Date(`${chaveDia}T12:00:00`);
+    const expectativas = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dataRegistro) || [];
+    return statusRegistroComExpectativa(registro, indice, expectativas, justificativas, funcionarioAtual?.id, chaveDia);
   };
   const excluirRegistro = (indice) => {
     setConfirmacao({ titulo: 'Excluir registro', mensagem: 'Deseja realmente excluir este registro de ponto?', destrutivo: true, confirmar: () => {
@@ -159,7 +173,7 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
   };
   const atrasosNoMes = registrosNoMes.reduce((total, [data, itens]) => total + itens.filter((registro, indice) => statusRegistro(registro, indice, itens, data) === 'Atrasado/Saída Antecipada').length, 0);
   const diasDoMesSemRegistroJustificados = Array.from({ length: new Date(mes.getFullYear(), mes.getMonth() + 1, 0).getDate() }, (_, indice) => new Date(mes.getFullYear(), mes.getMonth(), indice + 1))
-    .filter((dia) => { const chaveDia = chaveData(dia); const itensDia = registros[chaveDia] || []; return statusJustificativaSlotsFaltantes(justificativas, funcionarioAtual?.id, chaveDia, horariosDoDia(dia), itensDia.length) === 'Aceita'; }).length;
+    .filter((dia) => { const chaveDia = chaveData(dia); const itensDia = registros[chaveDia] || []; const expectativasDia = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dia) || []; return statusJustificativaSlotsFaltantes(justificativas, funcionarioAtual?.id, chaveDia, expectativasDia, itensDia.length) === 'Aceita'; }).length;
   const justificadasNoMes = registrosNoMes.reduce((total, [data, itens]) => total + itens.filter((registro, indice) => statusRegistro(registro, indice, itens, data) === 'Justificado').length, 0) + diasDoMesSemRegistroJustificados;
   const registrosDoModal = diaModal ? registros[diaModal] || [] : [];
   const statusRegistroDoModal = (registro, indice, registrosDoDia) => statusRegistro(registro, indice, registrosDoDia, diaModal);
@@ -169,7 +183,7 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
     Object.entries(registros).forEach(([chave, lista]) => { porData[chave] = { [idFuncionarioAtual]: lista }; });
     return porData;
   }, [registros, idFuncionarioAtual]);
-  const bancoHorasFuncionario = useMemo(() => buildEngFuncionariosFromStorage(hoje, undefined, [{ id: idFuncionarioAtual, nome: funcionarioAtual?.nome || usuarioLogado, setor: usuarioLogado }], justificativas, registrosBackendFuncionario), [hoje, idFuncionarioAtual, funcionarioAtual, usuarioLogado, justificativas, registrosBackendFuncionario]);
+  const bancoHorasFuncionario = useMemo(() => buildEngFuncionariosFromStorage(hoje, padroesHorario, [{ id: idFuncionarioAtual, nome: funcionarioAtual?.nome || usuarioLogado, setor: usuarioLogado, horista: funcionarioEhHorista, padraoHorarioId: funcionarioAtual?.padraoHorarioId || null }], justificativas, registrosBackendFuncionario), [hoje, idFuncionarioAtual, funcionarioAtual, usuarioLogado, justificativas, registrosBackendFuncionario, padroesHorario, funcionarioEhHorista]);
 
   return (
     <main style={{ height: '100%', overflow: 'auto', background: '#f8fafc', color: '#13254a' }}>
@@ -196,6 +210,7 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
             
           </aside>
           {aba === 'calendario' ? <div className="ponto-grid">
+          <div className="ponto-calendario-mobile-hide">
           <Card>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottom: '1px solid #e7edf6', gap: 10, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -218,12 +233,12 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
             </div>
             <div className="ponto-cal">
               {diasCalendario.map(({ data: dia, pertenceAoMes }) => {
-                const chave = chaveData(dia); const itens = registros[chave] || []; const ehHoje = chave === hoje; const horariosDia = horariosDoDia(dia); const statusItens = itens.map((registro, indice) => statusRegistro(registro, indice, itens, chave)); const { temAtraso, temJustificado, temJustificadoPendente, horariosPreenchidos } = statusCalendarioDoDia(itens, statusItens, horariosDia, justificativas, funcionarioAtual?.id, chave);
+                const chave = chaveData(dia); const itens = registros[chave] || []; const ehHoje = chave === hoje; const horariosDia = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dia) || []; const statusItens = itens.map((registro, indice) => statusRegistro(registro, indice, itens, chave)); const { temAtraso, temJustificado, temJustificadoPendente, horariosPreenchidos } = statusCalendarioDoDia(itens, statusItens, horariosDia, justificativas, funcionarioAtual?.id, chave);
                 return <motion.div key={chave} initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .2 }} whileHover={{ backgroundColor: '#f8fbff' }} className="ponto-dia" style={{ background: pertenceAoMes ? '#fff' : '#f4f7fb', boxShadow: ehHoje ? 'inset 0 0 0 2px #3682ff' : 'none', position: 'relative' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: ehHoje ? 800 : 700, color: ehHoje ? '#1767e8' : pertenceAoMes ? '#344766' : '#a7b4c9' }}><span style={ehHoje ? { display: 'grid', placeItems: 'center', width: 23, height: 23, borderRadius: '50%', background: '#1767e8', color: '#fff' } : {}}>{dia.getDate()}</span>{itens.length > 0 && <span title={temAtraso ? 'Há registro em atraso' : temJustificado ? 'Atraso justificado' : 'Registros no horário'} style={{ width: 8, height: 8, borderRadius: '50%', background: temAtraso ? '#ffb24a' : temJustificadoPendente ? '#f2c14e' : temJustificado ? '#4b83f5' : itens.length % 2 ? '#ffad42' : '#38bc7b' }} />}{itens.length === 0 && temJustificado && <span title="Justificado" style={{ width: 8, height: 8, borderRadius: '50%', background: temJustificadoPendente ? '#f2c14e' : '#4b83f5' }} />}</div>
                   {(itens.length > 0 || horariosPreenchidos.some(Boolean)) && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '5px 8px', marginTop: 9 }}>
-                    {itens.slice(0, 4).map((item, index) => { const entrada = horariosDia[index % 4][0] === 'Entrada'; const statusItem = statusItens[index]; return <span key={item} title={`${horariosDia[index % 4][0]} ${hora(new Date(item))}`} style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, fontSize: 11, fontWeight: 800, color: statusItem === 'Normal' ? '#425574' : statusItem === 'Justificado' ? '#2f5bd6' : '#d97706' }}><LogIn size={12} style={entrada ? undefined : { transform: 'rotate(180deg)' }} /><span>{hora(new Date(item)).slice(0, 5)}</span></span>; })}
-                    {horariosPreenchidos.map((horarioJustificado, index) => { if (!horarioJustificado || index < itens.length) return null; const entrada = horariosDia[index][0] === 'Entrada'; return <span key={`justificado-${chave}-${index}`} title={`${horariosDia[index][0]} ${horarioJustificado} · preenchido pela justificativa aprovada`} style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, fontSize: 11, fontWeight: 800, fontStyle: 'italic', color: '#2f5bd6' }}><LogIn size={12} style={entrada ? undefined : { transform: 'rotate(180deg)' }} /><span>{horarioJustificado}</span></span>; })}
+                    {itens.slice(0, 4).map((item, index) => { const tipo = horariosDia.length ? horariosDia[index % horariosDia.length][0] : (index % 2 === 0 ? 'Entrada' : 'Saída'); const entrada = tipo === 'Entrada'; const statusItem = statusItens[index]; return <span key={item} title={`${tipo} ${hora(new Date(item))}`} style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, fontSize: 11, fontWeight: 800, color: statusItem === 'Normal' ? '#425574' : statusItem === 'Justificado' ? '#2f5bd6' : '#d97706' }}><LogIn size={12} style={entrada ? undefined : { transform: 'rotate(180deg)' }} /><span>{hora(new Date(item)).slice(0, 5)}</span></span>; })}
+                    {horariosPreenchidos.map((horarioJustificado, index) => { if (!horarioJustificado || index < itens.length) return null; const tipo = horariosDia.length ? horariosDia[index % horariosDia.length][0] : (index % 2 === 0 ? 'Entrada' : 'Saída'); const entrada = tipo === 'Entrada'; return <span key={`justificado-${chave}-${index}`} title={`${tipo} ${horarioJustificado} · preenchido pela justificativa aprovada`} style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, fontSize: 11, fontWeight: 800, fontStyle: 'italic', color: '#2f5bd6' }}><LogIn size={12} style={entrada ? undefined : { transform: 'rotate(180deg)' }} /><span>{horarioJustificado}</span></span>; })}
                   </div>}
                   {itens.length > 4 && <button type="button" onClick={() => { setDiaModal(chave); setModalRegistros(true); }} style={{ marginTop: 6, padding: 0, border: 0, background: 'transparent', color: '#1767e8', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>+{itens.length - 4} registros</button>}
                   {temAtraso && <div style={{ marginTop: 5, color: '#d97706', fontSize: 10, fontWeight: 800 }}>Atrasado/Saída Antecipada</div>}
@@ -235,6 +250,7 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
               <Legenda cor="#38bc7b" texto="Normal" /><Legenda cor="#ffb24a" texto="Atrasado/Saída Antecipada" /><Legenda cor="#ff5d66" texto="Falta" /><Legenda cor="#4b83f5" texto="Justificado" /><Legenda cor="#a855f7" texto="Atestado" /><Legenda cor="#8e9bb0" texto="Feriado" /><Legenda cor="#b4bdca" texto="Folga" />
             </div>
           </Card>
+          </div>
 
           <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
             <Card style={{ padding: 22, textAlign: 'center' }}>
@@ -242,8 +258,8 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
               <div style={{ fontSize: 38, fontWeight: 800, letterSpacing: '-.04em', color: '#14264b' }}>{hora(agora)}</div>
               <p style={{ margin: '7px 0 22px', textTransform: 'capitalize', color: '#7183a3', fontSize: 12, fontWeight: 700 }}>{tituloData}</p>
               <div style={{ textAlign: 'left', padding: 14, border: '1px solid #d8e6fc', borderRadius: 10, background: '#f6faff', marginBottom: 16 }}>
-                <div style={{ color: '#7183a3', fontSize: 11, fontWeight: 800 }}>PRÓXIMO REGISTRO ESPERADO</div>
-                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#243755' }}><LogIn size={17} color={proximoEsperado[0] === 'Entrada' ? '#38bc7b' : '#ef5350'} style={proximoEsperado[0] === 'Entrada' ? undefined : { transform: 'rotate(180deg)' }} />{proximoEsperado[0]} <span style={{ marginLeft: 'auto', color: '#1767e8' }}>{proximoEsperado[1]}</span></div>
+                <div style={{ color: '#7183a3', fontSize: 11, fontWeight: 800 }}>{expectativasHoje.length ? 'PRÓXIMO REGISTRO ESPERADO' : 'PRÓXIMO REGISTRO'}</div>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#243755' }}><LogIn size={17} color={proximoEsperado[0] === 'Entrada' ? '#38bc7b' : '#ef5350'} style={proximoEsperado[0] === 'Entrada' ? undefined : { transform: 'rotate(180deg)' }} />{proximoEsperado[0]} <span style={{ marginLeft: 'auto', color: '#1767e8' }}>{expectativasHoje.length ? proximoEsperado[1] : (funcionarioEhHorista ? 'Horista' : 'Sem horário')}</span></div>
               </div>
               <button type="button" onClick={registrarPonto} style={{ width: '100%', border: 0, borderRadius: 9, background: '#1767e8', color: '#fff', padding: '13px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer', boxShadow: '0 6px 14px #1767e833' }}>Confirmar {proximoEhEntrada ? 'entrada' : 'saída'}</button>
               {registrosHoje.length > 0 && <button type="button" onClick={() => { setDiaModal(hoje); setModalRegistros(true); }} style={{ margin: '14px 0 0', color: '#1767e8', background: 'none', border: 0, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Ver registros de hoje ({registrosHoje.length})</button>}

@@ -1,12 +1,5 @@
-import { HORARIOS_PADRAO } from './sisPontoData.js';
-
 export const chaveData = (data) => `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
 export const hora = (data) => new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(data);
-export const nomeDiaConfig = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
-export const horariosDoDia = (data, configuracao = HORARIOS_PADRAO) => {
-  const dia = configuracao[nomeDiaConfig[data.getDay()]] || configuracao.segunda;
-  return [['Entrada', dia.entradaManha], ['Saída', dia.saidaManha], ['Entrada', dia.entradaTarde], ['Saída', dia.saidaTarde]];
-};
 export const minutoDoHorario = (valor) => { const [horaValor, minuto] = valor.split(':').map(Number); return horaValor * 60 + minuto; };
 
 export function formatHorario(data) {
@@ -43,22 +36,6 @@ export function formatDuracaoEmHorasDePontos(registrosDia = []) {
   const horas = Math.floor(totalMinutos / 60);
   const minutos = totalMinutos % 60;
   return `${String(horas).padStart(2, '0')}h${String(minutos).padStart(2, '0')}`;
-}
-
-export function jornadaPrevistaTexto(selectedDate = chaveData(new Date())) {
-  const data = new Date(`${selectedDate}T12:00:00`);
-  const dia = data.getDay();
-  if (dia === 5) return '08h40';
-  if (dia >= 1 && dia <= 5) return '08h50';
-  return '00h00';
-}
-
-export function jornadaPrevistaMinutos(selectedDate = chaveData(new Date())) {
-  const data = new Date(`${selectedDate}T12:00:00`);
-  const dia = data.getDay();
-  if (dia === 5) return 8 * 60 + 40;
-  if (dia >= 1 && dia <= 5) return 8 * 60 + 50;
-  return 0;
 }
 
 export function formatSaldoBanco(totalMinutos, jornadaMinutos) {
@@ -127,16 +104,15 @@ export function encontrarJustificativaAceita(justificativas = [], funcionarioId,
 }
 
 // Os registros de ponto de um dia são sempre sequenciais a partir do início
-// do expediente (entrada manhã, saída manhã, entrada tarde, saída tarde), então
-// se sobra algum horário "faltante" no dia, é sempre um bloco no final da
-// lista — cobre tanto uma ausência total (nenhuma batida) quanto parcial
-// (ex.: só faltou a tarde, mesmo tendo batido o ponto de manhã).
+// do expediente, então se sobra algum horário "faltante" no dia, é sempre um
+// bloco no final da lista — cobre tanto uma ausência total (nenhuma batida)
+// quanto parcial (ex.: só faltou o segundo turno, mesmo tendo batido o primeiro).
 // Não exige que o horário exato do slot caia dentro do período declarado na
 // justificativa: uma justificativa decidida para o dia já é suficiente,
 // mesmo que a pessoa não tenha trabalhado nenhum minuto daquele dia.
 // Retorna 'Aceita', 'Inválida' (Aceita tem prioridade se houver as duas) ou null.
-export function statusJustificativaSlotsFaltantes(justificativas = [], funcionarioId, chaveDia, horariosDia = [], totalRegistros = 0) {
-  if (totalRegistros >= horariosDia.length) return null;
+export function statusJustificativaSlotsFaltantes(justificativas = [], funcionarioId, chaveDia, expectativas = [], totalRegistros = 0) {
+  if (totalRegistros >= expectativas.length) return null;
 
   const doDia = justificativas.filter((justificativa) => (justificativa.status === 'Aceita' || justificativa.status === 'Inválida')
     && justificativa.funcionarioId === funcionarioId
@@ -155,11 +131,11 @@ export function statusJustificativaSlotsFaltantes(justificativas = [], funcionar
 // (horaInicio na ponta de entrada, horaFim na de saída); horários no meio de
 // um dia inteiro sem nenhuma batida ficam em branco, já que a justificativa
 // só define um único intervalo contínuo.
-// Retorna um array de 4 posições (uma por horário esperado do dia), cada uma
-// null ou a string 'HH:MM' vinda da justificativa.
-export function horariosJustificadosFaltantes(totalRegistros = 0, horariosDia = [], justificativas = [], funcionarioId, chaveDia) {
-  const preenchidos = [null, null, null, null];
-  if (totalRegistros >= horariosDia.length) return preenchidos;
+// Retorna um array do mesmo tamanho de `expectativas`, cada posição null ou
+// a string 'HH:MM' vinda da justificativa.
+export function horariosJustificadosFaltantes(totalRegistros = 0, expectativas = [], justificativas = [], funcionarioId, chaveDia) {
+  const preenchidos = expectativas.map(() => null);
+  if (totalRegistros >= expectativas.length) return preenchidos;
 
   const justificativaAceita = justificativas.find((justificativa) => justificativa.status === 'Aceita'
     && justificativa.funcionarioId === funcionarioId
@@ -167,10 +143,10 @@ export function horariosJustificadosFaltantes(totalRegistros = 0, horariosDia = 
   if (!justificativaAceita) return preenchidos;
 
   const primeiroIndice = totalRegistros;
-  const ultimoIndice = horariosDia.length - 1;
+  const ultimoIndice = expectativas.length - 1;
 
   if (primeiroIndice === ultimoIndice) {
-    preenchidos[primeiroIndice] = horariosDia[primeiroIndice][0] === 'Entrada' ? justificativaAceita.horaInicio : justificativaAceita.horaFim;
+    preenchidos[primeiroIndice] = expectativas[primeiroIndice][0] === 'Entrada' ? justificativaAceita.horaInicio : justificativaAceita.horaFim;
     return preenchidos;
   }
 
@@ -183,18 +159,118 @@ export function horariosJustificadosFaltantes(totalRegistros = 0, horariosDia = 
 // Junta os cálculos de justificativa usados em toda célula do calendário
 // (tela do funcionário e do admin usam exatamente a mesma lógica) para não
 // duplicar essas contas em cada arquivo.
-export function statusCalendarioDoDia(itens, statusItens, horariosDia, justificativas, funcionarioId, chaveDia) {
+export function statusCalendarioDoDia(itens, statusItens, expectativas, justificativas, funcionarioId, chaveDia) {
   const temAtraso = statusItens.includes('Atrasado/Saída Antecipada');
-  const statusJustificativaDia = statusJustificativaSlotsFaltantes(justificativas, funcionarioId, chaveDia, horariosDia, itens.length);
+  const statusJustificativaDia = statusJustificativaSlotsFaltantes(justificativas, funcionarioId, chaveDia, expectativas, itens.length);
   const temJustificado = statusItens.includes('Justificado') || Boolean(statusJustificativaDia);
   const temJustificadoPendente = !statusItens.includes('Justificado') && statusJustificativaDia === 'Inválida';
-  const horariosPreenchidos = itens.length < horariosDia.length
-    ? horariosJustificadosFaltantes(itens.length, horariosDia, justificativas, funcionarioId, chaveDia)
-    : horariosDia.map(() => null);
+  const horariosPreenchidos = itens.length < expectativas.length
+    ? horariosJustificadosFaltantes(itens.length, expectativas, justificativas, funcionarioId, chaveDia)
+    : expectativas.map(() => null);
   return { temAtraso, temJustificado, temJustificadoPendente, horariosPreenchidos };
 }
 
-export function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Date()), configuracao = HORARIOS_PADRAO, cadastro = [], justificativas = [], registrosBackend = {}) {
+export const ehHorista = (funcionario) => Boolean(funcionario?.horista);
+
+const NOME_DIA_CONFIG = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+
+// Um funcionário aponta pra um dos padrões fixos (`padraoHorarioId`: 'integral'
+// | 'manha' | 'tarde') — ou fica sem nenhum (não designado). `padroes` é o mapa
+// vindo do backend: { integral: { dias: { segunda: [...], ... } }, manha: {...}, tarde: {...} }.
+// Cada padrão tem os próprios turnos por dia útil (dá pra ter uma sexta mais
+// curta, por exemplo); fins de semana não têm turnos definidos. Cada turno
+// vira uma Entrada + Saída esperadas; um padrão com 2 turnos naquele dia (ex.:
+// Integral, com almoço) gera 4 expectativas, um com 1 turno gera 2. Quem é
+// horista ou não tem padrão designado não tem nenhuma expectativa (null) —
+// não existe "atrasado" nem "saída antecipada" pra essas pessoas.
+export function expectativasDoFuncionario(funcionario, padroes = {}, data = new Date()) {
+  if (!funcionario || ehHorista(funcionario)) return null;
+  const padrao = funcionario.padraoHorarioId && padroes[funcionario.padraoHorarioId];
+  if (!padrao) return null;
+  const turnos = padrao.dias?.[NOME_DIA_CONFIG[data.getDay()]];
+  if (!Array.isArray(turnos) || !turnos.length) return null;
+  return turnos.flatMap((turno) => [['Entrada', turno.entrada], ['Saída', turno.saida]]);
+}
+
+// Texto curto pro cabeçalho de cada coluna de padrão de horário na tela de
+// Jornada, ex.: "08:00 - 18:00, 1h Almoço" (2 turnos) ou "07:00 - 13:00" (1 turno).
+export function descreverTurnos(turnos = []) {
+  if (turnos.length === 2) {
+    const minutosAlmoco = minutoDoHorario(turnos[1].entrada) - minutoDoHorario(turnos[0].saida);
+    const horasAlmoco = minutosAlmoco / 60;
+    const textoAlmoco = Number.isInteger(horasAlmoco) ? horasAlmoco : horasAlmoco.toFixed(1);
+    return `${turnos[0].entrada} - ${turnos[1].saida}, ${textoAlmoco}h Almoço`;
+  }
+  if (turnos.length === 1) return `${turnos[0].entrada} - ${turnos[0].saida}`;
+  return '';
+}
+
+function minutosPrevistos(expectativas = []) {
+  let total = 0;
+  for (let indice = 0; indice < expectativas.length; indice += 2) {
+    if (expectativas[indice + 1]) total += minutoDoHorario(expectativas[indice + 1][1]) - minutoDoHorario(expectativas[indice][1]);
+  }
+  return total;
+}
+
+// Mapeia os registros/expectativas (2 ou 4 posições, conforme 1 ou 2 turnos)
+// pras 4 colunas fixas da tabela (Entrada/Intervalo/Retorno/Saída). Com 1
+// turno só existe Entrada e Saída — as colunas do meio ficam vazias.
+function mapearParaColunas(lista = [], numeroTurnos) {
+  if (numeroTurnos >= 2) return [lista[0] ?? null, lista[1] ?? null, lista[2] ?? null, lista[3] ?? null];
+  if (numeroTurnos === 1) return [lista[0] ?? null, null, null, lista[1] ?? null];
+  return [null, null, null, null];
+}
+
+export function statusRegistroComExpectativa(registro, indice, expectativas, justificativas, funcionarioId, chaveDia) {
+  if (!expectativas || !expectativas.length) return 'Normal';
+  const [tipo, horarioStr] = expectativas[indice % expectativas.length];
+  const [horaEsperada, minutoEsperado] = horarioStr.split(':').map(Number);
+  const instante = new Date(registro);
+  const diferenca = (instante.getHours() * 60 + instante.getMinutes()) - (horaEsperada * 60 + minutoEsperado);
+  const foraDoHorario = (tipo === 'Entrada' && diferenca >= 5) || (tipo === 'Saída' && diferenca <= -5);
+  if (!foraDoHorario) return 'Normal';
+  if (encontrarJustificativaAceita(justificativas, funcionarioId, chaveDia, hora(instante))) return 'Justificado';
+  return 'Atrasado/Saída Antecipada';
+}
+
+// Funcionário horista (recebe por hora, sem jornada fixa) ou ainda não
+// designado a um padrão: não faz sentido comparar as batidas com um horário
+// esperado, nem calcular saldo de banco de horas — só contamos o que a
+// pessoa efetivamente bateu no dia.
+function construirFuncionarioSemExpectativa(funcionario, registrosDia) {
+  const [entrada, intervalo, retorno, saida] = registrosDia;
+  const total = formatDuracaoEmHorasDePontos(registrosDia);
+  let status = 'Ausente';
+  if (entrada) status = registrosDia.length % 2 === 0 ? 'Finalizado' : 'Presente';
+
+  return {
+    id: funcionario.id,
+    nome: funcionario.nome,
+    setor: funcionario.setor || 'ENG',
+    horista: ehHorista(funcionario),
+    padraoHorarioId: null,
+    entrada: entrada ? formatHorario(entrada) : '',
+    intervalo: intervalo ? formatHorario(intervalo) : '',
+    retorno: retorno ? formatHorario(retorno) : '',
+    saida: saida ? formatHorario(saida) : '',
+    preenchidoPorJustificativa: [false, false, false, false],
+    total,
+    status,
+    atrasouEntrada: false,
+    atrasado: false,
+    saidaAntecipada: false,
+    justificado: false,
+    justificadoPendente: false,
+    justificativa: 0,
+    jornadaPrevista: ehHorista(funcionario) ? 'Horista' : 'Sem padrão',
+    jornadaRealizada: total,
+    jornadaTipo: 'Sem horário fixo',
+    banco: '—',
+  };
+}
+
+export function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Date()), padroes = {}, cadastro = [], justificativas = [], registrosBackend = {}) {
   try {
     const funcionarios = Array.from(new Map(cadastro.filter((funcionario) => funcionario?.id).map((funcionario) => [funcionario.id, funcionario])).values());
     if (!funcionarios.length) return [];
@@ -203,50 +279,50 @@ export function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Dat
       const perfil = funcionario.nome;
       const blob = extrairRegistrosFuncionario(registrosBackend, funcionario.id);
       const registrosDia = (blob[selectedDate] || []).map((iso) => new Date(iso)).sort((a, b) => a - b);
+      const expectativas = expectativasDoFuncionario(funcionario, padroes, new Date(`${selectedDate}T12:00:00`));
+      if (!expectativas) return construirFuncionarioSemExpectativa(funcionario, registrosDia);
 
-      const entrada = registrosDia[0] ?? null;
-      const intervalo = registrosDia[1] ?? null;
-      const retorno = registrosDia[2] ?? null;
-      const saida = registrosDia[3] ?? null;
-      const horarioDoDia = horariosDoDia(new Date(`${selectedDate}T12:00:00`), configuracao);
-      const entradaEsperada = minutoDoHorario(horarioDoDia[0][1]);
-      const saidaManhaEsperada = minutoDoHorario(horarioDoDia[1][1]);
-      const entradaTardeEsperada = minutoDoHorario(horarioDoDia[2][1]);
-      const saidaTardeEsperada = minutoDoHorario(horarioDoDia[3][1]);
-      const minutosEntrada = entrada ? entrada.getHours() * 60 + entrada.getMinutes() : null;
-      const minutosIntervalo = intervalo ? intervalo.getHours() * 60 + intervalo.getMinutes() : null;
-      const minutosRetorno = retorno ? retorno.getHours() * 60 + retorno.getMinutes() : null;
-      const minutosSaida = saida ? saida.getHours() * 60 + saida.getMinutes() : null;
-      const coberto = (registro) => registro && encontrarJustificativaAceita(justificativas, funcionario.id, selectedDate, formatHorario(registro));
-      const entradaJustificada = coberto(entrada);
-      const intervaloOuSaidaJustificada = coberto(intervalo) || coberto(saida);
-      const retornoJustificado = coberto(retorno);
-      const statusSlotsFaltantes = statusJustificativaSlotsFaltantes(justificativas, funcionario.id, selectedDate, horarioDoDia, registrosDia.length);
-      const atrasouEntrada = minutosEntrada !== null && minutosEntrada - entradaEsperada >= 5 && !entradaJustificada;
-      const saiuAntecipado = (minutosIntervalo !== null && minutosIntervalo - saidaManhaEsperada <= -5 && !coberto(intervalo)) || (minutosSaida !== null && minutosSaida - saidaTardeEsperada <= -5 && !coberto(saida));
-      const retornouAtrasado = minutosRetorno !== null && minutosRetorno - entradaTardeEsperada >= 5 && !retornoJustificado;
-      const foiJustificado = Boolean(entradaJustificada || intervaloOuSaidaJustificada || retornoJustificado || statusSlotsFaltantes);
+      const numeroTurnos = expectativas.length / 2;
+      const statusPorIndice = registrosDia.map((registro, indice) => statusRegistroComExpectativa(registro, indice, expectativas, justificativas, funcionario.id, selectedDate));
+      const atrasouEntrada = statusPorIndice.some((statusItem, indice) => statusItem === 'Atrasado/Saída Antecipada' && expectativas[indice % expectativas.length][0] === 'Entrada');
+      const saiuAntecipado = statusPorIndice.some((statusItem, indice) => statusItem === 'Atrasado/Saída Antecipada' && expectativas[indice % expectativas.length][0] === 'Saída');
+      const atrasado = atrasouEntrada || saiuAntecipado;
+      const justificadoPorPonto = statusPorIndice.includes('Justificado');
+      const statusSlotsFaltantes = statusJustificativaSlotsFaltantes(justificativas, funcionario.id, selectedDate, expectativas, registrosDia.length);
+      const foiJustificado = Boolean(justificadoPorPonto || statusSlotsFaltantes);
+
+      // Quando a pessoa termina um turno (número par de batidas) mas o horário
+      // do próximo turno já passou (com 30min de tolerância) sem que ela tenha
+      // voltado a bater o ponto, tratamos como ausência do restante do dia —
+      // do contrário ela ficaria "Presente" pra sempre depois de ir embora.
       const hoje = chaveData(new Date()) === selectedDate;
-      const prazoTardePassou = !hoje || (new Date().getHours() * 60 + new Date().getMinutes() >= entradaTardeEsperada + 30);
-      const naoBateuRetornoDaTarde = registrosDia.length >= 2 && !retorno && prazoTardePassou;
-      const temSaida = Boolean(saida);
+      const proximoIndice = registrosDia.length;
+      const prazoDoProximoPassou = (horarioStr) => {
+        if (!hoje) return true;
+        const [h, m] = horarioStr.split(':').map(Number);
+        return (new Date().getHours() * 60 + new Date().getMinutes()) >= (h * 60 + m + 30);
+      };
+      const aguardandoNovoTurno = proximoIndice > 0 && proximoIndice % 2 === 0 && proximoIndice < expectativas.length
+        && prazoDoProximoPassou(expectativas[proximoIndice][1]);
 
       let status = 'Ausente';
-      if (!entrada) {
+      if (!registrosDia.length) {
         status = statusSlotsFaltantes ? 'Justificado' : 'Ausente';
-      } else if (naoBateuRetornoDaTarde) {
+      } else if (aguardandoNovoTurno) {
         status = statusSlotsFaltantes ? 'Justificado' : 'Ausente';
-      } else if (atrasouEntrada || saiuAntecipado || retornouAtrasado) {
+      } else if (atrasado) {
         status = 'Atrasado/Saída Antecipada';
       } else if (foiJustificado) {
         status = 'Justificado';
-      } else if (temSaida) {
+      } else if (registrosDia.length >= expectativas.length) {
         status = 'Finalizado';
       } else {
         status = 'Presente';
       }
 
-      const horariosPreenchidos = horariosJustificadosFaltantes(registrosDia.length, horarioDoDia, justificativas, funcionario.id, selectedDate);
+      const horariosPreenchidos = horariosJustificadosFaltantes(registrosDia.length, expectativas, justificativas, funcionario.id, selectedDate);
+      const [colEntrada, colIntervalo, colRetorno, colSaida] = mapearParaColunas(registrosDia, numeroTurnos);
+      const [preenchidoEntrada, preenchidoIntervalo, preenchidoRetorno, preenchidoSaida] = mapearParaColunas(horariosPreenchidos, numeroTurnos);
       const total = formatDuracaoEmHorasDePontos(registrosDia);
       const totalMinutos = getTotalMinutosDePontos(registrosDia);
       // Horas de justificativas aceitas para o dia são creditadas no saldo do
@@ -255,22 +331,24 @@ export function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Dat
       const minutosJustificados = justificativas
         .filter((justificativa) => justificativa.status === 'Aceita' && justificativa.funcionarioId === funcionario.id && justificativa.dia === selectedDate)
         .reduce((soma, justificativa) => soma + Math.max(0, minutoDoHorario(justificativa.horaFim) - minutoDoHorario(justificativa.horaInicio)), 0);
-      const jornadaPrevista = jornadaPrevistaTexto(selectedDate);
-      const banco = formatSaldoBanco(totalMinutos + minutosJustificados, jornadaPrevistaMinutos(selectedDate));
+      const minutosDaJornada = minutosPrevistos(expectativas);
+      const jornadaPrevista = formatMinutos(minutosDaJornada);
+      const banco = formatSaldoBanco(totalMinutos + minutosJustificados, minutosDaJornada);
 
       return {
         id: funcionario.id,
         nome: perfil,
         setor: funcionario.setor || 'ENG',
-        entrada: entrada ? formatHorario(entrada) : (horariosPreenchidos[0] || ''),
-        intervalo: intervalo ? formatHorario(intervalo) : (horariosPreenchidos[1] || ''),
-        retorno: retorno ? formatHorario(retorno) : (horariosPreenchidos[2] || ''),
-        saida: saida ? formatHorario(saida) : (horariosPreenchidos[3] || ''),
-        preenchidoPorJustificativa: [!entrada && Boolean(horariosPreenchidos[0]), !intervalo && Boolean(horariosPreenchidos[1]), !retorno && Boolean(horariosPreenchidos[2]), !saida && Boolean(horariosPreenchidos[3])],
+        padraoHorarioId: funcionario.padraoHorarioId || null,
+        entrada: colEntrada ? formatHorario(colEntrada) : (preenchidoEntrada || ''),
+        intervalo: colIntervalo ? formatHorario(colIntervalo) : (preenchidoIntervalo || ''),
+        retorno: colRetorno ? formatHorario(colRetorno) : (preenchidoRetorno || ''),
+        saida: colSaida ? formatHorario(colSaida) : (preenchidoSaida || ''),
+        preenchidoPorJustificativa: [!colEntrada && Boolean(preenchidoEntrada), !colIntervalo && Boolean(preenchidoIntervalo), !colRetorno && Boolean(preenchidoRetorno), !colSaida && Boolean(preenchidoSaida)],
         total,
         status,
         atrasouEntrada,
-        atrasado: atrasouEntrada || retornouAtrasado,
+        atrasado,
         saidaAntecipada: saiuAntecipado,
         justificado: foiJustificado,
         justificadoPendente: statusSlotsFaltantes === 'Inválida',

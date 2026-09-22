@@ -5,10 +5,38 @@ import { notificationService } from './notificationService.js';
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DATA_FILE = path.resolve(DATA_DIR, 'sis-ponto.json');
 
+// Os 3 padrões de horário fixos da "Alocação de Horários Padrão": cada um tem
+// uma lista de turnos (1 ou 2) por dia da semana (segunda a sexta), então dá
+// pra ter uma sexta mais curta, por exemplo. Um funcionário aponta pra um
+// desses pelo id (`padraoHorarioId`) — ou fica sem nenhum (não designado) — e
+// quem é horista (`horista: true`) não usa nenhum padrão, é hora trabalhada livre.
+const PADRAO_HORARIO_IDS = ['integral', 'manha', 'tarde'];
+const DIAS_SEMANA_PADRAO = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+
+function diasIguais(turnos) {
+  return Object.fromEntries(DIAS_SEMANA_PADRAO.map((dia) => [dia, turnos.map((turno) => ({ ...turno }))]));
+}
+
+const PADROES_HORARIO_PADRAO = {
+  integral: { dias: diasIguais([{ entrada: '08:00', saida: '12:00' }, { entrada: '13:00', saida: '18:00' }]) },
+  manha: { dias: diasIguais([{ entrada: '07:00', saida: '13:00' }]) },
+  tarde: { dias: diasIguais([{ entrada: '13:00', saida: '19:00' }]) },
+};
+
+// Migra o formato antigo (turnos únicos, iguais pra semana toda) pro novo
+// (um `dias` por padrão) — sem isso, quem já tinha salvo horários antes dessa
+// mudança perderia a configuração ao carregar.
+function normalizarPadrao(padraoId, valorSalvo) {
+  if (valorSalvo?.dias) return valorSalvo;
+  if (Array.isArray(valorSalvo?.turnos)) return { dias: diasIguais(valorSalvo.turnos) };
+  return PADROES_HORARIO_PADRAO[padraoId];
+}
+
 const defaultStore = {
   funcionarios: [],
   registros: {},
   justificativas: [],
+  padroesHorario: PADROES_HORARIO_PADRAO,
 };
 
 const STATUS_VALIDOS = ['Em análise', 'Aceita', 'Recusada', 'Inválida'];
@@ -55,6 +83,8 @@ export async function criarFuncionario(funcionario) {
     id,
     nome: String(funcionario.nome || '').trim(),
     setor: String(funcionario.setor || 'ENG').trim().toUpperCase(),
+    horista: Boolean(funcionario.horista),
+    padraoHorarioId: PADRAO_HORARIO_IDS.includes(funcionario.padraoHorarioId) ? funcionario.padraoHorarioId : null,
   };
 
   if (!novo.nome || !novo.setor) {
@@ -71,6 +101,10 @@ export async function criarFuncionario(funcionario) {
 }
 
 export async function atualizarFuncionario(id, dados) {
+  if (dados.padraoHorarioId !== undefined && dados.padraoHorarioId !== null && !PADRAO_HORARIO_IDS.includes(dados.padraoHorarioId)) {
+    throw new Error('Padrão de horário inválido.');
+  }
+
   const store = await readStore();
   const atual = store.funcionarios || [];
   const index = atual.findIndex((item) => item.id === id);
@@ -122,8 +156,8 @@ export async function registrarPonto(data) {
   store.registros = registros;
   await writeStore(store);
 
-  // O horário padrão só existe no front (localStorage), então quem decide se
-  // o registro ficou fora do horário é ele; aqui só disparamos o aviso.
+  // Quem decide se o registro ficou fora do horário é o front (que já resolveu
+  // o horário-base/override antes de chamar essa rota); aqui só disparamos o aviso.
   if (data.atrasado) {
     const funcionario = (store.funcionarios || []).find((item) => item.id === id);
     if (funcionario) {
@@ -240,4 +274,41 @@ export async function excluirJustificativa(id) {
   store.justificativas = atual.filter((item) => item.id !== id);
   await writeStore(store);
   return existe;
+}
+
+const HORA_REGEX = /^\d{2}:\d{2}$/;
+
+function validarTurnos(turnos) {
+  if (!Array.isArray(turnos) || turnos.length < 1 || turnos.length > 2) {
+    throw new Error('O padrão precisa ter 1 ou 2 turnos.');
+  }
+  turnos.forEach((turno) => {
+    if (!HORA_REGEX.test(turno?.entrada || '') || !HORA_REGEX.test(turno?.saida || '')) {
+      throw new Error('Horário de turno inválido.');
+    }
+  });
+}
+
+function validarDias(dias) {
+  if (!dias || typeof dias !== 'object') throw new Error('Horários inválidos.');
+  DIAS_SEMANA_PADRAO.forEach((dia) => validarTurnos(dias[dia]));
+}
+
+export async function listarPadroesHorario() {
+  const store = await readStore();
+  const salvos = store.padroesHorario || {};
+  return Object.fromEntries(PADRAO_HORARIO_IDS.map((padraoId) => [padraoId, normalizarPadrao(padraoId, salvos[padraoId])]));
+}
+
+export async function atualizarPadraoHorario(padraoId, dias) {
+  if (!PADRAO_HORARIO_IDS.includes(padraoId)) throw new Error('Padrão de horário inválido.');
+  validarDias(dias);
+
+  const store = await readStore();
+  const salvos = store.padroesHorario || {};
+  const atuais = Object.fromEntries(PADRAO_HORARIO_IDS.map((id) => [id, normalizarPadrao(id, salvos[id])]));
+  atuais[padraoId] = { dias };
+  store.padroesHorario = atuais;
+  await writeStore(store);
+  return atuais[padraoId];
 }

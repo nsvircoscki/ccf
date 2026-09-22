@@ -1,148 +1,184 @@
 {
   "funcionarios": [
     {
-      "id": "DES-1789579210783",
-      "nome": "Bianca",
-      "setor": "DES"
-    },
-    {
-      "id": "CRD-1789579255721",
-      "nome": "Renan",
-      "setor": "CRD"
-    },
-    {
-      "id": "DEV-1789579281577",
+      "id": "DEV-1790106083796",
       "nome": "João Pedro Costi",
-      "setor": "DEV"
+      "setor": "DEV",
+      "horista": false,
+      "padraoHorarioId": null
     },
     {
-      "id": "DES-1789579301226",
+      "id": "CRD-1790106113805",
+      "nome": "Renan Anhaia",
+      "setor": "CRD",
+      "horista": false,
+      "padraoHorarioId": "integral"
+    },
+    {
+      "id": "DES-1790106152238",
       "nome": "Nicolas",
-      "setor": "DES"
+      "setor": "DES",
+      "horista": false,
+      "padraoHorarioId": null
+    },
+    {
+      "id": "DES-1790106169638",
+      "nome": "Bianca",
+      "setor": "DES",
+      "horista": false,
+      "padraoHorarioId": "integral"
     }
   ],
   "registros": {
-    "2026-09-16": {
-      "DES-1789146743741": [
-        "2026-09-16T17:14:46.316Z",
-        "2026-09-16T17:14:48.484Z"
-      ],
-      "DEV-1789578907141": [
-        "2026-09-16T17:15:17.845Z",
-        "2026-09-16T17:15:19.310Z"
-      ],
-      "DES-1789146749069": [
-        "2026-09-16T17:19:00.373Z",
-        "2026-09-16T17:19:02.125Z"
-      ],
-      "CRD-1789579255721": [
-        "2026-09-16T10:28:49.654Z",
-        "2026-09-16T15:02:23.526Z"
-      ],
-      "DES-1789579210783": [
-        "2026-09-16T10:29:42.488Z",
-        "2026-09-16T15:02:06.596Z",
-        "2026-09-16T16:01:10.137Z",
-        "2026-09-16T20:30:54.251Z"
-      ],
-      "DES-1789579301226": [
-        "2026-09-16T10:37:25.210Z",
-        "2026-09-16T14:49:15.207Z",
-        "2026-09-16T16:01:06.648Z",
-        "2026-09-16T20:30:57.227Z"
+    "2026-09-22": {
+      "DES": [
+        "2026-09-22T19:36:10.777Z"
       ],
       "DEV-1789579281577": [
-        "2026-09-16T21:36:45.959Z",
-        "2026-09-16T21:36:47.647Z"
-      ]
-    },
-    "2026-09-17": {
-      "DEV-1789579281577": [
-        "2026-09-17T17:28:21.217Z",
-        "2026-09-17T17:35:26.262Z"
+        "2026-09-22T19:36:49.650Z"
       ]
     }
   },
   "justificativas": [
     {
-      "id": "just-1789594677705-wcca8q",
-      "funcionarioId": "DEV-1789579281577",
-      "nome": "João Pedro Costi",
+      "id": "just-1790105823764-bbov02",
+      "funcionarioId": "DEV",
+      "nome": "DEV",
       "setor": "DEV",
-      "dia": "2026-09-16",
-      "horaInicio": "13:00",
-      "horaFim": "17:30",
-      "motivo": "dgfdgfdg",
+      "dia": "2026-09-22",
+      "horaInicio": "08:00",
+      "horaFim": "12:00",
+      "motivo": "KLJL",
       "anexoNome": null,
       "anexoTipo": null,
       "anexoDataUrl": null,
       "status": "Aceita",
-      "criadoEm": "2026-09-16T21:37:57.705Z",
-      "atualizadoEm": "2026-09-16T21:38:01.741Z"
-    },
-    {
-      "id": "just-1789594721642-vanv58",
-      "funcionarioId": "CRD-1789579255721",
-      "nome": "Renan",
-      "setor": "CRD",
-      "dia": "2026-09-16",
-      "horaInicio": "13:00",
-      "horaFim": "17:30",
-      "motivo": "atras",
-      "anexoNome": null,
-      "anexoTipo": null,
-      "anexoDataUrl": null,
-      "status": "Aceita",
-      "criadoEm": "2026-09-16T21:38:41.642Z",
-      "atualizadoEm": "2026-09-16T21:38:48.649Z"
-    },
-    {
-      "id": "just-1789596793964-bl59zz",
-      "funcionarioId": "DEV-1789579281577",
-      "nome": "João Pedro Costi",
-      "setor": "DEV",
-      "dia": "2026-09-15",
-      "horaInicio": "08:00",
-      "horaFim": "12:00",
-      "motivo": "965",
-      "anexoNome": null,
-      "anexoTipo": null,
-      "anexoDataUrl": null,
-      "status": "Aceita",
-      "criadoEm": "2026-09-16T22:13:13.980Z",
-      "atualizadoEm": "2026-09-16T22:13:18.941Z"
-    },
-    {
-      "id": "just-1789597407018-t1ab6g",
-      "funcionarioId": "CRD-1789579255721",
-      "nome": "Renan",
-      "setor": "CRD",
-      "dia": "2026-09-15",
-      "horaInicio": "08:00",
-      "horaFim": "12:00",
-      "motivo": "vgbn",
-      "anexoNome": null,
-      "anexoTipo": null,
-      "anexoDataUrl": null,
-      "status": "Inválida",
-      "criadoEm": "2026-09-16T22:23:27.018Z",
-      "atualizadoEm": "2026-09-16T22:23:33.740Z"
-    },
-    {
-      "id": "just-1789666115810-11y0rh",
-      "funcionarioId": "DEV-1789579281577",
-      "nome": "João Pedro Costi",
-      "setor": "DEV",
-      "dia": "2026-09-17",
-      "horaInicio": "08:00",
-      "horaFim": "12:00",
-      "motivo": "fdsfs",
-      "anexoNome": null,
-      "anexoTipo": null,
-      "anexoDataUrl": null,
-      "status": "Em análise",
-      "criadoEm": "2026-09-17T17:28:35.821Z",
-      "atualizadoEm": "2026-09-17T17:28:35.822Z"
+      "criadoEm": "2026-09-22T19:37:03.764Z",
+      "atualizadoEm": "2026-09-22T19:37:20.234Z"
     }
-  ]
+  ],
+  "padroesHorario": {
+    "integral": {
+      "dias": {
+        "segunda": [
+          {
+            "entrada": "08:00",
+            "saida": "12:00"
+          },
+          {
+            "entrada": "13:00",
+            "saida": "18:00"
+          }
+        ],
+        "terca": [
+          {
+            "entrada": "08:00",
+            "saida": "12:00"
+          },
+          {
+            "entrada": "13:00",
+            "saida": "18:00"
+          }
+        ],
+        "quarta": [
+          {
+            "entrada": "08:00",
+            "saida": "12:00"
+          },
+          {
+            "entrada": "13:00",
+            "saida": "18:00"
+          }
+        ],
+        "quinta": [
+          {
+            "entrada": "08:00",
+            "saida": "12:00"
+          },
+          {
+            "entrada": "13:00",
+            "saida": "18:00"
+          }
+        ],
+        "sexta": [
+          {
+            "entrada": "08:00",
+            "saida": "12:00"
+          },
+          {
+            "entrada": "13:00",
+            "saida": "18:00"
+          }
+        ]
+      }
+    },
+    "manha": {
+      "dias": {
+        "segunda": [
+          {
+            "entrada": "07:00",
+            "saida": "13:00"
+          }
+        ],
+        "terca": [
+          {
+            "entrada": "07:00",
+            "saida": "13:00"
+          }
+        ],
+        "quarta": [
+          {
+            "entrada": "07:00",
+            "saida": "13:00"
+          }
+        ],
+        "quinta": [
+          {
+            "entrada": "07:00",
+            "saida": "13:00"
+          }
+        ],
+        "sexta": [
+          {
+            "entrada": "07:00",
+            "saida": "13:00"
+          }
+        ]
+      }
+    },
+    "tarde": {
+      "dias": {
+        "segunda": [
+          {
+            "entrada": "13:00",
+            "saida": "19:00"
+          }
+        ],
+        "terca": [
+          {
+            "entrada": "13:00",
+            "saida": "19:00"
+          }
+        ],
+        "quarta": [
+          {
+            "entrada": "13:00",
+            "saida": "19:00"
+          }
+        ],
+        "quinta": [
+          {
+            "entrada": "13:00",
+            "saida": "19:00"
+          }
+        ],
+        "sexta": [
+          {
+            "entrada": "13:00",
+            "saida": "19:00"
+          }
+        ]
+      }
+    }
+  }
 }

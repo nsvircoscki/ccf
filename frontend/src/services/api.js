@@ -184,6 +184,24 @@ export const api = {
         return res.json();
     },
 
+    getSispontoPadroesHorario: async () => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/padroes-horario`);
+        return res.json();
+    },
+
+    updateSispontoPadraoHorario: async (padraoId, dias) => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/padroes-horario/${padraoId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dias })
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao atualizar padrão de horário.');
+        }
+        return res.json();
+    },
+
     getServicos: async () => {
         const res = await fetch(`${BASE_URL}/servicos`);
         return res.json();

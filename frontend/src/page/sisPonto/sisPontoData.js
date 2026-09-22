@@ -6,10 +6,29 @@ export const JUSTIFICATIVA_CORES = {
   Inválida: { fundo: '#fff1e0', texto: '#c2650a', borda: '#ffcf9e' },
 };
 export const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-export const HORARIOS_PADRAO = {
-  segunda: { entradaManha: '07:40', saidaManha: '12:00', entradaTarde: '13:00', saidaTarde: '17:30' },
-  terca: { entradaManha: '07:40', saidaManha: '12:00', entradaTarde: '13:00', saidaTarde: '17:30' },
-  quarta: { entradaManha: '07:40', saidaManha: '12:00', entradaTarde: '13:00', saidaTarde: '17:30' },
-  quinta: { entradaManha: '07:40', saidaManha: '12:00', entradaTarde: '13:00', saidaTarde: '17:30' },
-  sexta: { entradaManha: '07:40', saidaManha: '12:00', entradaTarde: '13:00', saidaTarde: '17:20' },
+export const DIAS_SEMANA_PADRAO = [
+  { id: 'segunda', nome: 'Segunda' },
+  { id: 'terca', nome: 'Terça' },
+  { id: 'quarta', nome: 'Quarta' },
+  { id: 'quinta', nome: 'Quinta' },
+  { id: 'sexta', nome: 'Sexta' },
+];
+
+function diasIguais(turnos) {
+  return Object.fromEntries(DIAS_SEMANA_PADRAO.map(({ id }) => [id, turnos.map((turno) => ({ ...turno }))]));
+}
+
+// Os 3 padrões de horário fixos da "Alocação de Horários Padrão": cada um tem
+// uma lista de turnos (1 ou 2) por dia útil (dá pra ter uma sexta mais curta,
+// por exemplo). O admin edita pela tela — isso aqui é só o valor inicial/
+// fallback antes de carregar do backend.
+export const PADROES_HORARIO_INFO = {
+  integral: { id: 'integral', nome: 'Horário Integral' },
+  manha: { id: 'manha', nome: 'Horário Manhã' },
+  tarde: { id: 'tarde', nome: 'Horário Tarde' },
+};
+export const PADROES_HORARIO_PADRAO = {
+  integral: { dias: diasIguais([{ entrada: '08:00', saida: '12:00' }, { entrada: '13:00', saida: '18:00' }]) },
+  manha: { dias: diasIguais([{ entrada: '07:00', saida: '13:00' }]) },
+  tarde: { dias: diasIguais([{ entrada: '13:00', saida: '19:00' }]) },
 };

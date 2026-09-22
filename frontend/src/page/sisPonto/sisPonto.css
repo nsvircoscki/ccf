@@ -4,7 +4,7 @@
 .ponto-dia { min-height:105px; padding:11px 12px; border-right:1px solid #e7edf6; border-bottom:1px solid #e7edf6; background:#fff; }
 .ponto-dia:nth-child(7n) { border-right:none; }
 @media (max-width: 950px) { .ponto-shell, .ponto-grid { grid-template-columns:1fr; } .ponto-menu { display:flex; gap:8px; } .ponto-menu button { flex:1; } }
-@media (max-width: 620px) { .ponto-page { padding:18px !important; } .ponto-dia { min-height:76px; padding:7px; } .ponto-cal { font-size:11px; } }
+@media (max-width: 620px) { .ponto-page { padding:18px !important; } .ponto-dia { min-height:76px; padding:7px; } .ponto-cal { font-size:11px; } .ponto-calendario-mobile-hide { display:none; } }
 
 :root { --text: #1c2440; --muted: #718398; --title: #2d3c59; --blue: #3177dd; --blue-deep: #244c91; --blue-soft: #eef4ff; --green: #2aba72; --green-soft: #ddfbe9; --orange: #ff9c2e; --orange-soft: #ffeede; --red: #e4544e; --red-soft: #ffecef; --line: #ccd9ea; --paper: #ffffff; --body: #eef4f9; --shadow: rgba(31,47,87,.12); }
 .sis-ponto-admin-screen { min-height: 100vh; background: var(--body); color: var(--text); font-family: Inter, 'Segoe UI', Arial, sans-serif; }
