@@ -22,10 +22,23 @@ export const notificationService = {
     return prisma.notification.update({ where: { id }, data: { lida: true } });
   },
 
+  async excluir(id) {
+    return prisma.notification.delete({ where: { id } });
+  },
+
   async marcarTodasComoLidas(nomeSetor) {
     const role = await prisma.role.findUnique({ where: { name: nomeSetor } });
     if (!role) return;
     await prisma.notification.updateMany({ where: { roleId: role.id, lida: false }, data: { lida: true } });
+  },
+
+  // Notificação avulsa (fora do fluxo de ticket/workflow), usada hoje pelo
+  // SIS Ponto: atraso no registro de ponto avisa o próprio setor, e uma
+  // justificativa enviada avisa o ENG.
+  async notificarSetor(nomeSetor, mensagem, tipo = 'kanban') {
+    const role = await prisma.role.findUnique({ where: { name: nomeSetor } });
+    if (!role) return;
+    await prisma.notification.create({ data: { mensagem, roleId: role.id, tipo } });
   },
 
   // Chamado quando um ticket entra em "Concluído": acha a próxima etapa na

@@ -7,5 +7,6 @@ const router = Router();
 router.get('/', notificationController.listar);
 router.put('/:id/lida', notificationController.marcarComoLida);
 router.put('/marcar-todas-lidas', notificationController.marcarTodasComoLidas);
+router.delete('/:id', notificationController.excluir);
 
 export default router;

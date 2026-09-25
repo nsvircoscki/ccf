@@ -94,6 +94,127 @@ export const api = {
     },
 
     // ---- NOVOS MÉTODOS PARA O FLUXO DE SERVIÇOS ----
+    getSispontoFuncionarios: async () => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/funcionarios`);
+        return res.json();
+    },
+
+    getSispontoRegistros: async () => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/registros`);
+        return res.json();
+    },
+
+    createSispontoFuncionario: async (dados) => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/funcionarios`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+        return res.json();
+    },
+
+    updateSispontoFuncionario: async (id, dados) => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/funcionarios/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+        return res.json();
+    },
+
+    deleteSispontoFuncionario: async (id) => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/funcionarios/${id}`, { method: 'DELETE' });
+        return res.json();
+    },
+
+    registrarSispontoPonto: async (dados) => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/registros`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao registrar ponto.');
+        }
+        return res.json();
+    },
+
+    deleteSispontoRegistro: async (dados) => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/registros`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao excluir registro.');
+        }
+        return res.json();
+    },
+
+    getSispontoJustificativas: async () => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/justificativas`);
+        return res.json();
+    },
+
+    createSispontoJustificativa: async (dados) => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/justificativas`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao enviar justificativa.');
+        }
+        return res.json();
+    },
+
+    updateSispontoJustificativa: async (id, dados) => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/justificativas/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao atualizar justificativa.');
+        }
+        return res.json();
+    },
+
+    deleteSispontoJustificativa: async (id) => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/justificativas/${id}`, { method: 'DELETE' });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao excluir justificativa.');
+        }
+        return res.json();
+    },
+
+    getSispontoPadroesHorario: async () => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/padroes-horario`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao carregar padrões de horário.');
+        }
+        return res.json();
+    },
+
+    updateSispontoPadraoHorario: async (padraoId, dias) => {
+        const res = await fetch(`${BASE_URL}/sis-ponto/padroes-horario/${padraoId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dias })
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao atualizar padrão de horário.');
+        }
+        return res.json();
+    },
+
     getServicos: async () => {
         const res = await fetch(`${BASE_URL}/servicos`);
         return res.json();
@@ -342,6 +463,11 @@ export const api = {
             method: 'PUT',
             headers: { 'x-usuario': usuarioLogado || '' },
         });
+        return res.json();
+    },
+
+    excluirNotificacao: async (id) => {
+        const res = await fetch(`${BASE_URL}/notificacoes/${id}`, { method: 'DELETE' });
         return res.json();
     },
 

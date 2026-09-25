@@ -5,9 +5,9 @@
 const PERMISSOES = {
   ENG: 'todos',
   DEV: 'todos',
-  DES: ['dashboard', 'kanban', 'vinculacao', 'sis-mon', 'cadastro', 'importar-pontos', 'clientes', 'imoveis', 'tarefas'],
-  CRD: ['orcamento', 'cadastro', 'emissao-documentos', 'sis-caixa', 'vinculacao', 'config', 'dashboard', 'kanban', 'clientes', 'imoveis', 'faturamento', 'tarefas'],
-  TOPO: ['dashboard', 'kanban', 'importar-pontos'],
+  DES: ['dashboard', 'kanban', 'vinculacao', 'sis-mon', 'cadastro', 'importar-pontos', 'clientes', 'imoveis', 'tarefas', 'sis-ponto'],
+  CRD: ['orcamento', 'cadastro', 'emissao-documentos', 'sis-caixa', 'vinculacao', 'config', 'dashboard', 'kanban', 'clientes', 'imoveis', 'faturamento', 'tarefas', 'sis-ponto'],
+  TOPO: ['dashboard', 'kanban', 'importar-pontos', 'sis-ponto'],
 };
 
 export function temAcessoAoModulo(usuarioLogado, moduloId) {
