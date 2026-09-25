@@ -222,6 +222,45 @@ function mapearParaColunas(lista = [], numeroTurnos) {
   return [null, null, null, null];
 }
 
+const formatarHoraCurta = (data) => `${String(data.getHours()).padStart(2, '0')}:${String(data.getMinutes()).padStart(2, '0')}`;
+
+// Duas janelas de horário (strings "HH:MM", que comparam bem como texto) se
+// sobrepõem quando uma começa antes da outra terminar e vice-versa — é assim
+// que decidimos se uma justificativa enviada já cobre uma pendência
+// específica. Sem isso, um único envio (ex.: cobrindo só a manhã) marcaria o
+// dia inteiro como "já enviado", escondendo a pendência da tarde também.
+function periodosSeSobrepoem(inicioA, fimA, inicioB, fimB) {
+  return inicioA <= fimB && fimA >= inicioB;
+}
+
+// Lista os registros de ponto de um funcionário que ficaram fora do horário
+// (atraso na entrada ou saída antecipada), do mais antigo pro mais recente —
+// usada pro contador da aba "Justificativas" e pra sugerir automaticamente o
+// período da próxima justificativa a enviar. Cada item já vem com o período
+// exato que faltou (do horário padrão até o horário batido, ou vice-versa) e
+// com `jaEnviada`: true assim que existe QUALQUER justificativa cobrindo
+// aquele período específico, mesmo que ainda esteja "Em análise" — pra sumir
+// da contagem no momento do envio, sem esperar o admin decidir.
+export function pendenciasDeJustificativa(registros = {}, funcionario, padroes = {}, justificativas = []) {
+  const pendencias = [];
+  Object.entries(registros).forEach(([dia, itens]) => {
+    const expectativas = expectativasDoFuncionario(funcionario, padroes, new Date(`${dia}T12:00:00`)) || [];
+    if (!expectativas.length) return;
+    (itens || []).forEach((registroIso, indice) => {
+      const status = statusRegistroComExpectativa(registroIso, indice, expectativas, justificativas, funcionario?.id, dia);
+      if (status !== 'Atrasado/Saída Antecipada') return;
+      const [tipo, horarioPadrao] = expectativas[indice % expectativas.length];
+      const horarioBatido = formatarHoraCurta(new Date(registroIso));
+      const [horaInicio, horaFim] = tipo === 'Entrada' ? [horarioPadrao, horarioBatido] : [horarioBatido, horarioPadrao];
+      const jaEnviada = justificativas.some((justificativa) => justificativa.funcionarioId === funcionario?.id
+        && justificativa.dia === dia
+        && periodosSeSobrepoem(justificativa.horaInicio, justificativa.horaFim, horaInicio, horaFim));
+      pendencias.push({ dia, horaInicio, horaFim, tipo, criadoEm: registroIso, jaEnviada });
+    });
+  });
+  return pendencias.sort((a, b) => new Date(a.criadoEm) - new Date(b.criadoEm));
+}
+
 export function statusRegistroComExpectativa(registro, indice, expectativas, justificativas, funcionarioId, chaveDia) {
   if (!expectativas || !expectativas.length) return 'Normal';
   const [tipo, horarioStr] = expectativas[indice % expectativas.length];

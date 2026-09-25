@@ -186,6 +186,10 @@ export const api = {
 
     getSispontoPadroesHorario: async () => {
         const res = await fetch(`${BASE_URL}/sis-ponto/padroes-horario`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao carregar padrões de horário.');
+        }
         return res.json();
     },
 

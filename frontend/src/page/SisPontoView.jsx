@@ -6,5 +6,5 @@ export default function SisPontoView({ usuarioLogado, destino }) {
     return <SisPontoEngAdminScreen usuarioLogado={usuarioLogado} destino={destino} />;
   }
 
-  return <SisPontoFuncionarioScreen usuarioLogado={usuarioLogado} />;
+  return <SisPontoFuncionarioScreen usuarioLogado={usuarioLogado} destino={destino} />;
 }

@@ -66,8 +66,15 @@ export function Card({ children, style }) {
   return <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .32, ease: 'easeOut' }} style={{ background: '#fff', border: '1px solid #e7edf6', borderRadius: 14, boxShadow: '0 4px 18px rgba(15, 35, 70, .035)', ...style }}>{children}</motion.section>;
 }
 
-export function MenuPonto({ ativo, icon, texto, onClick }) {
-  return <motion.button type="button" whileHover={{ x: 3 }} whileTap={{ scale: .98 }} onClick={onClick} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '11px 10px', border: 0, borderRadius: 9, cursor: 'pointer', background: ativo ? '#eaf2ff' : 'transparent', color: ativo ? '#1767e8' : '#5b6d89', fontSize: 12, fontWeight: 800, textAlign: 'left' }}>{icon}{texto}</motion.button>;
+export function MenuPonto({ ativo, icon, texto, onClick, badge = 0 }) {
+  return <motion.button type="button" whileHover={{ x: 3 }} whileTap={{ scale: .98 }} onClick={onClick} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '11px 10px', border: 0, borderRadius: 9, cursor: 'pointer', background: ativo ? '#eaf2ff' : 'transparent', color: ativo ? '#1767e8' : '#5b6d89', fontSize: 12, fontWeight: 800, textAlign: 'left' }}>
+    {icon}{texto}
+    {badge > 0 && (
+      <span style={{ marginLeft: 'auto', minWidth: 20, height: 20, padding: '0 5px', borderRadius: 999, background: '#e5484d', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: ativo ? '0 0 0 2px #eaf2ff' : '0 0 0 2px #fff' }}>
+        {badge > 99 ? '99+' : badge}
+      </span>
+    )}
+  </motion.button>;
 }
 
 export function Legenda({ cor, texto }) { return <span style={{ display: 'flex', gap: 7, alignItems: 'center' }}><i style={{ width: 9, height: 9, borderRadius: '50%', background: cor }} />{texto}</span>; }

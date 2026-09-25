@@ -4,7 +4,7 @@
       "id": "DEV-1790106083796",
       "nome": "João Pedro Costi",
       "setor": "DEV",
-      "horista": false,
+      "horista": true,
       "padraoHorarioId": null
     },
     {
@@ -19,7 +19,7 @@
       "nome": "Nicolas",
       "setor": "DES",
       "horista": false,
-      "padraoHorarioId": null
+      "padraoHorarioId": "integral"
     },
     {
       "id": "DES-1790106169638",
@@ -37,24 +37,140 @@
       "DEV-1789579281577": [
         "2026-09-22T19:36:49.650Z"
       ]
+    },
+    "2026-09-24": {
+      "DEV-1790106083796": [
+        "2026-09-24T17:47:37.253Z"
+      ],
+      "CRD-1790106113805": [
+        "2026-09-24T18:30:57.188Z",
+        "2026-09-24T18:47:08.510Z",
+        "2026-09-24T18:47:10.008Z",
+        "2026-09-24T18:59:06.953Z"
+      ],
+      "DES-1790106169638": [
+        "2026-09-24T18:32:16.694Z"
+      ],
+      "DES-1790106152238": [
+        "2026-09-24T10:41:00.949Z",
+        "2026-09-24T14:49:43.690Z",
+        "2026-09-24T16:07:42.783Z",
+        "2026-09-24T19:03:34.784Z"
+      ]
     }
   },
   "justificativas": [
     {
-      "id": "just-1790105823764-bbov02",
-      "funcionarioId": "DEV",
-      "nome": "DEV",
-      "setor": "DEV",
-      "dia": "2026-09-22",
-      "horaInicio": "08:00",
-      "horaFim": "12:00",
-      "motivo": "KLJL",
+      "id": "just-1790276837476-j2l7on",
+      "funcionarioId": "DES-1790106169638",
+      "nome": "Bianca",
+      "setor": "DES",
+      "dia": "2026-09-24",
+      "horaInicio": "07:30",
+      "horaFim": "15:32",
+      "motivo": "l",
       "anexoNome": null,
       "anexoTipo": null,
       "anexoDataUrl": null,
       "status": "Aceita",
-      "criadoEm": "2026-09-22T19:37:03.764Z",
-      "atualizadoEm": "2026-09-22T19:37:20.234Z"
+      "criadoEm": "2026-09-24T19:07:17.476Z",
+      "atualizadoEm": "2026-09-24T19:07:27.813Z"
+    },
+    {
+      "id": "just-1790277953647-axp443",
+      "funcionarioId": "CRD-1790106113805",
+      "nome": "Renan Anhaia",
+      "setor": "CRD",
+      "dia": "2026-09-24",
+      "horaInicio": "07:30",
+      "horaFim": "15:30",
+      "motivo": "gdfg",
+      "anexoNome": null,
+      "anexoTipo": null,
+      "anexoDataUrl": null,
+      "status": "Aceita",
+      "criadoEm": "2026-09-24T19:25:53.647Z",
+      "atualizadoEm": "2026-09-24T19:26:22.992Z"
+    },
+    {
+      "id": "just-1790277955148-z4u948",
+      "funcionarioId": "CRD-1790106113805",
+      "nome": "Renan Anhaia",
+      "setor": "CRD",
+      "dia": "2026-09-24",
+      "horaInicio": "15:59",
+      "horaFim": "17:30",
+      "motivo": "gfdgdf",
+      "anexoNome": null,
+      "anexoTipo": null,
+      "anexoDataUrl": null,
+      "status": "Aceita",
+      "criadoEm": "2026-09-24T19:25:55.148Z",
+      "atualizadoEm": "2026-09-24T19:26:22.503Z"
+    },
+    {
+      "id": "just-1790281522164-tmrczr",
+      "funcionarioId": "DES-1790106152238",
+      "nome": "Nicolas",
+      "setor": "DES",
+      "dia": "2026-09-24",
+      "horaInicio": "07:30",
+      "horaFim": "07:41",
+      "motivo": "Porque me atrazei",
+      "anexoNome": null,
+      "anexoTipo": null,
+      "anexoDataUrl": null,
+      "status": "Aceita",
+      "criadoEm": "2026-09-24T20:25:22.164Z",
+      "atualizadoEm": "2026-09-24T20:28:30.872Z"
+    },
+    {
+      "id": "just-1790281540459-n4eknt",
+      "funcionarioId": "DES-1790106152238",
+      "nome": "Nicolas",
+      "setor": "DES",
+      "dia": "2026-09-24",
+      "horaInicio": "11:49",
+      "horaFim": "12:00",
+      "motivo": "Tive que sair mais cedo",
+      "anexoNome": null,
+      "anexoTipo": null,
+      "anexoDataUrl": null,
+      "status": "Aceita",
+      "criadoEm": "2026-09-24T20:25:40.459Z",
+      "atualizadoEm": "2026-09-24T20:28:30.129Z"
+    },
+    {
+      "id": "just-1790281924751-1eoulw",
+      "funcionarioId": "DES-1790106152238",
+      "nome": "Nicolas",
+      "setor": "DES",
+      "dia": "2026-09-24",
+      "horaInicio": "13:00",
+      "horaFim": "13:07",
+      "motivo": "hg",
+      "anexoNome": null,
+      "anexoTipo": null,
+      "anexoDataUrl": null,
+      "status": "Em análise",
+      "criadoEm": "2026-09-24T20:32:04.751Z",
+      "atualizadoEm": "2026-09-24T20:32:04.751Z"
+    },
+    {
+      "id": "just-1790281926476-lg16nn",
+      "funcionarioId": "DES-1790106152238",
+      "nome": "Nicolas",
+      "setor": "DES",
+      "dia": "2026-09-24",
+      "horaInicio": "16:03",
+      "horaFim": "17:30",
+      "motivo": "hg",
+      "anexoNome": null,
+      "anexoTipo": null,
+      "anexoDataUrl": null,
+      "status": "Em análise",
+      "criadoEm": "2026-09-24T20:32:06.476Z",
+      "atualizadoEm": "2026-09-24T20:32:06.476Z"
     }
   ],
   "padroesHorario": {
@@ -62,52 +178,52 @@
       "dias": {
         "segunda": [
           {
-            "entrada": "08:00",
+            "entrada": "07:30",
             "saida": "12:00"
           },
           {
             "entrada": "13:00",
-            "saida": "18:00"
+            "saida": "17:30"
           }
         ],
         "terca": [
           {
-            "entrada": "08:00",
+            "entrada": "07:30",
             "saida": "12:00"
           },
           {
             "entrada": "13:00",
-            "saida": "18:00"
+            "saida": "17:30"
           }
         ],
         "quarta": [
           {
-            "entrada": "08:00",
+            "entrada": "07:30",
             "saida": "12:00"
           },
           {
             "entrada": "13:00",
-            "saida": "18:00"
+            "saida": "17:30"
           }
         ],
         "quinta": [
           {
-            "entrada": "08:00",
+            "entrada": "07:30",
             "saida": "12:00"
           },
           {
             "entrada": "13:00",
-            "saida": "18:00"
+            "saida": "17:30"
           }
         ],
         "sexta": [
           {
-            "entrada": "08:00",
+            "entrada": "07:30",
             "saida": "12:00"
           },
           {
             "entrada": "13:00",
-            "saida": "18:00"
+            "saida": "17:20"
           }
         ]
       }

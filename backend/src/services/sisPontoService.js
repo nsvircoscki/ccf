@@ -50,14 +50,35 @@ async function ensureStore() {
   }
 }
 
+// Todo acesso ao arquivo segue o padrão ler-tudo -> alterar em memória ->
+// gravar-tudo, sem transação nenhuma no sistema de arquivos. Duas requisições
+// concorrentes (ex.: salvar um padrão de horário e, ao mesmo tempo, mover
+// funcionários entre as colunas de jornada) podiam entrelaçar suas
+// leitura/escrita e uma sobrescrevia a outra com dados desatualizados,
+// apagando silenciosamente a alteração mais recente. `comFila` serializa
+// essas operações: cada uma só começa depois que a anterior (sucesso ou erro)
+// terminou de gravar.
+let filaOperacoes = Promise.resolve();
+function comFila(tarefa) {
+  const proxima = filaOperacoes.then(tarefa, tarefa);
+  filaOperacoes = proxima.then(() => {}, () => {});
+  return proxima;
+}
+
 async function readStore() {
   await ensureStore();
   const text = await fs.readFile(DATA_FILE, 'utf8');
   try {
     return JSON.parse(text);
-  } catch {
-    await fs.writeFile(DATA_FILE, JSON.stringify(defaultStore, null, 2), 'utf8');
-    return defaultStore;
+  } catch (erro) {
+    // Antes, um JSON inválido aqui fazia o arquivo inteiro ser sobrescrito
+    // pelos valores de fábrica — apagando funcionários, registros e padrões
+    // de horário já salvos sem avisar ninguém. Agora as leituras passam pela
+    // mesma fila das escritas (`comFila`), então isso não deveria mais
+    // acontecer por uma leitura no meio de uma gravação; se ainda assim o
+    // arquivo estiver corrompido, é melhor falhar visivelmente (500) do que
+    // destruir dados em silêncio.
+    throw new Error(`Arquivo de dados do SisPonto corrompido (${DATA_FILE}): ${erro.message}`);
   }
 }
 
@@ -67,16 +88,20 @@ async function writeStore(store) {
 }
 
 export async function listarFuncionarios() {
-  const store = await readStore();
+  const store = await comFila(readStore);
   return store.funcionarios || [];
 }
 
 export async function listarRegistros() {
-  const store = await readStore();
+  const store = await comFila(readStore);
   return store.registros || {};
 }
 
 export async function criarFuncionario(funcionario) {
+  return comFila(() => criarFuncionarioImpl(funcionario));
+}
+
+async function criarFuncionarioImpl(funcionario) {
   const store = await readStore();
   const id = funcionario.id || `${funcionario.setor || 'ENG'}-${Date.now()}`;
   const novo = {
@@ -105,6 +130,10 @@ export async function atualizarFuncionario(id, dados) {
     throw new Error('Padrão de horário inválido.');
   }
 
+  return comFila(() => atualizarFuncionarioImpl(id, dados));
+}
+
+async function atualizarFuncionarioImpl(id, dados) {
   const store = await readStore();
   const atual = store.funcionarios || [];
   const index = atual.findIndex((item) => item.id === id);
@@ -123,6 +152,10 @@ export async function atualizarFuncionario(id, dados) {
 }
 
 export async function excluirFuncionario(id) {
+  return comFila(() => excluirFuncionarioImpl(id));
+}
+
+async function excluirFuncionarioImpl(id) {
   const store = await readStore();
   const funcionarios = (store.funcionarios || []).filter((item) => item.id !== id);
   store.funcionarios = funcionarios;
@@ -145,6 +178,10 @@ export async function excluirFuncionario(id) {
 }
 
 export async function registrarPonto(data) {
+  return comFila(() => registrarPontoImpl(data));
+}
+
+async function registrarPontoImpl(data) {
   const store = await readStore();
   const registros = store.registros || {};
   const chave = data.data; // yyyy-mm-dd
@@ -173,6 +210,10 @@ export async function registrarPonto(data) {
 }
 
 export async function excluirRegistro(funcionarioId, chave, tempo) {
+  return comFila(() => excluirRegistroImpl(funcionarioId, chave, tempo));
+}
+
+async function excluirRegistroImpl(funcionarioId, chave, tempo) {
   const store = await readStore();
   const registros = store.registros || {};
   const registrosDia = registros[chave] || {};
@@ -193,11 +234,15 @@ export async function excluirRegistro(funcionarioId, chave, tempo) {
 }
 
 export async function listarJustificativas() {
-  const store = await readStore();
+  const store = await comFila(readStore);
   return store.justificativas || [];
 }
 
 export async function criarJustificativa(dados) {
+  return comFila(() => criarJustificativaImpl(dados));
+}
+
+async function criarJustificativaImpl(dados) {
   const store = await readStore();
   const funcionarioId = String(dados.funcionarioId || '').trim();
   const dia = String(dados.dia || '').trim();
@@ -238,6 +283,10 @@ export async function criarJustificativa(dados) {
 }
 
 export async function atualizarJustificativa(id, dados) {
+  return comFila(() => atualizarJustificativaImpl(id, dados));
+}
+
+async function atualizarJustificativaImpl(id, dados) {
   const store = await readStore();
   const atual = store.justificativas || [];
   const index = atual.findIndex((item) => item.id === id);
@@ -268,6 +317,10 @@ export async function atualizarJustificativa(id, dados) {
 }
 
 export async function excluirJustificativa(id) {
+  return comFila(() => excluirJustificativaImpl(id));
+}
+
+async function excluirJustificativaImpl(id) {
   const store = await readStore();
   const atual = store.justificativas || [];
   const existe = atual.some((item) => item.id === id);
@@ -295,7 +348,7 @@ function validarDias(dias) {
 }
 
 export async function listarPadroesHorario() {
-  const store = await readStore();
+  const store = await comFila(readStore);
   const salvos = store.padroesHorario || {};
   return Object.fromEntries(PADRAO_HORARIO_IDS.map((padraoId) => [padraoId, normalizarPadrao(padraoId, salvos[padraoId])]));
 }
@@ -304,6 +357,10 @@ export async function atualizarPadraoHorario(padraoId, dias) {
   if (!PADRAO_HORARIO_IDS.includes(padraoId)) throw new Error('Padrão de horário inválido.');
   validarDias(dias);
 
+  return comFila(() => atualizarPadraoHorarioImpl(padraoId, dias));
+}
+
+async function atualizarPadraoHorarioImpl(padraoId, dias) {
   const store = await readStore();
   const salvos = store.padroesHorario || {};
   const atuais = Object.fromEntries(PADRAO_HORARIO_IDS.map((id) => [id, normalizarPadrao(id, salvos[id])]));

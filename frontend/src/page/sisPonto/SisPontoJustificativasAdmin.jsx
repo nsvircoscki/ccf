@@ -1,16 +1,29 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Trash2, User } from 'lucide-react';
+import { CalendarDays, ChartNoAxesColumn, Clock3, FileText, Trash2, User } from 'lucide-react';
 import { api } from '../../services/api';
 import { JUSTIFICATIVA_CORES } from './sisPontoData.js';
 import { Card, ConfirmacaoPonto } from './SisPontoComponents.jsx';
 
 const ORDEM_STATUS_JUSTIFICATIVA = { 'Em análise': 0, Aceita: 1, Inválida: 2, Recusada: 3 };
+const OPCOES_STATUS = ['Todos os status', 'Em análise', 'Aceita', 'Inválida', 'Recusada'];
 
 export default function SisPontoJustificativasAdmin({ justificativas, carregando, onAtualizado }) {
   const [processandoId, setProcessandoId] = useState(null);
   const [imagemAmpliada, setImagemAmpliada] = useState(null);
   const [confirmacaoExclusao, setConfirmacaoExclusao] = useState(null);
+  const [funcionarioFiltro, setFuncionarioFiltro] = useState('Todos os funcionários');
+  const [setorFiltro, setSetorFiltro] = useState('Todos os setores');
+  const [statusFiltro, setStatusFiltro] = useState('Todos os status');
+  const [mesFiltro, setMesFiltro] = useState('Todos os meses');
+
+  const nomes = useMemo(() => Array.from(new Set(justificativas.map((item) => item.nome))).sort(), [justificativas]);
+  const setores = useMemo(() => Array.from(new Set(justificativas.map((item) => item.setor))).sort(), [justificativas]);
+  // "yyyy-mm" -> rótulo "MM/AAAA", pra filtrar por mês sem depender do mês
+  // que estiver aberto em outra aba (Calendário, Dashboard).
+  const meses = useMemo(() => Array.from(new Set(justificativas.map((item) => item.dia?.slice(0, 7)).filter(Boolean)))
+    .sort((a, b) => b.localeCompare(a))
+    .map((chave) => ({ chave, label: `${chave.slice(5, 7)}/${chave.slice(0, 4)}` })), [justificativas]);
 
   const decidir = async (id, status) => {
     setProcessandoId(id);
@@ -42,17 +55,57 @@ export default function SisPontoJustificativasAdmin({ justificativas, carregando
     },
   });
 
-  const ordenadas = [...justificativas].sort((a, b) => {
-    const porStatus = (ORDEM_STATUS_JUSTIFICATIVA[a.status] ?? 9) - (ORDEM_STATUS_JUSTIFICATIVA[b.status] ?? 9);
-    if (porStatus !== 0) return porStatus;
-    return new Date(b.criadoEm) - new Date(a.criadoEm);
-  });
+  const ordenadas = [...justificativas]
+    .filter((item) => (funcionarioFiltro === 'Todos os funcionários' || item.nome === funcionarioFiltro)
+      && (setorFiltro === 'Todos os setores' || item.setor === setorFiltro)
+      && (statusFiltro === 'Todos os status' || item.status === statusFiltro)
+      && (mesFiltro === 'Todos os meses' || item.dia?.startsWith(mesFiltro)))
+    .sort((a, b) => {
+      const porStatus = (ORDEM_STATUS_JUSTIFICATIVA[a.status] ?? 9) - (ORDEM_STATUS_JUSTIFICATIVA[b.status] ?? 9);
+      if (porStatus !== 0) return porStatus;
+      return new Date(b.criadoEm) - new Date(a.criadoEm);
+    });
+  const filtrosAtivos = funcionarioFiltro !== 'Todos os funcionários' || setorFiltro !== 'Todos os setores' || statusFiltro !== 'Todos os status' || mesFiltro !== 'Todos os meses';
+  const limparFiltros = () => { setFuncionarioFiltro('Todos os funcionários'); setSetorFiltro('Todos os setores'); setStatusFiltro('Todos os status'); setMesFiltro('Todos os meses'); };
+
+  const filtros = (
+    <section className="sis-filterbar" style={{ marginBottom: 16 }}>
+      <div className="sis-filter-group">
+        <User size={16} color="#3177dd" />
+        <select value={funcionarioFiltro} onChange={(evento) => setFuncionarioFiltro(evento.target.value)}>
+          <option>Todos os funcionários</option>
+          {nomes.map((nome) => <option key={nome}>{nome}</option>)}
+        </select>
+      </div>
+      <div className="sis-filter-group">
+        <ChartNoAxesColumn size={16} color="#3177dd" />
+        <select value={setorFiltro} onChange={(evento) => setSetorFiltro(evento.target.value)}>
+          <option>Todos os setores</option>
+          {setores.map((setor) => <option key={setor}>{setor}</option>)}
+        </select>
+      </div>
+      <div className="sis-filter-group">
+        <Clock3 size={16} color="#3177dd" />
+        <select value={statusFiltro} onChange={(evento) => setStatusFiltro(evento.target.value)}>
+          {OPCOES_STATUS.map((status) => <option key={status}>{status}</option>)}
+        </select>
+      </div>
+      <div className="sis-filter-group">
+        <CalendarDays size={16} color="#3177dd" />
+        <select value={mesFiltro} onChange={(evento) => setMesFiltro(evento.target.value)}>
+          <option value="Todos os meses">Todos os meses</option>
+          {meses.map((item) => <option key={item.chave} value={item.chave}>{item.label}</option>)}
+        </select>
+      </div>
+      {filtrosAtivos && <button type="button" className="sis-export-button" onClick={limparFiltros} style={{ background: '#fff', color: '#52637f', border: '1px solid #d8e4f3' }}>Limpar filtros</button>}
+    </section>
+  );
 
   if (carregando) {
     return <Card style={{ padding: 26, minHeight: 200 }}><p style={{ color: '#7183a3', fontSize: 13 }}>Carregando justificativas...</p></Card>;
   }
 
-  if (!ordenadas.length) {
+  if (!justificativas.length) {
     return <Card style={{ padding: 26, minHeight: 200 }}>
       <h2 style={{ margin: 0, fontSize: 20 }}>Justificativas</h2>
       <p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Nenhuma solicitação enviada pelos funcionários até o momento.</p>
@@ -61,6 +114,13 @@ export default function SisPontoJustificativasAdmin({ justificativas, carregando
 
   return (
     <>
+    {filtros}
+    {!ordenadas.length && (
+      <Card style={{ padding: 26, minHeight: 160, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
+        <p style={{ margin: 0, color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Nenhuma justificativa encontrada com esses filtros.</p>
+        <button type="button" onClick={limparFiltros} style={{ border: 0, borderRadius: 9, padding: '9px 14px', background: '#eef4ff', color: '#1767e8', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>Limpar filtros</button>
+      </Card>
+    )}
     <div style={{ display: 'grid', gap: 12 }}>
       {ordenadas.map((justificativa) => {
         const cor = JUSTIFICATIVA_CORES[justificativa.status] || JUSTIFICATIVA_CORES['Em análise'];

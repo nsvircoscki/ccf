@@ -44,6 +44,7 @@ export default function SisPontoJornadaAdmin({ cadastroFuncionarios, setCadastro
   const [padraoEmEdicao, setPadraoEmEdicao] = useState(null);
   const [menuPadroesAberto, setMenuPadroesAberto] = useState(false);
   const [statusSalvarHorario, setStatusSalvarHorario] = useState(null);
+  const [statusSalvarPadrao, setStatusSalvarPadrao] = useState(null);
 
   // Arrastar um card só muda o estado local (visível na hora); a gravação de
   // verdade no backend só acontece quando o admin clica em "Salvar Alterações",
@@ -75,7 +76,15 @@ export default function SisPontoJornadaAdmin({ cadastroFuncionarios, setCadastro
   const salvarPadraoHorario = (padraoId, dias) => {
     setPadroesHorario((atuais) => ({ ...atuais, [padraoId]: { dias } }));
     setPadraoEmEdicao(null);
-    api.updateSispontoPadraoHorario(padraoId, dias).catch(() => carregarHorarios());
+    setStatusSalvarPadrao('salvando');
+    api.updateSispontoPadraoHorario(padraoId, dias)
+      .then(() => setStatusSalvarPadrao('salvo'))
+      .catch(() => {
+        // Se a gravação falhar, o otimista acima fica errado — recarrega do
+        // servidor pra não deixar a tela mostrando um horário que não foi salvo.
+        setStatusSalvarPadrao('erro');
+        carregarHorarios();
+      });
   };
 
   const pendencias = Object.keys(alteracoesPendentes).length;
@@ -93,6 +102,9 @@ export default function SisPontoJornadaAdmin({ cadastroFuncionarios, setCadastro
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {statusSalvarPadrao === 'salvando' && <span style={{ color: '#7183a3', fontSize: 11, fontWeight: 800 }}>Salvando horário...</span>}
+            {statusSalvarPadrao === 'salvo' && <span style={{ color: '#2b8761', fontSize: 11, fontWeight: 800 }}>✓ Horário salvo</span>}
+            {statusSalvarPadrao === 'erro' && <span style={{ color: '#be3747', fontSize: 11, fontWeight: 800 }}>Falha ao salvar o horário — tente novamente.</span>}
             <button type="button" onClick={() => setMenuPadroesAberto(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, border: '1px solid #dbe6f5', borderRadius: 9, padding: '10px 14px', background: '#fff', color: '#243755', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}><Settings size={15} /> Configurar Horários Padrões</button>
             <button type="button" disabled={!pendencias} onClick={salvarAlteracoesJornada} style={{ border: 0, borderRadius: 9, padding: '10px 16px', background: pendencias ? '#1767e8' : '#a9c1ea', color: '#fff', fontWeight: 800, fontSize: 13, cursor: pendencias ? 'pointer' : 'default' }}>Salvar Alterações{pendencias ? ` (${pendencias})` : ''}</button>
           </div>

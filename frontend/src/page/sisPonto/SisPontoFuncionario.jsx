@@ -3,14 +3,22 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, FileText, Hourglass, Image as ImageIcon, LogIn, Pencil, TimerReset, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { meses, diasSemana, JUSTIFICATIVA_CORES, PADROES_HORARIO_PADRAO } from './sisPontoData.js';
-import { chaveData, hora, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, ehHorista } from './sisPontoUtils.js';
+import { chaveData, hora, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, pendenciasDeJustificativa, ehHorista } from './sisPontoUtils.js';
 import { Card, ConfirmacaoPonto, FormularioModal, BancoHoras, Legenda, MenuPonto, ModalRegistros, Resumo, navButton } from './SisPontoComponents.jsx';
 import './sisPonto.css';
 
-export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
+export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
   const [agora, setAgora] = useState(new Date());
   const [mes, setMes] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [aba, setAba] = useState('calendario');
+  // Leva direto pra aba "Justificativas" quando o funcionário chega por uma
+  // notificação de atraso/saída antecipada (ver Navbar.jsx) — sem isso, ele
+  // só abria o módulo na tela padrão (Calendário) e precisava achar a aba
+  // sozinho. O "ts" garante que o efeito roda de novo mesmo clicando na
+  // mesma notificação (ou tipo) duas vezes seguidas.
+  useEffect(() => {
+    if (destino?.pagina) setAba(destino.pagina);
+  }, [destino?.pagina, destino?.ts]);
   const [modalRegistros, setModalRegistros] = useState(false);
   const [diaModal, setDiaModal] = useState(null);
   const [mesesAberto, setMesesAberto] = useState(false);
@@ -184,6 +192,26 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
     return porData;
   }, [registros, idFuncionarioAtual]);
   const bancoHorasFuncionario = useMemo(() => buildEngFuncionariosFromStorage(hoje, padroesHorario, [{ id: idFuncionarioAtual, nome: funcionarioAtual?.nome || usuarioLogado, setor: usuarioLogado, horista: funcionarioEhHorista, padraoHorarioId: funcionarioAtual?.padraoHorarioId || null }], justificativas, registrosBackendFuncionario), [hoje, idFuncionarioAtual, funcionarioAtual, usuarioLogado, justificativas, registrosBackendFuncionario, padroesHorario, funcionarioEhHorista]);
+  // Todo atraso/saída antecipada (em qualquer mês, não só o exibido no
+  // calendário), do mais antigo pro mais recente. O badge da aba
+  // "Justificativas" conta só quem ainda não teve NENHUMA justificativa
+  // enviada — some assim que o funcionário envia, sem esperar o admin
+  // aprovar. A sugestão de preenchimento automático pega a mais antiga ainda
+  // sem envio: se o mesmo dia tiver atraso de manhã e saída antecipada à
+  // tarde, a da manhã aparece primeiro e, assim que enviada, a da tarde
+  // entra no lugar dela.
+  const pendenciasAtraso = useMemo(() => pendenciasDeJustificativa(registros, funcionarioAtual, padroesHorario, justificativas), [registros, funcionarioAtual, padroesHorario, justificativas]);
+  const pendenciasNaoEnviadas = pendenciasAtraso.filter((pendencia) => !pendencia.jaEnviada);
+  const pendenciaSugerida = pendenciasNaoEnviadas[0] || null;
+  // Justificativas que o admin recusou ou marcou como inválida também
+  // disputam o preenchimento automático, com prioridade sobre atrasos ainda
+  // nem enviados (o admin já deu um retorno, então isso é mais urgente).
+  const pendenciasRefazer = useMemo(() => justificativas
+    .filter((item) => item.funcionarioId === idFuncionarioAtual && (item.status === 'Recusada' || item.status === 'Inválida'))
+    .sort((a, b) => new Date(a.atualizadoEm || a.criadoEm) - new Date(b.atualizadoEm || b.criadoEm)), [justificativas, idFuncionarioAtual]);
+  // Mas só "Recusada" entra no número vermelho da aba — "Inválida" ainda é só
+  // um ajuste solicitado pelo admin, não uma rejeição definitiva.
+  const pendenciasRefazerNoContador = pendenciasRefazer.filter((item) => item.status === 'Recusada').length;
 
   return (
     <main style={{ height: '100%', overflow: 'auto', background: '#f8fafc', color: '#13254a' }}>
@@ -206,7 +234,7 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
               <button type="button" onClick={adicionarFuncionario} style={{ border: 0, borderRadius: 8, background: '#eef4ff', color: '#1767e8', padding: '8px 7px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>+ Novo funcionário</button>
             </div>
             <MenuPonto ativo={aba === 'calendario'} onClick={() => setAba('calendario')} icon={<CalendarDays size={17} />} texto="Calendário" />
-            <MenuPonto ativo={aba === 'justificativas'} onClick={() => setAba('justificativas')} icon={<FileText size={17} />} texto="Justificativas" />
+            <MenuPonto ativo={aba === 'justificativas'} onClick={() => setAba('justificativas')} icon={<FileText size={17} />} texto="Justificativas" badge={pendenciasNaoEnviadas.length + pendenciasRefazerNoContador} />
             
           </aside>
           {aba === 'calendario' ? <div className="ponto-grid">
@@ -274,7 +302,7 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado }) {
               <Resumo icon={<TimerReset size={16} />} cor="#1767e8" label="Registros realizados" valor={totalRegistros} />
             </Card>
           </div>
-          </div> : aba === 'justificativas' ? <SisPontoJustificativaForm funcionarioId={funcionarioAtual?.id || usuarioLogado} nome={funcionarioAtual?.nome || usuarioLogado} setor={usuarioLogado} justificativas={justificativas} onAtualizado={carregarJustificativas} /> : BancoHoras(bancoHorasFuncionario)}
+          </div> : aba === 'justificativas' ? <SisPontoJustificativaForm funcionarioId={funcionarioAtual?.id || usuarioLogado} nome={funcionarioAtual?.nome || usuarioLogado} setor={usuarioLogado} justificativas={justificativas} onAtualizado={carregarJustificativas} pendenciaSugerida={pendenciaSugerida} pendenciaRefazerSugerida={pendenciasRefazer[0] || null} /> : BancoHoras(bancoHorasFuncionario)}
         </div>
       </div>
       {modalRegistros && <ModalRegistros registros={registrosDoModal} statusRegistro={statusRegistroDoModal} horarioEsperado={horarioEsperado} onExcluir={excluirRegistro} onClose={() => { setModalRegistros(false); setDiaModal(null); }} />}
@@ -296,7 +324,7 @@ function lerArquivoComoDataUrl(arquivo) {
   });
 }
 
-function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas, onAtualizado }) {
+function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas, onAtualizado, pendenciaSugerida, pendenciaRefazerSugerida }) {
   const [form, setForm] = useState(formularioJustificativaVazio);
   const [anexo, setAnexo] = useState(null);
   const [anexoExistente, setAnexoExistente] = useState(null);
@@ -305,10 +333,40 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
   const [mensagem, setMensagem] = useState(null);
   const [confirmacaoExclusao, setConfirmacaoExclusao] = useState(null);
   const inputArquivoRef = useRef(null);
+  // Preenche o formulário sozinho com o que precisa de ação, em ordem de
+  // prioridade: 1) uma justificativa que o admin recusou ou marcou como
+  // inválida (o admin já deu um retorno, é mais urgente) — entra direto no
+  // modo "Refazer", igual ao botão manual da lista; 2) senão, a pendência de
+  // atraso/saída antecipada mais antiga ainda nem enviada. Guarda a última
+  // sugestão já aplicada (não um "só uma vez"): assim que o funcionário
+  // resolve uma, a próxima entra no lugar automaticamente, sem precisar sair
+  // e voltar na aba. Só não mexe enquanto a sugestão não muda (pra não
+  // sobrescrever o que o funcionário está digitando) nem durante uma edição
+  // já em andamento.
+  const ultimaSugestaoAplicadaRef = useRef(null);
+  useEffect(() => {
+    if (editandoId) return;
+    if (pendenciaRefazerSugerida) {
+      const chave = `refazer-${pendenciaRefazerSugerida.id}`;
+      if (ultimaSugestaoAplicadaRef.current === chave) return;
+      ultimaSugestaoAplicadaRef.current = chave;
+      setEditandoId(pendenciaRefazerSugerida.id);
+      setForm({ dia: pendenciaRefazerSugerida.dia, horaInicio: pendenciaRefazerSugerida.horaInicio, horaFim: pendenciaRefazerSugerida.horaFim, motivo: pendenciaRefazerSugerida.motivo });
+      setAnexo(null);
+      setAnexoExistente(pendenciaRefazerSugerida.anexoNome ? { nome: pendenciaRefazerSugerida.anexoNome, dataUrl: pendenciaRefazerSugerida.anexoDataUrl } : null);
+      return;
+    }
+    if (!pendenciaSugerida) return;
+    const chave = `atraso-${pendenciaSugerida.dia}|${pendenciaSugerida.horaInicio}|${pendenciaSugerida.horaFim}`;
+    if (ultimaSugestaoAplicadaRef.current === chave) return;
+    ultimaSugestaoAplicadaRef.current = chave;
+    setForm({ dia: pendenciaSugerida.dia, horaInicio: pendenciaSugerida.horaInicio, horaFim: pendenciaSugerida.horaFim, motivo: '' });
+  }, [pendenciaSugerida, pendenciaRefazerSugerida, editandoId]);
 
   const minhasJustificativas = useMemo(() => justificativas
     .filter((item) => item.funcionarioId === funcionarioId)
     .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm)), [justificativas, funcionarioId]);
+  const justificativaEmEdicao = editandoId ? minhasJustificativas.find((item) => item.id === editandoId) : null;
 
   const handleArquivo = (event) => {
     const arquivo = (event.target.files || [])[0];
@@ -404,6 +462,18 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
       <Card style={{ padding: 26 }}>
         <h2 style={{ margin: 0, fontSize: 20 }}>{editandoId ? 'Refazer justificativa' : 'Nova justificativa'}</h2>
         <p style={{ margin: '6px 0 20px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Explique uma ausência, atraso ou saída antecipada e, se tiver, anexe o atestado.</p>
+        {justificativaEmEdicao && (justificativaEmEdicao.status === 'Recusada' || justificativaEmEdicao.status === 'Inválida') && (
+          <div style={{ marginBottom: 16, padding: '10px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: '#fff4f3', color: '#c23b34' }}>
+            {justificativaEmEdicao.status === 'Recusada'
+              ? 'Essa justificativa foi recusada.'
+              : 'Essa justificativa foi marcada como inválida.'} Ajuste os dados abaixo e reenvie para uma nova análise.
+          </div>
+        )}
+        {!editandoId && pendenciaSugerida && form.dia === pendenciaSugerida.dia && form.horaInicio === pendenciaSugerida.horaInicio && (
+          <div style={{ marginBottom: 16, padding: '10px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: '#fff8ee', color: '#b9770e' }}>
+            Preenchemos abaixo o período em que você não bateu o ponto em {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(`${pendenciaSugerida.dia}T12:00:00`))} — confira e ajuste se precisar.
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
           <label style={{ display: 'grid', gap: 5, fontSize: 11, fontWeight: 800, color: '#7183a3' }}>Dia a justificar
@@ -455,7 +525,7 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
                 <p style={{ margin: '8px 0 0', color: '#405371', fontSize: 12, fontWeight: 600 }}>{justificativa.motivo}</p>
                 {justificativa.anexoNome && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, color: '#7183a3', fontSize: 11, fontWeight: 700 }}><FileText size={13} /> {justificativa.anexoNome}</span>}
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  {justificativa.status === 'Inválida' && <button type="button" onClick={() => refazer(justificativa)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 0, borderRadius: 8, padding: '8px 12px', background: '#c2650a', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}><Pencil size={12} /> Refazer justificativa</button>}
+                  {(justificativa.status === 'Inválida' || justificativa.status === 'Recusada') && <button type="button" onClick={() => refazer(justificativa)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 0, borderRadius: 8, padding: '8px 12px', background: '#c2650a', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}><Pencil size={12} /> Refazer justificativa</button>}
                   <button type="button" onClick={() => excluir(justificativa)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e5cdd0', borderRadius: 8, padding: '8px 12px', background: '#fff', color: '#8a4a4f', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}><Trash2 size={12} /> Excluir</button>
                 </div>
               </motion.div>;

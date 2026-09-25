@@ -196,7 +196,10 @@ export function Navbar({
       return;
     }
     if (notificacao.tipo === 'sis-ponto') {
+      // Atraso/saída antecipada: leva direto pra aba onde dá pra enviar a
+      // justificativa, em vez de só abrir o módulo na tela padrão.
       setTelaAtiva('sis-ponto');
+      onIrParaSisPonto?.('justificativas');
       return;
     }
     if (notificacao.workflowId && kanban?.setWorkflowAtivo) {
