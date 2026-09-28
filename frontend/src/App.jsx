@@ -14,11 +14,13 @@ import CadastroImovelView from './page/CadastroImovelView';
 import VinculacaoView from './page/VinculacaoView';
 import ConfigDocumentosView from './page/ConfigDocumentosView';
 import ConfigEtapasView from './page/ConfigEtapasView';
+import UsuariosView from './page/UsuariosView';
 import ImportarPontosView from './page/ImportarPontosView';
 import TabelaServicosView from './page/TabelaServicosView';
 import FaturamentoView from './page/FaturamentoView';
 import TarefasView from './page/TarefasView';
 import SisPontoView from './page/SisPontoView';
+import { authService } from './services/authService';
 
 import { EditarProjetoModal } from './modals/EditarProjetoModal';
 import { TicketDetailModal } from './modals/TicketDetailModal';
@@ -32,7 +34,14 @@ const COLUNAS_VISUAIS = ['Iniciar', 'Em Andamento', 'Concluído'];
 
 export default function App() {
   const kanban = useKanban();
-  const [usuarioLogado, setUsuarioLogado] = useState(null);
+  // A pessoa logada: { id, nome, setor }. `usuarioLogado` continua sendo o
+  // SETOR (string) — é o que permissões, Kanban e "Minhas Etapas" comparam, e
+  // deixá-lo igual evita mexer em todas essas telas.
+  const [usuarioAtual, setUsuarioAtual] = useState(null);
+  const usuarioLogado = usuarioAtual?.setor || null;
+  // Enquanto confere um token guardado (recarregou a página), não mostra o
+  // login — senão ele pisca antes de a sessão ser restaurada.
+  const [verificandoSessao, setVerificandoSessao] = useState(() => authService.temToken());
   // A animação só toca uma vez, antes do primeiro login da sessão — depois de
   // "concluída" ela não volta a aparecer mesmo se o usuário sair e entrar de
   // novo (senão o "Sair" no Navbar viraria um replay da splash toda vez).
@@ -48,6 +57,29 @@ export default function App() {
   // painel do ENG). O "ts" força o efeito a rodar de novo mesmo clicando em
   // duas notificações seguidas com a mesma página de destino.
   const [sisPontoDestino, setSisPontoDestino] = useState(null);
+
+  // Recarregou a página com um token guardado: confere com o backend se ele
+  // ainda vale (pode ter expirado, ou a pessoa pode ter sido desativada).
+  useEffect(() => {
+    if (!authService.temToken()) return;
+    authService.sessaoAtual()
+      .then((res) => {
+        if (res.ok) setUsuarioAtual(res.data);
+        else authService.definirToken(null);
+      })
+      .catch(() => authService.definirToken(null))
+      .finally(() => setVerificandoSessao(false));
+  }, []);
+
+  // O backend recusou a sessão no meio do uso (token expirou ou a pessoa foi
+  // desativada): volta pra tela de login em vez de deixar tudo falhando.
+  useEffect(() => {
+    authService.aoExpirarSessao(() => {
+      authService.definirToken(null);
+      setUsuarioAtual(null);
+      setModuloEscolhido(false);
+    });
+  }, []);
 
   const [modais, setModais] = useState({
     editarProjeto: false,
@@ -124,15 +156,23 @@ export default function App() {
     return <IntroScreen onDone={() => setIntroConcluida(true)} />;
   }
 
-  const handleLogin = (nome) => {
+  // Recebe { token, usuario } do login ou da criação de senha.
+  const handleLogin = ({ token, usuario }) => {
+    authService.definirToken(token);
     setModuloEscolhido(false);
-    setUsuarioLogado(nome);
+    setUsuarioAtual(usuario);
+    // O polling do Kanban não carrega nada sem token; com a sessão pronta,
+    // busca já em vez de esperar o próximo ciclo.
+    kanban.carregarDados();
   };
 
   const handleLogout = () => {
+    authService.definirToken(null);
     setModuloEscolhido(false);
-    setUsuarioLogado(null);
+    setUsuarioAtual(null);
   };
+
+  if (verificandoSessao) return null;
 
   if (!usuarioLogado) {
     return <LoginView onLogin={handleLogin} globalCss={globalCss} />;
@@ -144,6 +184,7 @@ export default function App() {
         {globalCss}
         <ModuleSelectorView
           usuarioLogado={usuarioLogado}
+          usuarioAtual={usuarioAtual}
           onAbrirModulo={(id) => {
             setTelaAtiva(id);
             setModuloEscolhido(true);
@@ -164,6 +205,7 @@ export default function App() {
           telaAtiva={telaAtiva}
           setTelaAtiva={setTelaAtiva}
           usuarioLogado={usuarioLogado}
+          usuarioAtual={usuarioAtual}
           setUsuarioLogado={handleLogout}
           onVoltarModulos={() => setModuloEscolhido(false)}
           kanban={kanban}
@@ -229,6 +271,10 @@ export default function App() {
 
           {telaAtiva === 'config-etapas' && (
             <ConfigEtapasView onBack={() => setTelaAtiva('dashboard')} usuarioLogado={usuarioLogado} />
+          )}
+
+          {telaAtiva === 'config-usuarios' && (
+            <UsuariosView onBack={() => setTelaAtiva('dashboard')} usuarioAtual={usuarioAtual} />
           )}
 
           {telaAtiva === 'importar-pontos' && (

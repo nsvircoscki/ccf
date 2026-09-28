@@ -1,6 +1,6 @@
 // src/hooks/useKanban.js
 import { useState, useEffect, useCallback } from 'react';
-import { api } from '../services/api';
+import { api, temToken } from '../services/api';
 
 export function useKanban() {
   const [tickets, setTickets] = useState([]);
@@ -8,6 +8,9 @@ export function useKanban() {
   const [workflowAtivo, setWorkflowAtivo] = useState(null);
 
   const carregarDados = useCallback(async () => {
+    // O hook roda desde a tela de login; sem sessão o backend só devolveria
+    // 401. O App chama carregarDados logo após o login.
+    if (!temToken()) return;
     try {
       const dadosWf = await api.getWorkflows();
       if (Array.isArray(dadosWf)) {

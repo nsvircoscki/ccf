@@ -4,7 +4,9 @@ import { notificationService } from '../services/notificationService.js';
 export const notificationController = {
   async listar(req, res) {
     try {
-      const setor = req.headers['x-usuario'];
+      // Setor da sessão, não do header x-usuario — que o navegador mandava
+      // com qualquer valor, deixando ler as notificações de outro setor.
+      const setor = req.usuario.setor;
       const [notificacoes, naoLidas] = await Promise.all([
         notificationService.listarPorSetor(setor),
         notificationService.contarNaoLidas(setor),
@@ -26,7 +28,7 @@ export const notificationController = {
 
   async marcarTodasComoLidas(req, res) {
     try {
-      await notificationService.marcarTodasComoLidas(req.headers['x-usuario']);
+      await notificationService.marcarTodasComoLidas(req.usuario.setor);
       res.status(200).json({ message: 'ok' });
     } catch (error) {
       res.status(400).json({ error: error.message });

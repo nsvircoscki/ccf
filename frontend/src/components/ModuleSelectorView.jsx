@@ -1,42 +1,37 @@
 import { useState } from 'react';
 import {
-  ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, ListChecks, ArrowLeft,
-  BookOpen, Wallet, FileSpreadsheet, Table, Receipt, ClipboardCheck, Clock3,
+  Search, LayoutGrid, Calculator, FileText, Link2, ArrowLeft,
+  BookOpen, Wallet, Receipt, ClipboardCheck, Clock3,
 } from 'lucide-react';
 import { temAcessoAoModulo } from '../utils/permissoes';
+import { GRUPOS, ehGrupo, subitensDoGrupo, podeAbrirSubitem, grupoAcessivel } from '../utils/gruposMenu';
 
 const MONT = '"Montserrat", sans-serif';
 const SANS = '"Open Sans", sans-serif';
 const EASE = 'cubic-bezier(0.22, 0.61, 0.36, 1)';
 const POP_EASE = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 
+// Tiles de grupo (Cadastros, Relatórios, Configurações) abrem uma segunda
+// tela com as opções de dentro — definidos em utils/gruposMenu.js, que a
+// navbar também usa.
+const tileDeGrupo = (id) => ({ id, label: GRUPOS[id].label, desc: GRUPOS[id].desc, icon: GRUPOS[id].icon, color: GRUPOS[id].color });
+
 // wip: ainda não têm tela — o tile aparece pra dar visibilidade do que vem
 // por aí, mas fica desabilitado (ver ModuleTile) até a tela existir.
 const MODULOS = [
-  { id: 'cadastro', label: 'Cadastro de Serviço', desc: 'Abrir um novo serviço e escolher os tipos de processo', icon: ClipboardList, color: '#1a3a8a' },
+  tileDeGrupo('cadastros'),
   { id: 'dashboard', label: 'Pesquisa', desc: 'Buscar serviços por cliente, matrícula ou etapa', icon: Search, color: '#2e8b2e' },
   { id: 'kanban', label: 'Kanban', desc: 'Acompanhar o andamento dos projetos por etapa', icon: LayoutGrid, color: '#0e7490' },
   { id: 'orcamento', label: 'Orçamento', desc: 'Montar e aprovar orçamentos de serviço', icon: Calculator, color: '#b45309' },
   { id: 'emissao-documentos', label: 'OS/Contrato', desc: 'Gerar requerimentos e declarações a partir de modelos', icon: FileText, color: '#0f766e' },
   { id: 'sis-caixa', label: 'SIS CAIXA', desc: 'Controle de caixa do sistema', icon: Wallet, color: '#065f46', wip: true },
-  { id: 'clientes', label: 'Pessoas', desc: 'Cadastro de clientes, pessoas físicas e jurídicas', icon: Users, color: '#be185d' },
-  { id: 'imoveis', label: 'Imóveis', desc: 'Cadastro de imóveis, proprietários e usufrutuários', icon: Home, color: '#7c3aed' },
   { id: 'vinculacao', label: 'SIS DOC', desc: 'Vincular proprietários, imóvel e confrontantes ao serviço', icon: Link2, color: '#1a3a8a' },
-  { id: 'config', label: 'Configurações', desc: 'Documentos, etapas e outros ajustes do sistema', icon: Settings2, color: '#64748b' },
+  tileDeGrupo('config'),
   { id: 'sis-mon', label: 'SIS MON', desc: 'Sistema de monografia', icon: BookOpen, color: '#92400e', wip: true },
-  { id: 'importar-pontos', label: 'Pontos', desc: 'Converte exportação de levantamento (GNSS/RTK) em tabela/Excel', icon: FileSpreadsheet, color: '#0369a1' },
-  { id: 'tabela-servicos', label: 'Tabela de Serviços', desc: 'Todos os projetos, etapa atual e o que falta em cada um', icon: Table, color: '#4d7c0f' },
+  tileDeGrupo('relatorios'),
   { id: 'faturamento', label: 'Faturamento', desc: 'Emitir boletos e notas fiscais', icon: Receipt, color: '#b91c1c' },
   { id: 'tarefas', label: 'Tarefas', desc: 'Planilha de atividades por setor, com histórico do que já foi concluído', icon: ClipboardCheck, color: '#ea580c' },
   { id: 'sis-ponto', label: 'SIS Ponto', desc: 'Sistema para bater o ponto dos funcionários', icon: Clock3, color: '#2563eb' },
-];
-
-// Sub-módulos dentro de "Configurações" — clicar no tile principal abre esta
-// segunda tela em vez de ir direto pra uma tela específica. "Etapas" só
-// aparece pro usuário ENG (mesma restrição da tela em si).
-const SUBMODULOS_CONFIG = [
-  { id: 'config-documentos', label: 'Documentos', desc: 'Quais documentos aparecem para cada tipo de serviço', icon: FileText, color: '#64748b' },
-  { id: 'config-etapas', label: 'Etapas', desc: 'Etapas padrão de cada tipo de processo no Kanban', icon: ListChecks, color: '#9333ea', apenasEng: true },
 ];
 
 function ModuleTile({ mod, index, onOpen, semPermissao }) {
@@ -99,19 +94,24 @@ function ModuleTile({ mod, index, onOpen, semPermissao }) {
   );
 }
 
-export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
-  const [submenuConfig, setSubmenuConfig] = useState(false);
+export default function ModuleSelectorView({ usuarioLogado, usuarioAtual, onAbrirModulo }) {
+  // Grupo aberto na segunda tela (Cadastros, Relatórios, Configurações), ou null.
+  const [submenu, setSubmenu] = useState(null);
+
+  // Grupo fica bloqueado se a pessoa não abre nada dentro dele; tela comum
+  // segue permissoes.js.
+  const semPermissao = (mod) => (
+    ehGrupo(mod.id) ? !grupoAcessivel(mod.id, usuarioLogado) : !temAcessoAoModulo(usuarioLogado, mod.id)
+  );
 
   const abrirTilePrincipal = (mod) => {
-    if (mod.wip || !temAcessoAoModulo(usuarioLogado, mod.id)) return;
-    if (mod.id === 'config') {
-      setSubmenuConfig(true);
+    if (mod.wip || semPermissao(mod)) return;
+    if (ehGrupo(mod.id)) {
+      setSubmenu(mod.id);
       return;
     }
     onAbrirModulo(mod.id);
   };
-
-  const submodulosVisiveis = SUBMODULOS_CONFIG.filter((sub) => !sub.apenasEng || ['ENG', 'DEV'].includes(usuarioLogado));
 
   return (
     <div style={{
@@ -137,11 +137,11 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontFamily: MONT, fontWeight: 700, fontSize: 14, color: '#fff',
           }}>
-            {(usuarioLogado || '?').charAt(0).toUpperCase()}
+            {(usuarioAtual?.nome || usuarioLogado || '?').charAt(0).toUpperCase()}
           </div>
           <div>
-            <div style={{ fontFamily: MONT, fontWeight: 600, fontSize: 13, color: '#0e2549' }}>{usuarioLogado}</div>
-            <div style={{ fontFamily: SANS, fontSize: 11, color: '#9aabcc' }}>CCF Consultores</div>
+            <div style={{ fontFamily: MONT, fontWeight: 600, fontSize: 13, color: '#0e2549' }}>{usuarioAtual?.nome || usuarioLogado}</div>
+            <div style={{ fontFamily: SANS, fontSize: 11, color: '#9aabcc' }}>{usuarioLogado} · CCF Consultores</div>
           </div>
         </div>
       </header>
@@ -154,10 +154,10 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
             estreito demais e o último sobra sozinho numa 3ª linha, exigindo
             rolar a tela pra aparecer. */}
         <div style={{ textAlign: 'center', marginBottom: 32, position: 'relative', width: '100%', maxWidth: 900 }}>
-          {submenuConfig && (
+          {submenu && (
             <button
               type="button"
-              onClick={() => setSubmenuConfig(false)}
+              onClick={() => setSubmenu(null)}
               aria-label="Voltar aos módulos"
               style={{
                 position: 'absolute', left: 0, top: 0, width: 36, height: 36, borderRadius: 10,
@@ -175,7 +175,7 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
             SISTEMA CCF
           </p>
           <h2 style={{ fontFamily: MONT, fontWeight: 700, fontSize: 24, color: '#0e2549', margin: 0, letterSpacing: '-0.01em' }}>
-            {submenuConfig ? 'Configurações — escolha o que ajustar' : 'Selecione um módulo'}
+            {submenu ? GRUPOS[submenu].titulo : 'Selecione um módulo'}
           </h2>
         </div>
 
@@ -183,15 +183,25 @@ export default function ModuleSelectorView({ usuarioLogado, onAbrirModulo }) {
           display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
           gap: '26px 22px', width: '100%', maxWidth: 900, justifyItems: 'center',
         }}>
-          {(submenuConfig ? submodulosVisiveis : MODULOS).map((mod, i) => (
-            <ModuleTile
-              key={mod.id}
-              mod={mod}
-              index={i}
-              semPermissao={!submenuConfig && !temAcessoAoModulo(usuarioLogado, mod.id)}
-              onOpen={() => (submenuConfig ? onAbrirModulo(mod.id) : abrirTilePrincipal(mod))}
-            />
-          ))}
+          {submenu
+            ? subitensDoGrupo(submenu, usuarioLogado).map((sub, i) => (
+              <ModuleTile
+                key={sub.id}
+                mod={sub}
+                index={i}
+                semPermissao={!podeAbrirSubitem(submenu, sub, usuarioLogado)}
+                onOpen={() => onAbrirModulo(sub.id)}
+              />
+            ))
+            : MODULOS.map((mod, i) => (
+              <ModuleTile
+                key={mod.id}
+                mod={mod}
+                index={i}
+                semPermissao={semPermissao(mod)}
+                onOpen={() => abrirTilePrincipal(mod)}
+              />
+            ))}
         </div>
       </main>
     </div>

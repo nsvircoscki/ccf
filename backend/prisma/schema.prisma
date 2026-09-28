@@ -160,9 +160,18 @@ model User {
   id            String  @id @default(uuid())
   name          String
   email         String  @unique
+  // Nome de usuário digitado na tela de login (minúsculas, sem espaço).
+  login         String  @unique
   // Nulo = usuário ainda não criou a própria senha (força o fluxo de
   // "criar senha" no primeiro login, em vez de aceitar qualquer coisa).
   password_hash String?
+
+  // Cada User é uma pessoa (vários por setor). Desativar em vez de apagar:
+  // TicketHistory e Comment apontam pra cá, e o histórico não pode sumir.
+  ativo         Boolean @default(true)
+  // Campos do SisPonto: quem está sujeito ao registro de ponto e como.
+  registraPonto Boolean @default(true)
+  horista       Boolean @default(false)
 
   roleId        String
   role          Role   @relation(fields: [roleId], references: [id])

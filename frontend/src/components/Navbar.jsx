@@ -1,39 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  ClipboardList, Search, LayoutGrid, Calculator, FileText, Users, Home, Link2, Settings2, KeyRound, ListChecks, Bell, X,
-  Wallet, BookOpen, FileSpreadsheet, Table, Receipt, ClipboardCheck, Clock3,
+  Search, LayoutGrid, Calculator, FileText, Link2, KeyRound, Bell, X,
+  Wallet, BookOpen, Receipt, ClipboardCheck, Clock3,
 } from 'lucide-react';
 import { AlterarSenhaModal } from '../modals/AlterarSenhaModal.jsx';
 import { api } from '../services/api';
 import { temAcessoAoModulo } from '../utils/permissoes';
+import { GRUPOS, ehGrupo, subitensDoGrupo, podeAbrirSubitem, grupoAcessivel } from '../utils/gruposMenu';
+
+// Cadastros, Relatórios e Configurações abrem um menu com as opções de dentro
+// em vez de ir direto pra uma tela — definidos em utils/gruposMenu.js, que o
+// seletor de módulos também usa.
+const grupo = (id) => ({ id, label: GRUPOS[id].label, icon: GRUPOS[id].icon, color: GRUPOS[id].color });
 
 // Mesmo ícone/cor de cada módulo no ModuleSelectorView.jsx — mantém os dois
 // selecionáveis (a tela de módulos e a navbar) visualmente consistentes.
 const ITENS = [
   { id: 'dashboard', label: 'Pesquisa', icon: Search, color: '#2e8b2e' },
   { id: 'kanban', label: 'SIS SOS', icon: LayoutGrid, color: '#0e7490' },
+  grupo('cadastros'),
   { id: 'orcamento', label: 'Orçamento', icon: Calculator, color: '#b45309' },
   { id: 'emissao-documentos', label: 'OS/Contrato', icon: FileText, color: '#0f766e' },
   { id: 'sis-caixa', label: 'SIS CAIXA', icon: Wallet, color: '#065f46', wip: true },
-  { id: 'clientes', label: 'Pessoas', icon: Users, color: '#be185d' },
-  { id: 'imoveis', label: 'Imóveis', icon: Home, color: '#7c3aed' },
   { id: 'vinculacao', label: 'SIS DOC', icon: Link2, color: '#1a3a8a' },
   { id: 'sis-mon', label: 'SIS MON', icon: BookOpen, color: '#92400e', wip: true },
-  { id: 'importar-pontos', label: 'Pontos', icon: FileSpreadsheet, color: '#0369a1' },
-  { id: 'tabela-servicos', label: 'Tabela de Serviços', icon: Table, color: '#4d7c0f' },
+  grupo('relatorios'),
   { id: 'faturamento', label: 'Faturamento', icon: Receipt, color: '#b91c1c' },
   { id: 'tarefas', label: 'Tarefas', icon: ClipboardCheck, color: '#ea580c' },
   { id: 'sis-ponto', label: 'SIS Ponto', icon: Clock3, color: '#2563eb' },
-  { id: 'config', label: 'Configurações', icon: Settings2, color: '#64748b' },
-];
-
-// Sub-opções do item "Configurações" — clicar nele abre este menu em vez de
-// ir direto pra uma tela, igual ao seletor de módulos. "Etapas" só aparece
-// pro usuário ENG (mesma restrição da tela em si).
-const SUBMENU_CONFIG = [
-  { id: 'config-documentos', label: 'Documentos', icon: FileText, color: '#64748b' },
-  { id: 'config-etapas', label: 'Etapas', icon: ListChecks, color: '#9333ea', apenasEng: true },
+  grupo('config'),
 ];
 
 function NavItem({ ativo, onClick, item, bloqueado }) {
@@ -109,26 +105,30 @@ export function Navbar({
   telaAtiva,
   setTelaAtiva,
   usuarioLogado,
+  usuarioAtual,
   setUsuarioLogado,
   onVoltarModulos,
   kanban,
   onIrParaSisPonto,
 }) {
   const [alterarSenhaAberto, setAlterarSenhaAberto] = useState(false);
-  const [configMenuAberto, setConfigMenuAberto] = useState(false);
-  // Posição calculada na hora de abrir (ver abrirMenuConfig) — o dropdown usa
-  // position:fixed pra escapar do overflow-x:auto do <nav> (senão fica
-  // cortado, já que fica fora dos limites verticais do container com scroll).
-  const [configMenuPos, setConfigMenuPos] = useState({ top: 0, left: 0 });
-  const configRef = useRef(null);
+  // Qual grupo (Cadastros, Relatórios, Configurações) está com o menu aberto — um por vez.
+  const [grupoAberto, setGrupoAberto] = useState(null);
+  // Posição calculada na hora de abrir — o dropdown usa position:fixed pra
+  // escapar do overflow-x:auto do <nav> (senão fica cortado, já que fica fora
+  // dos limites verticais do container com scroll).
+  const [grupoMenuPos, setGrupoMenuPos] = useState({ top: 0, left: 0 });
+  const gruposRef = useRef({});
 
-  const abrirMenuConfig = () => {
-    setConfigMenuAberto((aberto) => {
-      if (!aberto && configRef.current) {
-        const rect = configRef.current.getBoundingClientRect();
-        setConfigMenuPos({ top: rect.bottom + 8, left: rect.left + rect.width / 2 });
+  const alternarGrupo = (grupoId) => {
+    setGrupoAberto((aberto) => {
+      if (aberto === grupoId) return null;
+      const el = gruposRef.current[grupoId];
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        setGrupoMenuPos({ top: rect.bottom + 8, left: rect.left + rect.width / 2 });
       }
-      return !aberto;
+      return grupoId;
     });
   };
 
@@ -233,15 +233,24 @@ export function Navbar({
 
   useEffect(() => {
     const fecharSeForaDoMenu = (evento) => {
-      if (configRef.current && !configRef.current.contains(evento.target)) setConfigMenuAberto(false);
+      const dentroDeGrupo = Object.values(gruposRef.current).some((el) => el && el.contains(evento.target));
+      if (!dentroDeGrupo) setGrupoAberto(null);
       if (notifRef.current && !notifRef.current.contains(evento.target)) setNotifMenuAberto(false);
     };
     document.addEventListener('mousedown', fecharSeForaDoMenu);
     return () => document.removeEventListener('mousedown', fecharSeForaDoMenu);
   }, []);
 
-  const submenuConfigVisivel = SUBMENU_CONFIG.filter((sub) => !sub.apenasEng ||['ENG', 'DEV'].includes(usuarioLogado));
-  const emTelaDeConfig = ['config-documentos', 'config-etapas'].includes(telaAtiva);
+  // Na navbar, o que a pessoa não pode abrir nem aparece (no seletor de
+  // módulos aparece cinza, com "Sem permissão").
+  const subitensVisiveis = (grupoId) => subitensDoGrupo(grupoId, usuarioLogado)
+    .filter((sub) => podeAbrirSubitem(grupoId, sub, usuarioLogado));
+
+  const itemVisivel = (item) => {
+    if (item.wip) return false;
+    if (ehGrupo(item.id)) return grupoAcessivel(item.id, usuarioLogado);
+    return temAcessoAoModulo(usuarioLogado, item.id);
+  };
 
   return (
     <header
@@ -282,29 +291,29 @@ export function Navbar({
       {/* Centro: navegação — rola horizontalmente em vez de espremer os
           lados quando não cabe tudo de uma vez */}
       <nav className="scroll" style={{ display: 'flex', alignItems: 'flex-start', gap: '18px', overflowX: 'auto', overflowY: 'hidden', minWidth: 0, padding: '2px 2px 6px' }}>
-        {ITENS.filter((item) => !item.wip && temAcessoAoModulo(usuarioLogado, item.id)).map((item) => {
-          return item.id === 'config' ? (
-            <div key={item.id} ref={configRef} style={{ position: 'relative' }}>
+        {ITENS.filter(itemVisivel).map((item) => {
+          return ehGrupo(item.id) ? (
+            <div key={item.id} ref={(el) => { gruposRef.current[item.id] = el; }} style={{ position: 'relative' }}>
               <NavItem
                 item={item}
-                ativo={emTelaDeConfig || configMenuAberto}
+                ativo={GRUPOS[item.id].itens.some((sub) => sub.id === telaAtiva) || grupoAberto === item.id}
                 bloqueado={false}
-                onClick={abrirMenuConfig}
+                onClick={() => alternarGrupo(item.id)}
               />
-              {configMenuAberto && (
+              {grupoAberto === item.id && (
                 <div style={{
-                  position: 'fixed', top: configMenuPos.top, left: configMenuPos.left, transform: 'translateX(-50%)',
+                  position: 'fixed', top: grupoMenuPos.top, left: grupoMenuPos.left, transform: 'translateX(-50%)',
                   background: '#fff', border: '1px solid rgba(15, 23, 42, 0.10)', borderRadius: 12,
                   boxShadow: '0 12px 34px rgba(14,37,73,0.16)', overflow: 'hidden', zIndex: 40,
                   minWidth: 170,
                 }}>
-                  {submenuConfigVisivel.map((sub) => {
+                  {subitensVisiveis(item.id).map((sub) => {
                     const SubIcon = sub.icon;
                     return (
                       <button
                         key={sub.id}
                         type="button"
-                        onClick={() => { setTelaAtiva(sub.id); setConfigMenuAberto(false); }}
+                        onClick={() => { setTelaAtiva(sub.id); setGrupoAberto(null); }}
                         style={{
                           width: '100%', display: 'flex', alignItems: 'center', gap: 10,
                           padding: '10px 14px', border: 'none', cursor: 'pointer',
@@ -336,35 +345,6 @@ export function Navbar({
 
       {/* Direita: ação principal e sessão */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', minWidth: 0 }}>
-        {temAcessoAoModulo(usuarioLogado, 'cadastro') && (
-          <motion.button
-            type="button"
-            onClick={() => setTelaAtiva('cadastro')}
-            whileHover={{ y: -1 }}
-            whileTap={{ scale: 0.98 }}
-            style={{
-              height: '36px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '0 14px',
-              borderRadius: '999px',
-              border: '1px solid rgba(26, 58, 138, 0.22)',
-              background: 'rgba(26, 58, 138, 0.06)',
-              color: '#1a3a8a',
-              fontSize: '12.5px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            <ClipboardList size={15} strokeWidth={2.1} /> Cadastrar Serviço
-          </motion.button>
-        )}
-
-        <div style={{ width: '1px', height: '24px', background: 'rgba(15, 23, 42, 0.10)', flexShrink: 0 }} />
-
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '28px', flexShrink: 1, overflow: 'hidden' }}>
           <div style={{
             width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0,
@@ -372,11 +352,11 @@ export function Navbar({
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontWeight: 700, fontSize: '14px', color: '#fff',
           }}>
-            {(usuarioLogado || '?').charAt(0).toUpperCase()}
+            {(usuarioAtual?.nome || usuarioLogado || '?').charAt(0).toUpperCase()}
           </div>
           <div style={{ overflow: 'hidden', minWidth: 0 }}>
             <div
-              title={usuarioLogado}
+              title={usuarioAtual?.nome || usuarioLogado}
               style={{
                 fontSize: '13px',
                 fontWeight: 700,
@@ -386,9 +366,9 @@ export function Navbar({
                 whiteSpace: 'nowrap',
               }}
             >
-              {usuarioLogado}
+              {usuarioAtual?.nome || usuarioLogado}
             </div>
-            <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600, whiteSpace: 'nowrap' }}>CCF Consultores</div>
+            <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600, whiteSpace: 'nowrap' }}>{usuarioLogado} · CCF Consultores</div>
           </div>
         </div>
 
@@ -534,7 +514,7 @@ export function Navbar({
       </div>
 
       {alterarSenhaAberto && (
-        <AlterarSenhaModal usuarioLogado={usuarioLogado} onClose={() => setAlterarSenhaAberto(false)} />
+        <AlterarSenhaModal usuarioLogado={usuarioAtual?.nome || usuarioLogado} onClose={() => setAlterarSenhaAberto(false)} />
       )}
     </header>
   );

@@ -37,26 +37,23 @@ export const ticketService = {
     });
   },
 
+  // userId é o id do User logado (pessoa), vindo da sessão — antes era o nome
+  // do setor, resolvido pro usuário genérico dele ("Equipe Desenho").
   async adicionarComentario(ticketId, userId, text) {
-    const role = await prisma.role.findUnique({ where: { name: userId } });
-    const user = await prisma.user.findFirst({ where: { roleId: role.id } });
-
     return prisma.comment.create({
-      data: { text, ticketId, userId: user.id },
+      data: { text, ticketId, userId },
       include: { user: true }
     });
   },
 
   async moverTicket(ticketId, toStepId, userId) {
-    const role = await prisma.role.findUnique({ where: { name: userId } });
-    const user = await prisma.user.findFirst({ where: { roleId: role.id } });
     const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
     const toStep = await prisma.workflowStep.findUnique({ where: { id: toStepId } });
 
     return prisma.$transaction(async (tx) => {
       const updatedTicket = await tx.ticket.update({ where: { id: ticketId }, data: { currentStepId: toStepId } });
       await tx.ticketHistory.create({
-        data: { ticketId, fromStepId: ticket.currentStepId, toStepId, userId: user.id }
+        data: { ticketId, fromStepId: ticket.currentStepId, toStepId, userId }
       });
 
       if (toStep.step_name === 'Concluído') {

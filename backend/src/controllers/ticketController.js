@@ -31,7 +31,8 @@ export const ticketController = {
 
   async comentar(req, res) {
     try {
-      const comentario = await ticketService.adicionarComentario(req.params.id, req.body.userId, req.body.text);
+      // Autor = quem está logado (req.usuario), não o userId do corpo.
+      const comentario = await ticketService.adicionarComentario(req.params.id, req.usuario.id, req.body.text);
       res.status(201).json(comentario);
     } catch (error) { 
       res.status(500).json({ error: "Erro ao adicionar comentário." }); 
@@ -40,7 +41,8 @@ export const ticketController = {
 
   async mover(req, res) {
     try {
-      const updatedTicket = await ticketService.moverTicket(req.body.ticketId, req.body.toStepId, req.body.userId);
+      // Quem moveu = quem está logado (req.usuario), não o userId do corpo.
+      const updatedTicket = await ticketService.moverTicket(req.body.ticketId, req.body.toStepId, req.usuario.id);
       res.status(200).json({ message: "Movido", updatedTicket });
     } catch (error) { 
       res.status(500).json({ error: "Erro ao mover tarefa." }); 
