@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Building2, Check, FileText, MessageSquare, Save, MapPin, Plus, X } from 'lucide-react';
+import { ArrowLeft, Building2, Check, FileText, Hash, MessageSquare, Save, MapPin, Plus, X } from 'lucide-react';
 import PlaceholderMapa from '../page/PlaceholderMapa.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { servicoService } from '../services/servicoService';
@@ -179,6 +179,8 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
   const [perimetroRio, setPerimetroRio] = useState('');
   const [municipio, setMunicipio] = useState('Sao Bento do Sul');
   const [numeroServico, setNumeroServico] = useState(null);
+  // Número escolhido pra um serviço novo; vazio = o backend gera automático.
+  const [numeroManual, setNumeroManual] = useState('');
   const [servicoId, setServicoId] = useState(null);
   const [mensagem, setMensagem] = useState(null);
   const [cliente, setCliente] = useState('');
@@ -215,6 +217,7 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
   const limparFormulario = () => {
     setServicoId(null);
     setNumeroServico(null);
+    setNumeroManual('');
     setCliente('');
     setContato('');
     setMatricula('');
@@ -421,7 +424,10 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
         municipio,
         linhaSecaKm: perimetroLSeca,
         rioKm: perimetroRio,
-        servicosSelecionados
+        servicosSelecionados,
+        // Só vale na criação: depois de criado, o número já virou nome da
+        // pasta e base dos nomes de projeto no Kanban, então não muda.
+        ...(servicoId ? {} : { numeroServico: numeroManual }),
       };
 
       const editando = Boolean(servicoId);
@@ -614,6 +620,26 @@ export default function CadastroServicoView({ onBack, onServicoCriado }) {
                   searchPlaceholder="Pesquisar serviço cadastrado"
                 />
               </div>
+
+              {!servicoId && (
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
+                    <Hash size={14} /> Número do serviço <span style={{ textTransform: 'none', fontWeight: 600, color: '#95A0B5' }}>(opcional)</span>
+                  </span>
+                  <input
+                    value={numeroManual}
+                    onChange={(event) => setNumeroManual(event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))}
+                    onFocus={() => setCampoAtivo('numeroManual')}
+                    onBlur={() => setCampoAtivo(null)}
+                    placeholder="Em branco = número automático (ex.: 2025-150)"
+                    maxLength={30}
+                    style={{
+                      ...baseFieldStyle,
+                      ...(campoAtivo === 'numeroManual' ? activeFieldStyle : {}),
+                    }}
+                  />
+                </label>
+              )}
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '1 / -1'}}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 800, color: '#5F6B83', textTransform: 'uppercase' }}>
