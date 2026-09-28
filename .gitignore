@@ -26,3 +26,8 @@ node_modules/
 dist/
 build/
 
+
+# Dados do SisPonto (registros de ponto reais). O backend reescreve esse
+# arquivo a cada batida; versionado, um git pull em produção falharia ou
+# sobrescreveria os registros. O serviço cria o arquivo sozinho se faltar.
+backend/data/sis-ponto.json
