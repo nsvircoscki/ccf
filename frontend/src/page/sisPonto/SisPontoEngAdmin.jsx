@@ -4,9 +4,10 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChartNoAxesColumn
 import { api } from '../../services/api';
 import { meses, diasSemana, PADROES_HORARIO_INFO, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_CORES } from './sisPontoData.js';
 import { chaveData, hora, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, calcularHistoricoSemanal, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, ehHorista } from './sisPontoUtils.js';
-import { BancoHoras, Card, ConfirmacaoPonto, FormularioModal } from './SisPontoComponents.jsx';
+import { BancoHoras, Card, ConfirmacaoPonto } from './SisPontoComponents.jsx';
 import SisPontoJustificativasAdmin from './SisPontoJustificativasAdmin.jsx';
 import SisPontoJornadaAdmin from './SisPontoJornadaAdmin.jsx';
+import SisPontoRevisaoAdmin from './SisPontoRevisaoAdmin.jsx';
 import './sisPonto.css';
 
 export default function SisPontoEngAdminScreen({ destino }) {
@@ -35,8 +36,6 @@ export default function SisPontoEngAdminScreen({ destino }) {
   const [carregandoJustificativas, setCarregandoJustificativas] = useState(true);
   const [registrosBackend, setRegistrosBackend] = useState({});
   const [confirmacaoModal, setConfirmacaoModal] = useState(null);
-  const [novoFuncionarioModal, setNovoFuncionarioModal] = useState(false);
-  const [renomeacaoModal, setRenomeacaoModal] = useState(null);
   // Dia clicado no calendário do admin (só a chave "yyyy-mm-dd") — os itens são
   // derivados ao vivo de `justificativas` a cada render, então o popup já
   // mostra o status atualizado assim que o admin decide algo nele.
@@ -214,58 +213,6 @@ export default function SisPontoEngAdminScreen({ destino }) {
   const presentes = funcionarios.filter((f) => f.status === 'Presente' || f.status === 'Atrasado/Saída Antecipada' || f.status === 'Finalizado' || f.status === 'Justificado').length;
   const atrasados = funcionarios.filter((f) => f.status === 'Atrasado/Saída Antecipada').length;
   const ausentes = funcionarios.filter((f) => f.status === 'Ausente').length;
-  // Fallback comum quando o backend está fora do ar: as três ações abaixo
-  // (criar/renomear/excluir) continuam funcionando localmente e sincronizam
-  // com o servidor na próxima vez que a tela carregar.
-  const atualizarCadastroLocalStorage = (setor, transformar) => {
-    const chave = `ccf-sis-ponto-funcionarios-${setor}`;
-    const lista = JSON.parse(localStorage.getItem(chave) || '[]');
-    localStorage.setItem(chave, JSON.stringify(transformar(lista)));
-  };
-
-  const adicionarFuncionarioEng = () => setNovoFuncionarioModal(true);
-  const criarFuncionarioEng = ({ nome, setor, horista }) => {
-    setNovoFuncionarioModal(false);
-    if (!nome?.trim() || !setor?.trim()) return;
-    const funcionario = { id: `${setor.trim().toUpperCase()}-${Date.now()}`, nome: nome.trim(), setor: setor.trim().toUpperCase(), horista: Boolean(horista) };
-    api.createSispontoFuncionario(funcionario).then((novo) => {
-      setCadastroFuncionarios((atuais) => [...atuais, novo]);
-    }).catch(() => {
-      setCadastroFuncionarios((atuais) => [...atuais, funcionario]);
-      atualizarCadastroLocalStorage(funcionario.setor, (lista) => [...lista, funcionario]);
-    });
-  };
-
-  const renomearFuncionarioEng = (funcionario) => setRenomeacaoModal(funcionario);
-  const confirmarRenomeacaoEng = ({ nome }) => {
-    const funcionario = renomeacaoModal;
-    setRenomeacaoModal(null);
-    if (!funcionario || !nome?.trim()) return;
-    const proximoNome = nome.trim();
-    api.updateSispontoFuncionario(funcionario.id, { nome: proximoNome }).then((atualizado) => {
-      setCadastroFuncionarios((atuais) => atuais.map((item) => item.id === funcionario.id ? { ...item, nome: atualizado.nome } : item));
-    }).catch(() => {
-      setCadastroFuncionarios((atuais) => atuais.map((item) => item.id === funcionario.id ? { ...item, nome: proximoNome } : item));
-      atualizarCadastroLocalStorage(funcionario.setor, (lista) => lista.map((item) => item.id === funcionario.id ? { ...item, nome: proximoNome } : item));
-    });
-  };
-
-  const excluirFuncionarioEng = (funcionario) => setConfirmacaoModal({
-    titulo: 'Excluir funcionário',
-    mensagem: `Deseja excluir o funcionário ${funcionario.nome} do cadastro? Os registros de ponto e justificativas dele também serão apagados.`,
-    destrutivo: true,
-    confirmar: () => {
-      setConfirmacaoModal(null);
-      api.deleteSispontoFuncionario(funcionario.id).then(() => {
-        setCadastroFuncionarios((atuais) => atuais.filter((item) => item.id !== funcionario.id));
-        carregarRegistros();
-      }).catch(() => {
-        setCadastroFuncionarios((atuais) => atuais.filter((item) => item.id !== funcionario.id));
-        atualizarCadastroLocalStorage(funcionario.setor, (lista) => lista.filter((item) => item.id !== funcionario.id));
-      });
-    },
-  });
-
   return (
     <main className="sis-ponto-admin-screen">
       <div className="sis-admin-layout">
@@ -283,6 +230,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
                 </span>
               )}
             </button>
+            <button className={`sis-admin-nav-item ${activePage === 'revisao' ? 'active' : ''}`} onClick={() => setActivePage('revisao')}><CircleAlert size={16} /> Pontos a revisar</button>
             <button className={`sis-admin-nav-item ${activePage === 'relatorios' ? 'active' : ''}`} onClick={() => setActivePage('relatorios')}><ChartNoAxesColumn size={16} /> Relatórios</button>
             <button className={`sis-admin-nav-item ${activePage === 'configuracoes' ? 'active' : ''}`} onClick={() => setActivePage('configuracoes')}><Clock3 size={16} /> Jornada</button>
           </nav>
@@ -518,6 +466,8 @@ export default function SisPontoEngAdminScreen({ destino }) {
             </section>
           )}
 
+          {activePage === 'revisao' && <SisPontoRevisaoAdmin />}
+
           {activePage === 'relatorios' && (
             <section className="sis-empty-view">
               <Card style={{ padding: 26, minHeight: 280 }}><h2 style={{ margin: 0, fontSize: 20 }}>Relatórios</h2><p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Relatórios e exportações do SIS Ponto aparecerão aqui.</p><button onClick={exportarRelatorio} type="button" style={{ border: 0, borderRadius: 9, padding: '11px 15px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>Exportar relatório</button></Card>
@@ -537,7 +487,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
           {activePage === 'funcionarios' && (
             <section className="sis-empty-view">
               <Card style={{ padding: 26, minHeight: 280 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><h2 style={{ margin: 0, fontSize: 20 }}>Funcionários</h2><p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Cadastros nominais usados no painel do administrador.</p></div><button type="button" onClick={adicionarFuncionarioEng} style={{ border: 0, borderRadius: 9, padding: '10px 14px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>+ Novo funcionário</button></div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><h2 style={{ margin: 0, fontSize: 20 }}>Funcionários</h2><p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Pessoas com "Registra ponto" ligado. Para incluir, renomear ou desligar alguém, use Configurações → Usuários.</p></div></div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 22 }}>{cadastroFuncionarios.map((funcionario) => {
                   const dados = funcionarios.find((item) => item.nome === funcionario.nome && item.setor === funcionario.setor) || { nome: funcionario.nome, setor: funcionario.setor, total: '00h00', status: 'Ausente' };
                   return <div key={funcionario.id} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px', border: '1px solid #e5edf8', borderRadius: 12, color: '#405371', fontSize: 13, fontWeight: 800, background: '#f8fbff' }}>
@@ -545,10 +495,6 @@ export default function SisPontoEngAdminScreen({ destino }) {
                       <span style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                         <span>{funcionario.nome}</span>
                         <small style={{ color: '#7183a3' }}>{funcionario.setor}</small>
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <button type="button" onClick={() => renomearFuncionarioEng(funcionario)} style={{ border: 0, borderRadius: 8, padding: '8px 10px', background: '#eef4ff', color: '#1767e8', fontWeight: 800, cursor: 'pointer' }}>Renomear</button>
-                        <button type="button" onClick={() => excluirFuncionarioEng(funcionario)} style={{ border: 0, borderRadius: 8, padding: '8px 10px', background: '#ffecef', color: '#be3747', fontWeight: 800, cursor: 'pointer' }}>Excluir</button>
                       </span>
                     </span>
                     <span style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -673,12 +619,6 @@ export default function SisPontoEngAdminScreen({ destino }) {
         </section>
       </div>
       {confirmacaoModal && <ConfirmacaoPonto {...confirmacaoModal} onClose={() => setConfirmacaoModal(null)} />}
-      {novoFuncionarioModal && <FormularioModal titulo="Novo funcionário" campos={[
-        { nome: 'nome', label: 'Nome completo', obrigatorio: true },
-        { nome: 'setor', label: 'Setor', obrigatorio: true, valorInicial: 'ENG' },
-        { nome: 'horista', tipo: 'switch', label: 'Tipo de contrato', descricao: 'Arraste para a direita se for horista (recebe por hora, sem horário fixo).', rotuloDesligado: 'Mensalista', rotuloLigado: 'Horista' },
-      ]} textoConfirmar="Adicionar" confirmar={criarFuncionarioEng} onClose={() => setNovoFuncionarioModal(false)} />}
-      {renomeacaoModal && <FormularioModal titulo="Renomear funcionário" campos={[{ nome: 'nome', label: 'Nome completo', obrigatorio: true, valorInicial: renomeacaoModal.nome }]} textoConfirmar="Salvar" confirmar={confirmarRenomeacaoEng} onClose={() => setRenomeacaoModal(null)} />}
       {popupDiaJustificativa && (
         <PopupJustificativasDia
           dia={popupDiaJustificativa}

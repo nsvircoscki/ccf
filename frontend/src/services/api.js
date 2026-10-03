@@ -179,6 +179,27 @@ export const api = {
         return res.json();
     },
 
+    // Envio da fila offline (services/pontoOffline.js). Não lança em erro HTTP:
+    // quem chama decide o que manter na fila pelo status. Sem rede, o fetch lança.
+    syncSispontoBatidas: async (payload) => {
+        const res = await req(`${BASE_URL}/sis-ponto/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) };
+    },
+
+    // Pares sem saída/sem entrada/inconsistentes do mês (só ENG/DEV).
+    getSispontoRevisao: async (mes) => {
+        const res = await req(`${BASE_URL}/sis-ponto/revisao?mes=${encodeURIComponent(mes)}`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao carregar pontos para revisão.');
+        }
+        return res.json();
+    },
+
     deleteSispontoRegistro: async (dados) => {
         const res = await req(`${BASE_URL}/sis-ponto/registros`, {
             method: 'DELETE',

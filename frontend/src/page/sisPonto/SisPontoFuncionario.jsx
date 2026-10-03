@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, FileText, Hourglass, Image as ImageIcon, LogIn, Pencil, TimerReset, Trash2 } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, CloudOff, CloudUpload, FileText, Hourglass, Image as ImageIcon, LogIn, Pencil, TimerReset, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
+import { registrarBatida, pendentesDoFuncionario, descartarPendente, inscrever, obterEstado, sincronizarPendentes } from '../../services/pontoOffline.js';
 import { meses, diasSemana, JUSTIFICATIVA_CORES, PADROES_HORARIO_PADRAO } from './sisPontoData.js';
 import { chaveData, hora, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, pendenciasDeJustificativa, ehHorista } from './sisPontoUtils.js';
-import { Card, ConfirmacaoPonto, FormularioModal, BancoHoras, Legenda, MenuPonto, ModalRegistros, Resumo, navButton } from './SisPontoComponents.jsx';
+import { Card, ConfirmacaoPonto, BancoHoras, Legenda, MenuPonto, ModalRegistros, Resumo, navButton } from './SisPontoComponents.jsx';
 import './sisPonto.css';
 
 export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
@@ -23,7 +24,6 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
   const [diaModal, setDiaModal] = useState(null);
   const [mesesAberto, setMesesAberto] = useState(false);
   const [confirmacao, setConfirmacao] = useState(null);
-  const [novoFuncionarioModal, setNovoFuncionarioModal] = useState(false);
   const [erroPonto, setErroPonto] = useState(null);
   const [justificativas, setJustificativas] = useState([]);
   const funcionariosKey = `ccf-sis-ponto-funcionarios-${usuarioLogado}`;
@@ -35,14 +35,34 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
   });
   const [funcionarioId, setFuncionarioId] = useState(usuarioLogado);
   const funcionarioAtual = funcionariosSetor.find((funcionario) => funcionario.id === funcionarioId) || funcionariosSetor[0];
-  const [registros, setRegistros] = useState({});
+  // O que o servidor já confirmou + o que ainda está na fila do aparelho
+  // (batida offline). A tela mostra os dois juntos.
+  const [registrosServidor, setRegistrosServidor] = useState({});
+  const [pendentesLocais, setPendentesLocais] = useState([]);
+  const [sync, setSync] = useState(obterEstado);
+  const registros = useMemo(() => {
+    const junto = Object.fromEntries(Object.entries(registrosServidor).map(([dia, lista]) => [dia, [...lista]]));
+    pendentesLocais.forEach((batida) => {
+      const dia = chaveData(new Date(batida.batidoEm));
+      if (!(junto[dia] ||= []).includes(batida.batidoEm)) junto[dia].push(batida.batidoEm);
+    });
+    Object.values(junto).forEach((lista) => lista.sort());
+    return junto;
+  }, [registrosServidor, pendentesLocais]);
+  const pendentesSet = useMemo(() => new Set(pendentesLocais.map((batida) => batida.batidoEm)), [pendentesLocais]);
   // Mesma fonte que o admin (SisPontoEngAdmin) usa pra alocar cada funcionário
   // num padrão de horário, agora vinda do backend — sem isso, este painel
   // sempre usava o horário padrão de fábrica e ignorava a alocação feita lá.
-  const [padroesHorario, setPadroesHorario] = useState(PADROES_HORARIO_PADRAO);
+  // Guardado no aparelho pra tela abrir offline com a jornada certa.
+  const CHAVE_PADROES = 'ccf-sis-ponto-padroes-horario';
+  const [padroesHorario, setPadroesHorario] = useState(() => {
+    try { return { ...PADROES_HORARIO_PADRAO, ...(JSON.parse(localStorage.getItem(CHAVE_PADROES)) || {}) }; } catch { return PADROES_HORARIO_PADRAO; }
+  });
   useEffect(() => {
     api.getSispontoPadroesHorario().then((dados) => {
-      setPadroesHorario({ ...PADROES_HORARIO_PADRAO, ...(dados && typeof dados === 'object' ? dados : {}) });
+      if (!dados || typeof dados !== 'object') return;
+      localStorage.setItem(CHAVE_PADROES, JSON.stringify(dados));
+      setPadroesHorario({ ...PADROES_HORARIO_PADRAO, ...dados });
     }).catch(() => {});
   }, [usuarioLogado, aba]);
   const expectativasHoje = expectativasDoFuncionario(funcionarioAtual, padroesHorario, agora) || [];
@@ -74,13 +94,27 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
     .then((lista) => setJustificativas(Array.isArray(lista) ? lista : []))
     .catch(() => setJustificativas([]));
   useEffect(() => { carregarJustificativas(); }, [funcionarioAtual?.id, aba]);
+  const carregarPendentes = () => pendentesDoFuncionario(funcionarioAtual?.id || usuarioLogado).then(setPendentesLocais).catch(() => {});
   const carregarRegistros = () => {
     const idAtual = funcionarioAtual?.id || usuarioLogado;
+    carregarPendentes();
     return api.getSispontoRegistros()
-      .then((registrosBackend) => setRegistros(extrairRegistrosFuncionario(registrosBackend, idAtual)))
+      .then((registrosBackend) => setRegistrosServidor(extrairRegistrosFuncionario(registrosBackend, idAtual)))
       .catch(() => {});
   };
   useEffect(() => { carregarRegistros(); }, [funcionarioAtual?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A fila andou (batida nova, envio confirmado): atualiza contador e lista.
+  // Quando algo sobe pro servidor, recarrega dele pra trocar "pendente" por confirmado.
+  const ultimoEnvioVisto = useRef(sync.ultimoEnvio);
+  useEffect(() => inscrever((estado) => {
+    setSync(estado);
+    if (estado.ultimoEnvio !== ultimoEnvioVisto.current) {
+      ultimoEnvioVisto.current = estado.ultimoEnvio;
+      carregarRegistros();
+    } else {
+      carregarPendentes();
+    }
+  }), [funcionarioAtual?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hoje = chaveData(agora);
   const registrosHoje = registros[hoje] || [];
@@ -91,7 +125,6 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
   };
   const registrarPontoConfirmado = () => {
     const momento = new Date();
-    const chave = chaveData(momento);
     const tempoIso = momento.toISOString();
     const idAtual = funcionarioAtual?.id || usuarioLogado;
 
@@ -106,33 +139,25 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
       minutosAtraso = Math.abs(diferenca);
     }
 
-    setRegistros((atuais) => ({ ...atuais, [chave]: [...(atuais[chave] || []), tempoIso] }));
     setConfirmacao(null);
     if (atrasado) {
       setErroPonto('Esse registro ficou fora do horário. Não esqueça de enviar uma justificativa na aba Justificativas.');
       window.setTimeout(() => setErroPonto(null), 6000);
     }
-    api.registrarSispontoPonto({ funcionarioId: idAtual, data: chave, tempo: tempoIso, atrasado, minutosAtraso, tipo }).catch(() => {
-      carregarRegistros();
-    });
+    // Grava primeiro no aparelho (vale mesmo sem internet); o envio ao
+    // servidor acontece em seguida ou quando a conexão voltar.
+    setPendentesLocais((atuais) => [...atuais, { batidoEm: tempoIso }]);
+    registrarBatida({ funcionarioId: idAtual, tipo: tipo === 'Saída' ? 'SAIDA' : 'ENTRADA', batidoEm: tempoIso, atrasado, minutosAtraso })
+      .then(carregarPendentes)
+      .catch(() => {
+        carregarPendentes();
+        setErroPonto('Não foi possível guardar o ponto neste aparelho. Tente de novo.');
+        window.setTimeout(() => setErroPonto(null), 6000);
+      });
   };
   const selecionarFuncionario = (id) => {
     setFuncionarioId(id);
     setDiaModal(null);
-  };
-  const adicionarFuncionario = () => setNovoFuncionarioModal(true);
-  const criarFuncionario = ({ nome }) => {
-    setNovoFuncionarioModal(false);
-    if (!nome?.trim()) return;
-    const id = `${usuarioLogado}-${Date.now()}`;
-    const novoFuncionario = { id, nome: nome.trim(), setor: usuarioLogado };
-    setFuncionariosSetor((atuais) => [...atuais, novoFuncionario]);
-    setFuncionarioId(id);
-    setRegistros({});
-    api.createSispontoFuncionario(novoFuncionario).catch(() => {
-      // fallback: o funcionário continua salvo localmente e será sincronizado
-      // com o backend na próxima vez que a tela carregar.
-    });
   };
 
   const diasCalendario = useMemo(() => {
@@ -169,9 +194,14 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
     setConfirmacao({ titulo: 'Excluir registro', mensagem: 'Deseja realmente excluir este registro de ponto?', destrutivo: true, confirmar: () => {
       const idAtual = funcionarioAtual?.id || usuarioLogado;
       const tempo = (registros[diaModal] || [])[indice];
-      setRegistros((atuais) => ({ ...atuais, [diaModal]: (atuais[diaModal] || []).filter((_, itemIndice) => itemIndice !== indice) }));
       setConfirmacao(null);
       if (!tempo) return;
+      // Ainda não subiu: basta tirar da fila do aparelho.
+      if (pendentesSet.has(tempo)) {
+        descartarPendente(idAtual, tempo).finally(carregarPendentes);
+        return;
+      }
+      setRegistrosServidor((atuais) => ({ ...atuais, [diaModal]: (atuais[diaModal] || []).filter((item) => item !== tempo) }));
       api.deleteSispontoRegistro({ funcionarioId: idAtual, data: diaModal, tempo }).catch((erro) => {
         setErroPonto(erro?.message || 'Não foi possível excluir o registro. Tente novamente.');
         window.setTimeout(() => setErroPonto(null), 4500);
@@ -231,7 +261,8 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
               <select value={funcionarioId} onChange={(event) => selecionarFuncionario(event.target.value)} style={{ width: '100%', minWidth: 0, padding: '9px 7px', border: '1px solid #d8e6fc', borderRadius: 8, color: '#405371', fontSize: 11, fontWeight: 700 }}>
                 {funcionariosSetor.map((funcionario) => <option key={funcionario.id} value={funcionario.id}>{funcionario.nome}</option>)}
               </select>
-              <button type="button" onClick={adicionarFuncionario} style={{ border: 0, borderRadius: 8, background: '#eef4ff', color: '#1767e8', padding: '8px 7px', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>+ Novo funcionário</button>
+              <span style={{ color: '#8a99b1', fontSize: 10, fontWeight: 600, lineHeight: 1.35 }}>Novo funcionário: cadastre em Configurações → Usuários.</span>
+              <IndicadorSincronizacao sync={sync} />
             </div>
             <MenuPonto ativo={aba === 'calendario'} onClick={() => setAba('calendario')} icon={<CalendarDays size={17} />} texto="Calendário" />
             <MenuPonto ativo={aba === 'justificativas'} onClick={() => setAba('justificativas')} icon={<FileText size={17} />} texto="Justificativas" badge={pendenciasNaoEnviadas.length + pendenciasRefazerNoContador} />
@@ -307,7 +338,6 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
       </div>
       {modalRegistros && <ModalRegistros registros={registrosDoModal} statusRegistro={statusRegistroDoModal} horarioEsperado={horarioEsperado} onExcluir={excluirRegistro} onClose={() => { setModalRegistros(false); setDiaModal(null); }} />}
       {confirmacao && <ConfirmacaoPonto {...confirmacao} onClose={() => setConfirmacao(null)} />}
-      {novoFuncionarioModal && <FormularioModal titulo="Novo funcionário" campos={[{ nome: 'nome', label: 'Nome do funcionário', obrigatorio: true }]} textoConfirmar="Adicionar" confirmar={criarFuncionario} onClose={() => setNovoFuncionarioModal(false)} />}
       {erroPonto && <div style={{ position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 120, padding: '12px 18px', borderRadius: 10, background: '#c23b34', color: '#fff', fontSize: 13, fontWeight: 700, boxShadow: '0 14px 30px rgba(15,35,70,.25)' }}>{erroPonto}</div>}
     </main>
   );
@@ -534,6 +564,27 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
         )}
       </Card>
       {confirmacaoExclusao && <ConfirmacaoPonto {...confirmacaoExclusao} onClose={() => setConfirmacaoExclusao(null)} />}
+    </div>
+  );
+}
+
+// Quantos pontos ainda estão só neste aparelho. Sem rede ou com sessão
+// expirada, eles ficam guardados e sobem sozinhos depois.
+function IndicadorSincronizacao({ sync }) {
+  const { pendentes, online, sincronizando, ultimoErro } = sync;
+  if (!pendentes && online && !ultimoErro) return null;
+  const cor = pendentes ? '#b9770e' : '#7183a3';
+  return (
+    <div style={{ display: 'grid', gap: 5, padding: '8px 9px', borderRadius: 8, background: pendentes ? '#fff8ee' : '#f1f4f9', color: cor, fontSize: 11, fontWeight: 700 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {online ? <CloudUpload size={14} /> : <CloudOff size={14} />}
+        {online ? (sincronizando ? 'Enviando…' : 'Online') : 'Sem internet'}
+        {pendentes > 0 && ` · ${pendentes} ponto${pendentes > 1 ? 's' : ''} pendente${pendentes > 1 ? 's' : ''} de envio`}
+      </span>
+      {ultimoErro && <span style={{ fontWeight: 600, fontSize: 10, lineHeight: 1.35 }}>{ultimoErro}</span>}
+      {online && pendentes > 0 && !sincronizando && (
+        <button type="button" onClick={() => sincronizarPendentes()} style={{ border: 0, borderRadius: 6, background: '#fff', color: '#1767e8', padding: '5px 7px', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>Enviar agora</button>
+      )}
     </div>
   );
 }

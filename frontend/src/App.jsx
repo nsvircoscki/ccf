@@ -21,6 +21,7 @@ import FaturamentoView from './page/FaturamentoView';
 import TarefasView from './page/TarefasView';
 import SisPontoView from './page/SisPontoView';
 import { authService } from './services/authService';
+import { sincronizarPendentes } from './services/pontoOffline';
 
 import { EditarProjetoModal } from './modals/EditarProjetoModal';
 import { TicketDetailModal } from './modals/TicketDetailModal';
@@ -31,6 +32,17 @@ import { ExcluirCartaoModal } from './modals/ExcluirCartaoModal';
 import { DetalhesProjetoModal } from './modals/DetalhesProjetoModal';
 
 const COLUNAS_VISUAIS = ['Iniciar', 'Em Andamento', 'Concluído'];
+
+// Cópia de { id, nome, setor } da última sessão válida, usada só quando o app
+// abre sem rede (ver o efeito que restaura a sessão).
+const CHAVE_USUARIO_OFFLINE = 'ccf:usuario';
+function guardarUsuarioOffline(usuario) {
+  if (usuario) localStorage.setItem(CHAVE_USUARIO_OFFLINE, JSON.stringify({ id: usuario.id, nome: usuario.nome, setor: usuario.setor }));
+  else localStorage.removeItem(CHAVE_USUARIO_OFFLINE);
+}
+function lerUsuarioOffline() {
+  try { return JSON.parse(localStorage.getItem(CHAVE_USUARIO_OFFLINE)); } catch { return null; }
+}
 
 export default function App() {
   const kanban = useKanban();
@@ -64,10 +76,17 @@ export default function App() {
     if (!authService.temToken()) return;
     authService.sessaoAtual()
       .then((res) => {
-        if (res.ok) setUsuarioAtual(res.data);
+        if (res.ok) { setUsuarioAtual(res.data); guardarUsuarioOffline(res.data); }
+        else { authService.definirToken(null); guardarUsuarioOffline(null); }
+      })
+      // Sem rede (não é sessão recusada): abre com a pessoa da última sessão,
+      // pra tela de ponto funcionar offline. As batidas ficam na fila do
+      // aparelho e o backend confere o token quando elas forem enviadas.
+      .catch(() => {
+        const emCache = lerUsuarioOffline();
+        if (emCache) setUsuarioAtual(emCache);
         else authService.definirToken(null);
       })
-      .catch(() => authService.definirToken(null))
       .finally(() => setVerificandoSessao(false));
   }, []);
 
@@ -76,6 +95,7 @@ export default function App() {
   useEffect(() => {
     authService.aoExpirarSessao(() => {
       authService.definirToken(null);
+      guardarUsuarioOffline(null);
       setUsuarioAtual(null);
       setModuloEscolhido(false);
     });
@@ -159,8 +179,11 @@ export default function App() {
   // Recebe { token, usuario } do login ou da criação de senha.
   const handleLogin = ({ token, usuario }) => {
     authService.definirToken(token);
+    guardarUsuarioOffline(usuario);
     setModuloEscolhido(false);
     setUsuarioAtual(usuario);
+    // Pontos que ficaram na fila por sessão expirada sobem agora.
+    sincronizarPendentes();
     // O polling do Kanban não carrega nada sem token; com a sessão pronta,
     // busca já em vez de esperar o próximo ciclo.
     kanban.carregarDados();
@@ -168,6 +191,7 @@ export default function App() {
 
   const handleLogout = () => {
     authService.definirToken(null);
+    guardarUsuarioOffline(null);
     setModuloEscolhido(false);
     setUsuarioAtual(null);
   };
