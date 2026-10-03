@@ -172,12 +172,60 @@ model User {
   // Campos do SisPonto: quem está sujeito ao registro de ponto e como.
   registraPonto Boolean @default(true)
   horista       Boolean @default(false)
+  // "integral" | "manha" | "tarde" (jornadas do sis-ponto.json) ou nulo.
+  padraoHorarioId String?
 
   roleId        String
   role          Role   @relation(fields: [roleId], references: [id])
 
   history       TicketHistory[]
   comments      Comment[]
+  batidas       PontoBatida[]
+}
+
+enum PontoTipo {
+  ENTRADA
+  SAIDA
+}
+
+// Uma batida de ponto (evento, não par). Nasce no aparelho — às vezes offline —
+// e chega pelo POST /sis-ponto/sync; clientId único torna o reenvio idempotente.
+// Nada de salário aqui: o CCF só conhece os pontos.
+model PontoBatida {
+  id                   String    @id @default(uuid())
+  clientId             String    @unique
+  userId               String
+  user                 User      @relation(fields: [userId], references: [id])
+  tipo                 PontoTipo
+  // Hora do aparelho no momento da batida.
+  batidoEm             DateTime
+  // Hora em que o servidor recebeu (pode ser bem depois, se estava offline).
+  recebidoEm           DateTime  @default(now())
+  deviceId             String?
+  // Quem estava logado no aparelho (o quiosque do setor bate por outras pessoas).
+  registradoPorId      String?
+  // "APP" | "LEGADO" (importado do sis-ponto.json)
+  origem               String    @default("APP")
+  // Sequência inválida (ex.: duas entradas seguidas) não é descartada: fica
+  // marcada pra revisão e sai sinalizada no export.
+  inconsistente        Boolean   @default(false)
+  motivoInconsistencia String?
+  // Exclusão pela tela vira soft delete: a batida some das telas e do export,
+  // mas o registro de que existiu (e quem tirou) fica.
+  removidoEm           DateTime?
+  removidoPorId        String?
+
+  @@index([userId, batidoEm])
+}
+
+// Último contato de cada aparelho que bate ponto. É o melhor indício que o
+// servidor tem de batidas ainda presas num celular offline.
+model PontoDispositivo {
+  deviceId      String   @id
+  ultimoContato DateTime
+  // Quantas batidas o aparelho ainda tinha na fila no último contato.
+  pendentes     Int      @default(0)
+  userAgent     String?
 }
 
 model Workflow {

@@ -19,6 +19,7 @@ import notaFiscalRoutes from './routes/notaFiscalRoutes.js';
 import tarefaRoutes from './routes/tarefaRoutes.js';
 import sisPontoRoutes from './routes/sisPontoRoutes.js';
 import usuarioRoutes from './routes/usuarioRoutes.js';
+import pontoExportRoutes from './routes/pontoExportRoutes.js';
 
 // Para aqui, com mensagem clara, se faltar o segredo — ver config/jwt.js.
 garantirSegredoJwt();
@@ -33,6 +34,11 @@ app.use(express.json({ limit: '25mb' }));
 // Única rota aberta: é por ela que a pessoa consegue o token. As rotas dela
 // que exigem sessão (/me, /alterar-senha) aplicam o autenticar por conta própria.
 app.use('/auth', authRoutes);
+
+// Export de pontos pro PC da folha: token de máquina (PONTO_EXPORT_TOKENS) em
+// vez de sessão. Precisa vir antes do /sis-ponto autenticado abaixo; caminhos
+// que não forem do export seguem adiante normalmente.
+app.use('/sis-ponto', pontoExportRoutes);
 
 // Todo o resto exige sessão: autenticar identifica quem chama e preenche
 // req.usuario antes de qualquer rota rodar.
