@@ -103,8 +103,122 @@ O backend depende de variáveis como:
 - `GEMINI_MATRICULA_MODEL`
 - `INTER_CLIENT_ID`
 - `INTER_CLIENT_SECRET`
+- `PONTO_EXPORT_TOKENS`: token(s) do PC da folha para o export de pontos, separados por vírgula, com no mínimo 32 caracteres cada. Sem essa variável o export responde 503.
+- `PONTO_TZ`: fuso dos pontos. O padrão é `America/Sao_Paulo`.
 
 Crie um arquivo `.env` apenas para uso local e nunca o comite no repositório.
+
+## SIS Ponto: batidas, modo offline e export para a folha
+
+### O que fica onde
+
+- **CCF (Postgres)** guarda só os **pontos**:
+  - `PontoBatida`: um evento por batida (`ENTRADA`/`SAIDA`), com `batidoEm` (hora do aparelho) e `recebidoEm` (hora do servidor).
+  - O funcionário é o `User` com "Registra ponto" ligado; o cadastro é feito em Configurações → Usuários.
+  - Justificativas e jornadas continuam em `backend/data/sis-ponto.json`.
+  - **Nenhum dado de salário** passa pelo CCF nem pelo celular.
+- **PC da folha (Sistema Ponto, SQLite local)** guarda salário, descontos, férias, 13º, histórico e recibos. Ele **busca** os pontos no CCF; o CCF nunca acessa o PC.
+
+### Como a batida offline funciona
+
+1. Na tela de ponto, a batida é gravada **primeiro no IndexedDB do aparelho** (`frontend/src/services/pontoOffline.js`) com um `clientId` (UUID).
+2. O envio vai para `POST /sis-ponto/sync`, disparado:
+   - ao abrir o app;
+   - quando a rede volta;
+   - quando a aba volta a ficar visível;
+   - a cada 60 s.
+3. Só o que o servidor confirma (`criado` ou `duplicado`) sai da fila. Reenviar o mesmo `clientId` não duplica nada.
+4. A tela mostra quantos pontos ainda estão pendentes de envio.
+5. Uma sequência inválida (por exemplo, duas entradas seguidas) **não é descartada**: fica marcada como inconsistente e aparece na aba **Pontos a revisar** do admin.
+
+### Export para o PC da folha
+
+```
+GET /sis-ponto/export.csv?mes=YYYY-MM        (ou ?ano=YYYY)
+GET /sis-ponto/export-pendencias.json?mes=YYYY-MM
+Authorization: Bearer <um dos PONTO_EXPORT_TOKENS>
+```
+
+**Colunas do CSV:** `O,Name,Time In,Time Out,Total Hours,Hourly Wage,Total Wages,CCF ID,Observacao`
+- `Name` é o e-mail do usuário.
+- `CCF ID` é o `User.id`.
+- As datas vêm em `M/D/YYYY H:mm:ss`, no fuso `PONTO_TZ`.
+- `Hourly Wage` vem vazio.
+- `Total Wages` vem como `0`. No Sistema Ponto essa coluna é o **código de ocorrência**, não dinheiro.
+- Ponto sem saída ou inconsistente sai **com o horário faltante vazio** e a `Observacao` preenchida. Nunca é omitido.
+
+**Para trocar o token sem interrupção:**
+1. Acrescente o novo token em `PONTO_EXPORT_TOKENS` e reinicie o backend.
+2. Troque o token no PC da folha.
+3. Remova o antigo e reinicie de novo.
+
+Para gerar um token: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+
+### Migração dos dados antigos (uma vez)
+
+Com o **backend parado**, na pasta `backend/`:
+
+```bash
+npx prisma migrate deploy                 # cria PontoBatida/PontoDispositivo e User.padraoHorarioId
+node scripts/migrarSisPontoJson.js        # dry-run: mostra como cada funcionário do JSON casa com um User
+node scripts/migrarSisPontoJson.js --aplicar
+```
+
+Quem não casar pelo nome (mesmo setor) precisa ser criado em Usuários ou mapeado com `--mapa mapa.json` (`{ "ENG-1727...": "<id do User>" }`). Antes de gravar, o script faz backup do JSON.
+
+### Verificação
+
+```bash
+npm test                                          # regras de sequência/pares, formato do CSV, token do export
+node scripts/verificarSyncPonto.js <userId>      # idempotência do sync no banco de dev (apaga o que cria)
+```
+
+## Deploy com HTTPS (necessário para o ponto offline)
+
+O service worker (PWA) **só funciona em HTTPS** (ou em `localhost`). E, se o site estiver em HTTPS, a API também precisa estar, senão o navegador bloqueia as chamadas (mixed content).
+
+Configuração sugerida: um proxy reverso (nginx ou Caddy) na frente, com o pm2 cuidando só do backend.
+
+```bash
+# backend: o cwd precisa ser backend/ (o sis-ponto.json é resolvido a partir dele)
+pm2 start src/server.js --name ccf-backend --cwd /caminho/ccf/backend
+pm2 save
+
+# frontend: build com a API atrás do mesmo domínio
+cd frontend && VITE_API_URL=https://ccf.seudominio.com.br/api npm run build
+```
+
+nginx (o equivalente no Caddy é um `reverse_proxy` + `file_server`, e ele obtém o certificado sozinho):
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name ccf.seudominio.com.br;
+    ssl_certificate     /etc/letsencrypt/live/ccf.seudominio.com.br/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/ccf.seudominio.com.br/privkey.pem;
+
+    root /caminho/ccf/frontend/dist;
+    location / { try_files $uri /index.html; }
+    # sw.js nunca em cache longo, senão a atualização do app demora a chegar
+    location = /sw.js { add_header Cache-Control "no-cache"; }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000/;   # a barra final remove o /api
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        client_max_body_size 25m;
+    }
+}
+server { listen 80; server_name ccf.seudominio.com.br; return 301 https://$host$request_uri; }
+```
+
+**Certificado:**
+- **Domínio público:** Let's Encrypt (`certbot --nginx`, ou automático no Caddy).
+- **Só rede interna:** um certificado de CA interna (mkcert, por exemplo) precisa ser **instalado como confiável em cada celular**. Isso é trabalhoso. Alternativas: Cloudflare Tunnel ou Tailscale (HTTPS sem abrir porta).
+- Feche a porta 3000 para fora do servidor: só o proxy fala com o backend.
+- Restrinja o CORS do backend ao domínio final; hoje ele está aberto.
+
+Externamente, os endpoints ficam em `https://<dominio>/api/sis-ponto/...` (por exemplo, `/api/sis-ponto/export.csv`).
 
 ## Observações
 
