@@ -5,7 +5,7 @@ import { api } from '../../services/api';
 import { useEhCelular } from '../../hooks/useEhCelular';
 import { registrarBatida, pendentesDoFuncionario, inscrever, obterEstado, sincronizarPendentes } from '../../services/pontoOffline.js';
 import { meses, diasSemana, JUSTIFICATIVA_CORES, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_TIPOS, rotuloTipoJustificativa, PRAZO_JUSTIFICATIVA_PADRAO_HORAS } from './sisPontoData.js';
-import { chaveData, hora, calcularBancoHoras, carregarFeriados, montarItensParaJustificar, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, pendenciasDeJustificativa, ehHorista, toleranciaEntrada, fimDoPrazo } from './sisPontoUtils.js';
+import { chaveData, hora, calcularBancoHoras, carregarFeriados, montarItensParaJustificar, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, pendenciasDeJustificativa, ehHorista, toleranciaEntrada, fimDoPrazo, diaSemRegistro } from './sisPontoUtils.js';
 import { Card, ConfirmacaoPonto, BancoHoras, Legenda, MenuPonto, ModalRegistros, Resumo, navButton } from './SisPontoComponents.jsx';
 import './sisPonto.css';
 
@@ -357,6 +357,7 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
                   </div>}
                   {itens.length > 4 && <button type="button" onClick={() => { setDiaModal(chave); setModalRegistros(true); }} style={{ marginTop: 6, padding: 0, border: 0, background: 'transparent', color: '#1767e8', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>+{itens.length - 4} registros</button>}
                   {feriados.get(chave) && <div title="Feriado" style={{ marginTop: 5, color: '#8e9bb0', fontSize: 10, fontWeight: 800 }}>{feriados.get(chave)}</div>}
+                  {pertenceAoMes && diaSemRegistro({ chave, hoje, itens, horariosDia, feriado: feriados.get(chave), temJustificado, pontoDesde: funcionarioAtual?.pontoDesde }) && <div title="Dia de trabalho sem nenhum registro: desconta do banco de horas" style={{ marginTop: 5, color: '#e5484d', fontSize: 10, fontWeight: 800 }}>Falta</div>}
                   {temAtraso && <div style={{ marginTop: 5, color: '#d97706', fontSize: 10, fontWeight: 800 }}>Atrasado/Saída Antecipada</div>}
                   {!temAtraso && temJustificado && <div style={{ marginTop: 5, color: temJustificadoPendente ? '#b9770e' : '#2f5bd6', fontSize: 10, fontWeight: 800 }}>Justificado</div>}
                 </motion.div>;

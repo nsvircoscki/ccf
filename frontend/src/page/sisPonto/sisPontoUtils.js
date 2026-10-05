@@ -172,6 +172,18 @@ export function statusCalendarioDoDia(itens, statusItens, expectativas, justific
 
 export const ehHorista = (funcionario) => Boolean(funcionario?.horista);
 
+// Dia de trabalho = tem jornada (seg a sex no padrão) e não é feriado. Sábado,
+// domingo e feriado só contam se a pessoa trabalhou (crédito no banco).
+export const ehDiaDeTrabalho = (horariosDia = [], feriado = null) => horariosDia.length > 0 && !feriado;
+
+// Dia de trabalho já encerrado, sem nenhum registro e sem justificativa: falta
+// (desconta a jornada do banco de horas). Antes de começar a registrar ponto
+// (pontoDesde) não conta.
+export function diaSemRegistro({ chave, hoje, itens = [], horariosDia = [], feriado = null, temJustificado = false, pontoDesde = null }) {
+  if (!ehDiaDeTrabalho(horariosDia, feriado) || itens.length || temJustificado || chave >= hoje) return false;
+  return !pontoDesde || chave >= chaveData(new Date(pontoDesde));
+}
+
 const NOME_DIA_CONFIG = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 
 // Um funcionário aponta pra um dos padrões fixos (`padraoHorarioId`: 'integral'
