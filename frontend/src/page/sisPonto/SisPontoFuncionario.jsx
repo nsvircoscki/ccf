@@ -3,12 +3,15 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, CloudOff, CloudUpload, FileText, Hourglass, Image as ImageIcon, LogIn, Pencil, TimerReset, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { registrarBatida, pendentesDoFuncionario, descartarPendente, inscrever, obterEstado, sincronizarPendentes } from '../../services/pontoOffline.js';
-import { meses, diasSemana, JUSTIFICATIVA_CORES, PADROES_HORARIO_PADRAO } from './sisPontoData.js';
+import { meses, diasSemana, JUSTIFICATIVA_CORES, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_TIPOS, rotuloTipoJustificativa } from './sisPontoData.js';
 import { chaveData, hora, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, pendenciasDeJustificativa, ehHorista } from './sisPontoUtils.js';
 import { Card, ConfirmacaoPonto, BancoHoras, Legenda, MenuPonto, ModalRegistros, Resumo, navButton } from './SisPontoComponents.jsx';
 import './sisPonto.css';
 
-export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
+// `usuario` = a pessoa logada ({ id, nome, setor }). Cada pessoa vê e bate só
+// o próprio ponto — o servidor também recusa batida para outra pessoa.
+export default function SisPontoFuncionarioScreen({ usuario, destino }) {
+  const usuarioLogado = usuario?.setor;
   const [agora, setAgora] = useState(new Date());
   const [mes, setMes] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [aba, setAba] = useState('calendario');
@@ -26,15 +29,18 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
   const [confirmacao, setConfirmacao] = useState(null);
   const [erroPonto, setErroPonto] = useState(null);
   const [justificativas, setJustificativas] = useState([]);
-  const funcionariosKey = `ccf-sis-ponto-funcionarios-${usuarioLogado}`;
-  const [funcionariosSetor, setFuncionariosSetor] = useState(() => {
-    try {
-      const cadastrados = JSON.parse(localStorage.getItem(funcionariosKey));
-      return Array.isArray(cadastrados) && cadastrados.length ? cadastrados : [{ id: usuarioLogado, nome: usuarioLogado }];
-    } catch { return [{ id: usuarioLogado, nome: usuarioLogado }]; }
+  // Cadastro de ponto da própria pessoa (jornada, horista), guardado no
+  // aparelho pra tela funcionar offline. null = ainda não carregou;
+  // false = a pessoa não está marcada para registrar ponto.
+  const chaveCadastro = `ccf-sis-ponto-cadastro-${usuario.id}`;
+  const [cadastro, setCadastro] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(chaveCadastro)); } catch { return null; }
   });
-  const [funcionarioId, setFuncionarioId] = useState(usuarioLogado);
-  const funcionarioAtual = funcionariosSetor.find((funcionario) => funcionario.id === funcionarioId) || funcionariosSetor[0];
+  const funcionarioAtual = useMemo(
+    () => ({ id: usuario.id, nome: usuario.nome, setor: usuario.setor, ...(cadastro || {}) }),
+    [usuario.id, usuario.nome, usuario.setor, cadastro],
+  );
+  const naoRegistraPonto = cadastro === false;
   // O que o servidor já confirmou + o que ainda está na fila do aparelho
   // (batida offline). A tela mostra os dois juntos.
   const [registrosServidor, setRegistrosServidor] = useState({});
@@ -72,24 +78,16 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
     const timer = setInterval(() => setAgora(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-  useEffect(() => localStorage.setItem(funcionariosKey, JSON.stringify(funcionariosSetor)), [funcionariosKey, funcionariosSetor]);
-  // O backend é a fonte da verdade: a lista deste setor é sempre substituída
-  // pelo que vier de lá, nunca só mesclada — do contrário um funcionário
-  // excluído pelo ENG admin continuaria selecionável aqui (e a versão antiga
-  // deste efeito chegava a recriá-lo no backend, "ressuscitando-o").
-  const carregarFuncionarios = () => api.getSispontoFuncionarios().then((lista) => {
-    if (!Array.isArray(lista)) return;
-    const doSetor = lista.filter((funcionario) => funcionario.setor === usuarioLogado);
-    setFuncionariosSetor(doSetor.length ? doSetor : [{ id: usuarioLogado, nome: usuarioLogado }]);
-  }).catch(() => {
-    // fallback: mantém a lista local (ex.: sem conexão) até a próxima sincronização.
-  });
-  useEffect(() => { carregarFuncionarios(); }, [usuarioLogado, aba]); // eslint-disable-line react-hooks/exhaustive-deps
+  // O backend é a fonte da verdade (jornada e "registra ponto" mudam no
+  // cadastro de Usuários); sem conexão, vale o que ficou guardado.
   useEffect(() => {
-    if (!funcionariosSetor.some((funcionario) => funcionario.id === funcionarioId)) {
-      setFuncionarioId(funcionariosSetor[0]?.id || usuarioLogado);
-    }
-  }, [funcionariosSetor, funcionarioId, usuarioLogado]);
+    api.getSispontoFuncionarios().then((lista) => {
+      if (!Array.isArray(lista)) return;
+      const eu = lista.find((funcionario) => funcionario.id === usuario.id) || false;
+      localStorage.setItem(chaveCadastro, JSON.stringify(eu));
+      setCadastro(eu);
+    }).catch(() => {});
+  }, [usuario.id, chaveCadastro, aba]);
   const carregarJustificativas = () => api.getSispontoJustificativas()
     .then((lista) => setJustificativas(Array.isArray(lista) ? lista : []))
     .catch(() => setJustificativas([]));
@@ -154,10 +152,6 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
         setErroPonto('Não foi possível guardar o ponto neste aparelho. Tente de novo.');
         window.setTimeout(() => setErroPonto(null), 6000);
       });
-  };
-  const selecionarFuncionario = (id) => {
-    setFuncionarioId(id);
-    setDiaModal(null);
   };
 
   const diasCalendario = useMemo(() => {
@@ -257,11 +251,8 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
           <aside className="ponto-menu" style={{ alignSelf: 'start', padding: 8, borderRadius: 14, background: '#fff', border: '1px solid #e7edf6' }}>
             <p style={{ margin: '8px 10px 12px', color: '#8a99b1', fontSize: 10, fontWeight: 800, letterSpacing: '.09em' }}>SIS PONTO · {usuarioLogado}</p>
             <div style={{ padding: '0 6px 12px', display: 'grid', gap: 7 }}>
-              <label style={{ color: '#7183a3', fontSize: 10, fontWeight: 800 }}>Funcionário</label>
-              <select value={funcionarioId} onChange={(event) => selecionarFuncionario(event.target.value)} style={{ width: '100%', minWidth: 0, padding: '9px 7px', border: '1px solid #d8e6fc', borderRadius: 8, color: '#405371', fontSize: 11, fontWeight: 700 }}>
-                {funcionariosSetor.map((funcionario) => <option key={funcionario.id} value={funcionario.id}>{funcionario.nome}</option>)}
-              </select>
-              <span style={{ color: '#8a99b1', fontSize: 10, fontWeight: 600, lineHeight: 1.35 }}>Novo funcionário: cadastre em Configurações → Usuários.</span>
+              <span style={{ color: '#7183a3', fontSize: 10, fontWeight: 800 }}>Funcionário</span>
+              <span style={{ padding: '9px 7px', border: '1px solid #e2ebf8', borderRadius: 8, background: '#f8fbff', color: '#405371', fontSize: 11, fontWeight: 800 }}>{usuario.nome}</span>
               <IndicadorSincronizacao sync={sync} />
             </div>
             <MenuPonto ativo={aba === 'calendario'} onClick={() => setAba('calendario')} icon={<CalendarDays size={17} />} texto="Calendário" />
@@ -320,7 +311,9 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
                 <div style={{ color: '#7183a3', fontSize: 11, fontWeight: 800 }}>{expectativasHoje.length ? 'PRÓXIMO REGISTRO ESPERADO' : 'PRÓXIMO REGISTRO'}</div>
                 <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#243755' }}><LogIn size={17} color={proximoEsperado[0] === 'Entrada' ? '#38bc7b' : '#ef5350'} style={proximoEsperado[0] === 'Entrada' ? undefined : { transform: 'rotate(180deg)' }} />{proximoEsperado[0]} <span style={{ marginLeft: 'auto', color: '#1767e8' }}>{expectativasHoje.length ? proximoEsperado[1] : (funcionarioEhHorista ? 'Horista' : 'Sem horário')}</span></div>
               </div>
-              <button type="button" onClick={registrarPonto} style={{ width: '100%', border: 0, borderRadius: 9, background: '#1767e8', color: '#fff', padding: '13px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer', boxShadow: '0 6px 14px #1767e833' }}>Confirmar {proximoEhEntrada ? 'entrada' : 'saída'}</button>
+              {naoRegistraPonto
+                ? <p style={{ margin: 0, padding: 12, borderRadius: 9, background: '#fff8ee', color: '#b9770e', fontSize: 12, fontWeight: 700 }}>Seu usuário não está marcado para registrar ponto. Peça à administração para ligar "Registra ponto" em Configurações → Usuários.</p>
+                : <button type="button" onClick={registrarPonto} style={{ width: '100%', border: 0, borderRadius: 9, background: '#1767e8', color: '#fff', padding: '13px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer', boxShadow: '0 6px 14px #1767e833' }}>Confirmar {proximoEhEntrada ? 'entrada' : 'saída'}</button>}
               {registrosHoje.length > 0 && <button type="button" onClick={() => { setDiaModal(hoje); setModalRegistros(true); }} style={{ margin: '14px 0 0', color: '#1767e8', background: 'none', border: 0, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Ver registros de hoje ({registrosHoje.length})</button>}
             </Card>
             <Card style={{ padding: 22 }}>
@@ -343,7 +336,7 @@ export default function SisPontoFuncionarioScreen({ usuarioLogado, destino }) {
   );
 }
 
-const formularioJustificativaVazio = { dia: chaveData(new Date()), horaInicio: '08:00', horaFim: '12:00', motivo: '' };
+const formularioJustificativaVazio = { dia: chaveData(new Date()), horaInicio: '08:00', horaFim: '12:00', tipo: '', motivo: '' };
 
 function lerArquivoComoDataUrl(arquivo) {
   return new Promise((resolve, reject) => {
@@ -381,7 +374,7 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
       if (ultimaSugestaoAplicadaRef.current === chave) return;
       ultimaSugestaoAplicadaRef.current = chave;
       setEditandoId(pendenciaRefazerSugerida.id);
-      setForm({ dia: pendenciaRefazerSugerida.dia, horaInicio: pendenciaRefazerSugerida.horaInicio, horaFim: pendenciaRefazerSugerida.horaFim, motivo: pendenciaRefazerSugerida.motivo });
+      setForm({ dia: pendenciaRefazerSugerida.dia, horaInicio: pendenciaRefazerSugerida.horaInicio, horaFim: pendenciaRefazerSugerida.horaFim, tipo: pendenciaRefazerSugerida.tipo || '', motivo: pendenciaRefazerSugerida.motivo });
       setAnexo(null);
       setAnexoExistente(pendenciaRefazerSugerida.anexoNome ? { nome: pendenciaRefazerSugerida.anexoNome, dataUrl: pendenciaRefazerSugerida.anexoDataUrl } : null);
       return;
@@ -390,7 +383,7 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
     const chave = `atraso-${pendenciaSugerida.dia}|${pendenciaSugerida.horaInicio}|${pendenciaSugerida.horaFim}`;
     if (ultimaSugestaoAplicadaRef.current === chave) return;
     ultimaSugestaoAplicadaRef.current = chave;
-    setForm({ dia: pendenciaSugerida.dia, horaInicio: pendenciaSugerida.horaInicio, horaFim: pendenciaSugerida.horaFim, motivo: '' });
+    setForm({ dia: pendenciaSugerida.dia, horaInicio: pendenciaSugerida.horaInicio, horaFim: pendenciaSugerida.horaFim, tipo: '', motivo: '' });
   }, [pendenciaSugerida, pendenciaRefazerSugerida, editandoId]);
 
   const minhasJustificativas = useMemo(() => justificativas
@@ -419,7 +412,7 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
 
   const refazer = (justificativa) => {
     setEditandoId(justificativa.id);
-    setForm({ dia: justificativa.dia, horaInicio: justificativa.horaInicio, horaFim: justificativa.horaFim, motivo: justificativa.motivo });
+    setForm({ dia: justificativa.dia, horaInicio: justificativa.horaInicio, horaFim: justificativa.horaFim, tipo: justificativa.tipo || '', motivo: justificativa.motivo });
     setAnexo(null);
     setAnexoExistente(justificativa.anexoNome ? { nome: justificativa.anexoNome, dataUrl: justificativa.anexoDataUrl } : null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -442,8 +435,13 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
     },
   });
   const enviar = async () => {
-    if (!form.dia || !form.horaInicio || !form.horaFim || !form.motivo.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Preencha o dia, o período e a explicação.' });
+    if (!form.dia || !form.horaInicio || !form.horaFim || !form.tipo) {
+      setMensagem({ tipo: 'erro', texto: 'Preencha o dia, o período e o motivo.' });
+      window.setTimeout(() => setMensagem(null), 2600);
+      return;
+    }
+    if (form.tipo === 'outro' && !form.motivo.trim()) {
+      setMensagem({ tipo: 'erro', texto: 'Explique o motivo quando escolher "Outro".' });
       window.setTimeout(() => setMensagem(null), 2600);
       return;
     }
@@ -464,6 +462,7 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
         dia: form.dia,
         horaInicio: form.horaInicio,
         horaFim: form.horaFim,
+        tipo: form.tipo,
         motivo: form.motivo.trim(),
         anexoNome,
         anexoTipo: anexo?.type || null,
@@ -517,7 +516,14 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
           </label>
         </div>
 
-        <label style={{ display: 'grid', gap: 5, marginTop: 12, fontSize: 11, fontWeight: 800, color: '#7183a3' }}>Explicação
+        <label style={{ display: 'grid', gap: 5, marginTop: 12, fontSize: 11, fontWeight: 800, color: '#7183a3' }}>Motivo
+          <select value={form.tipo} onChange={(event) => setForm((atual) => ({ ...atual, tipo: event.target.value }))} style={{ height: 40, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 10px', fontSize: 13, fontWeight: 700, color: form.tipo ? '#405371' : '#8a99b1', background: '#fff' }}>
+            <option value="">Selecione o motivo...</option>
+            {JUSTIFICATIVA_TIPOS.map((tipo) => <option key={tipo.id} value={tipo.id}>{tipo.nome}</option>)}
+          </select>
+        </label>
+
+        <label style={{ display: 'grid', gap: 5, marginTop: 12, fontSize: 11, fontWeight: 800, color: '#7183a3' }}>{form.tipo === 'outro' ? 'Explicação' : 'Explicação (opcional)'}
           <textarea value={form.motivo} onChange={(event) => setForm((atual) => ({ ...atual, motivo: event.target.value }))} rows={3} placeholder="Descreva o motivo da ausência, atraso ou saída antecipada..." style={{ borderRadius: 8, border: '1px solid #d8e6fc', padding: 10, fontSize: 13, fontWeight: 600, color: '#405371', resize: 'vertical', fontFamily: 'inherit' }} />
         </label>
 
@@ -552,7 +558,8 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
                   <span style={{ fontWeight: 900, color: '#1d3156', fontSize: 13 }}>{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(`${justificativa.dia}T12:00:00`))} · {justificativa.horaInicio}–{justificativa.horaFim}</span>
                   <span style={{ padding: '4px 10px', borderRadius: 99, background: cor.texto, color: '#fff', fontSize: 10, fontWeight: 900 }}>{justificativa.status}</span>
                 </div>
-                <p style={{ margin: '8px 0 0', color: '#405371', fontSize: 12, fontWeight: 600 }}>{justificativa.motivo}</p>
+                {rotuloTipoJustificativa(justificativa.tipo) && <p style={{ margin: '8px 0 0', color: '#1d3156', fontSize: 12, fontWeight: 800 }}>{rotuloTipoJustificativa(justificativa.tipo)}</p>}
+                {justificativa.motivo && <p style={{ margin: '4px 0 0', color: '#405371', fontSize: 12, fontWeight: 600 }}>{justificativa.motivo}</p>}
                 {justificativa.anexoNome && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, color: '#7183a3', fontSize: 11, fontWeight: 700 }}><FileText size={13} /> {justificativa.anexoNome}</span>}
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                   {(justificativa.status === 'Inválida' || justificativa.status === 'Recusada') && <button type="button" onClick={() => refazer(justificativa)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 0, borderRadius: 8, padding: '8px 12px', background: '#c2650a', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}><Pencil size={12} /> Refazer justificativa</button>}

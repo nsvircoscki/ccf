@@ -41,6 +41,22 @@ const defaultStore = {
 
 const STATUS_VALIDOS = ['Em análise', 'Aceita', 'Recusada', 'Inválida'];
 
+// Motivos padrão de ajuste de ponto (a lista da tela fica em
+// frontend/src/page/sisPonto/sisPontoData.js — manter as duas iguais).
+// Em "outro", a explicação por escrito é obrigatória.
+export const TIPOS_JUSTIFICATIVA = [
+  'esquecimento', 'falha_registro', 'trabalho_externo', 'atestado', 'consulta',
+  'falta_justificada', 'atraso_transporte', 'saida_autorizada', 'compensacao', 'hora_extra', 'outro',
+];
+
+const SETORES_ADMIN = ['ENG', 'DEV'];
+const ehAdmin = (quem) => SETORES_ADMIN.includes(quem?.setor);
+
+function validarTipoEMotivo(tipo, motivo) {
+  if (!TIPOS_JUSTIFICATIVA.includes(tipo)) throw new Error('Escolha o motivo da justificativa.');
+  if (tipo === 'outro' && !motivo) throw new Error('Explique o motivo quando escolher "Outro".');
+}
+
 async function ensureStore() {
   await fs.mkdir(DATA_DIR, { recursive: true });
   try {
@@ -97,30 +113,33 @@ export async function listarJustificativas() {
   return store.justificativas || [];
 }
 
-export async function criarJustificativa(dados) {
-  return comFila(() => criarJustificativaImpl(dados));
+// Cada pessoa justifica o próprio ponto: quem, nome e setor vêm da sessão.
+export async function criarJustificativa(dados, quem) {
+  return comFila(() => criarJustificativaImpl(dados, quem));
 }
 
-async function criarJustificativaImpl(dados) {
+async function criarJustificativaImpl(dados, quem) {
   const store = await readStore();
-  const funcionarioId = String(dados.funcionarioId || '').trim();
   const dia = String(dados.dia || '').trim();
   const horaInicio = String(dados.horaInicio || '').trim();
   const horaFim = String(dados.horaFim || '').trim();
+  const tipo = String(dados.tipo || '').trim();
   const motivo = String(dados.motivo || '').trim();
 
-  if (!funcionarioId || !dia || !horaInicio || !horaFim || !motivo) {
-    throw new Error('Preencha o dia, o período e a explicação da justificativa.');
+  if (!dia || !horaInicio || !horaFim) {
+    throw new Error('Preencha o dia e o período da justificativa.');
   }
+  validarTipoEMotivo(tipo, motivo);
 
   const nova = {
     id: `just-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    funcionarioId,
-    nome: String(dados.nome || '').trim(),
-    setor: String(dados.setor || 'ENG').trim().toUpperCase(),
+    funcionarioId: quem.id,
+    nome: quem.nome,
+    setor: quem.setor,
     dia,
     horaInicio,
     horaFim,
+    tipo,
     motivo,
     anexoNome: dados.anexoNome || null,
     anexoTipo: dados.anexoTipo || null,
@@ -141,20 +160,34 @@ async function criarJustificativaImpl(dados) {
   return nova;
 }
 
-export async function atualizarJustificativa(id, dados) {
-  return comFila(() => atualizarJustificativaImpl(id, dados));
+// A pessoa só mexe na própria justificativa (e só pode devolvê-la para
+// "Em análise"); aceitar/recusar é da administração (ENG/DEV).
+export async function atualizarJustificativa(id, dados, quem) {
+  return comFila(() => atualizarJustificativaImpl(id, dados, quem));
 }
 
-async function atualizarJustificativaImpl(id, dados) {
+async function atualizarJustificativaImpl(id, dados, quem) {
   const store = await readStore();
   const atual = store.justificativas || [];
   const index = atual.findIndex((item) => item.id === id);
   if (index === -1) return null;
 
   const existente = atual[index];
+  if (!ehAdmin(quem) && existente.funcionarioId !== quem?.id) {
+    throw new Error('Você só pode alterar as suas justificativas.');
+  }
   const proximoStatus = dados.status ? String(dados.status).trim() : existente.status;
   if (dados.status && !STATUS_VALIDOS.includes(proximoStatus)) {
     throw new Error('Status de justificativa inválido.');
+  }
+  if (!ehAdmin(quem) && dados.status && proximoStatus !== 'Em análise') {
+    throw new Error('Só a administração aceita ou recusa justificativas.');
+  }
+  if (dados.tipo !== undefined || dados.motivo !== undefined) {
+    validarTipoEMotivo(
+      String(dados.tipo ?? existente.tipo ?? '').trim(),
+      String(dados.motivo ?? existente.motivo ?? '').trim(),
+    );
   }
 
   atual[index] = {
@@ -162,7 +195,8 @@ async function atualizarJustificativaImpl(id, dados) {
     ...(dados.dia !== undefined ? { dia: dados.dia } : {}),
     ...(dados.horaInicio !== undefined ? { horaInicio: dados.horaInicio } : {}),
     ...(dados.horaFim !== undefined ? { horaFim: dados.horaFim } : {}),
-    ...(dados.motivo !== undefined ? { motivo: dados.motivo } : {}),
+    ...(dados.tipo !== undefined ? { tipo: String(dados.tipo).trim() } : {}),
+    ...(dados.motivo !== undefined ? { motivo: String(dados.motivo).trim() } : {}),
     ...(dados.anexoNome !== undefined ? { anexoNome: dados.anexoNome } : {}),
     ...(dados.anexoTipo !== undefined ? { anexoTipo: dados.anexoTipo } : {}),
     ...(dados.anexoDataUrl !== undefined ? { anexoDataUrl: dados.anexoDataUrl } : {}),
@@ -175,14 +209,18 @@ async function atualizarJustificativaImpl(id, dados) {
   return atual[index];
 }
 
-export async function excluirJustificativa(id) {
-  return comFila(() => excluirJustificativaImpl(id));
+export async function excluirJustificativa(id, quem) {
+  return comFila(() => excluirJustificativaImpl(id, quem));
 }
 
-async function excluirJustificativaImpl(id) {
+async function excluirJustificativaImpl(id, quem) {
   const store = await readStore();
   const atual = store.justificativas || [];
-  const existe = atual.some((item) => item.id === id);
+  const alvo = atual.find((item) => item.id === id);
+  if (alvo && !ehAdmin(quem) && alvo.funcionarioId !== quem?.id) {
+    throw new Error('Você só pode excluir as suas justificativas.');
+  }
+  const existe = Boolean(alvo);
   store.justificativas = atual.filter((item) => item.id !== id);
   await writeStore(store);
   return existe;

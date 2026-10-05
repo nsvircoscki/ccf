@@ -200,6 +200,20 @@ export const api = {
         return res.json();
     },
 
+    // ENG decide os horários previstos (pessoa não bateu): ABONADA, FALTA ou PENDENTE (desfaz).
+    decidirSispontoPrevistas: async (ids, situacao) => {
+        const res = await req(`${BASE_URL}/sis-ponto/previstas/decisao`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids, situacao })
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao registrar a decisão.');
+        }
+        return res.json();
+    },
+
     deleteSispontoRegistro: async (dados) => {
         const res = await req(`${BASE_URL}/sis-ponto/registros`, {
             method: 'DELETE',

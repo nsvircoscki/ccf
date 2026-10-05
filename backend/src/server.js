@@ -20,6 +20,7 @@ import tarefaRoutes from './routes/tarefaRoutes.js';
 import sisPontoRoutes from './routes/sisPontoRoutes.js';
 import usuarioRoutes from './routes/usuarioRoutes.js';
 import pontoExportRoutes from './routes/pontoExportRoutes.js';
+import { gerarPrevistas } from './services/ponto/batidaService.js';
 
 // Para aqui, com mensagem clara, se faltar o segredo — ver config/jwt.js.
 garantirSegredoJwt();
@@ -62,3 +63,10 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(` API rodando na porta ${PORT}`);
 });
+
+// Horários da jornada que ficaram sem batida (esquecimento/falta) viram
+// "previstos" para o ENG decidir. Roda ao subir e a cada 30 min; também roda
+// antes da revisão e do export.
+const atualizarPrevistas = () => gerarPrevistas().catch((erro) => console.error('Erro ao gerar horários previstos:', erro.message));
+setTimeout(atualizarPrevistas, 10 * 1000);
+setInterval(atualizarPrevistas, 30 * 60 * 1000);

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CalendarDays, ChartNoAxesColumn, Clock3, FileText, Trash2, User } from 'lucide-react';
 import { api } from '../../services/api';
-import { JUSTIFICATIVA_CORES } from './sisPontoData.js';
+import { JUSTIFICATIVA_CORES, rotuloTipoJustificativa } from './sisPontoData.js';
 import { Card, ConfirmacaoPonto } from './SisPontoComponents.jsx';
 
 const ORDEM_STATUS_JUSTIFICATIVA = { 'Em análise': 0, Aceita: 1, Inválida: 2, Recusada: 3 };
@@ -136,7 +136,7 @@ export default function SisPontoJustificativasAdmin({ justificativas, carregando
               <div style={{ marginTop: 8, color: '#243755', fontSize: 12, fontWeight: 800 }}>
                 {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', weekday: 'long' }).format(new Date(`${justificativa.dia}T12:00:00`))} · {justificativa.horaInicio}–{justificativa.horaFim}
               </div>
-              <p style={{ margin: '8px 0 0', color: '#405371', fontSize: 12, fontWeight: 600, lineHeight: 1.5 }}>{justificativa.motivo}</p>
+              <p style={{ margin: '8px 0 0', color: '#405371', fontSize: 12, fontWeight: 600, lineHeight: 1.5 }}>{[rotuloTipoJustificativa(justificativa.tipo), justificativa.motivo].filter(Boolean).join(' — ')}</p>
               {justificativa.anexoDataUrl && (
                 <button type="button" onClick={() => setImagemAmpliada(justificativa.anexoDataUrl)} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, border: 0, background: 'transparent', padding: 0, cursor: 'pointer' }}>
                   <span style={{ display: 'block', width: 56, height: 56, borderRadius: 8, overflow: 'hidden', border: '1px solid #e5edf8', flexShrink: 0 }}>

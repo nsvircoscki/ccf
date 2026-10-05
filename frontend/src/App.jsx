@@ -317,7 +317,7 @@ export default function App() {
             <TarefasView onBack={() => setModuloEscolhido(false)} usuarioLogado={usuarioLogado} />
           )}
 
-          {telaAtiva === 'sis-ponto' && <SisPontoView usuarioLogado={usuarioLogado} destino={sisPontoDestino} />}
+          {telaAtiva === 'sis-ponto' && <SisPontoView usuario={usuarioAtual} destino={sisPontoDestino} />}
         </div>
 
 

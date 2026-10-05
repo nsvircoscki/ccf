@@ -32,3 +32,22 @@ export const PADROES_HORARIO_PADRAO = {
   manha: { dias: diasIguais([{ entrada: '07:00', saida: '13:00' }]) },
   tarde: { dias: diasIguais([{ entrada: '13:00', saida: '19:00' }]) },
 };
+
+// Motivos padrão de ajuste de ponto (mesma lista do backend em
+// services/sisPontoService.js, TIPOS_JUSTIFICATIVA). Em "Outro", a explicação
+// por escrito é obrigatória; nos demais ela é opcional.
+export const JUSTIFICATIVA_TIPOS = [
+  { id: 'esquecimento', nome: 'Esquecimento de marcação' },
+  { id: 'falha_registro', nome: 'Falha no sistema ou no aparelho de ponto' },
+  { id: 'trabalho_externo', nome: 'Trabalho externo / em campo' },
+  { id: 'atestado', nome: 'Atestado médico' },
+  { id: 'consulta', nome: 'Consulta ou exame médico (declaração de comparecimento)' },
+  { id: 'falta_justificada', nome: 'Falta justificada (luto, casamento, doação de sangue...)' },
+  { id: 'atraso_transporte', nome: 'Atraso por problema no transporte' },
+  { id: 'saida_autorizada', nome: 'Saída antecipada autorizada pela chefia' },
+  { id: 'compensacao', nome: 'Compensação de banco de horas' },
+  { id: 'hora_extra', nome: 'Hora extra autorizada' },
+  { id: 'outro', nome: 'Outro' },
+];
+
+export const rotuloTipoJustificativa = (tipo) => JUSTIFICATIVA_TIPOS.find((item) => item.id === tipo)?.nome || null;

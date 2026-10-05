@@ -119,6 +119,9 @@ async function atualizar(id, dados, idQuemEdita) {
       ativo: dados.ativo ?? atual.ativo,
       registraPonto: dados.registraPonto ?? atual.registraPonto,
       horista: dados.horista ?? atual.horista,
+      // Passou a registrar ponto agora: a jornada só é cobrada daqui pra
+      // frente (sem gerar faltas dos dias em que não registrava).
+      ...(dados.registraPonto === true && !atual.registraPonto ? { pontoDesde: new Date() } : {}),
     },
     include: { role: true },
   });

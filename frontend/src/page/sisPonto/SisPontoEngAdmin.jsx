@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChartNoAxesColumn, CircleAlert, Clock3, Files, FileText, LogIn, TimerReset, User, X } from 'lucide-react';
 import { api } from '../../services/api';
-import { meses, diasSemana, PADROES_HORARIO_INFO, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_CORES } from './sisPontoData.js';
+import { meses, diasSemana, PADROES_HORARIO_INFO, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_CORES, rotuloTipoJustificativa } from './sisPontoData.js';
 import { chaveData, hora, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, calcularHistoricoSemanal, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, ehHorista } from './sisPontoUtils.js';
 import { BancoHoras, Card, ConfirmacaoPonto } from './SisPontoComponents.jsx';
 import SisPontoJustificativasAdmin from './SisPontoJustificativasAdmin.jsx';
@@ -413,7 +413,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
                           return (
                             <div key={justificativa.id} style={{ border: '1px solid #ffd8aa', background: '#fff8ee', borderRadius: 10, padding: 10 }}>
                               <div style={{ fontSize: 11.5, fontWeight: 800, color: '#243755' }}>{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(`${justificativa.dia}T12:00:00`))} · {justificativa.horaInicio}–{justificativa.horaFim}</div>
-                              <p style={{ margin: '4px 0 8px', fontSize: 11, color: '#405371', fontWeight: 600, lineHeight: 1.4 }}>{justificativa.motivo}</p>
+                              <p style={{ margin: '4px 0 8px', fontSize: 11, color: '#405371', fontWeight: 600, lineHeight: 1.4 }}>{[rotuloTipoJustificativa(justificativa.tipo), justificativa.motivo].filter(Boolean).join(' — ')}</p>
                               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                 <button type="button" disabled={processando} onClick={() => decidirJustificativa(justificativa.id, 'Aceita')} style={{ border: 0, borderRadius: 7, padding: '6px 10px', background: '#2aba72', color: '#fff', fontWeight: 800, fontSize: 10.5, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Aceitar</button>
                                 <button type="button" disabled={processando} onClick={() => decidirJustificativa(justificativa.id, 'Inválida')} style={{ border: 0, borderRadius: 7, padding: '6px 10px', background: '#ff9c2e', color: '#fff', fontWeight: 800, fontSize: 10.5, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Inválida</button>
@@ -655,7 +655,7 @@ function PopupJustificativasDia({ dia, itens, processandoId, onDecidir, onClose 
                   <strong style={{ color: '#1d3156', fontSize: 13 }}>{justificativa.horaInicio}–{justificativa.horaFim}</strong>
                   <span style={{ padding: '4px 10px', borderRadius: 99, background: cor.texto, color: '#fff', fontSize: 10, fontWeight: 900 }}>{justificativa.status}</span>
                 </div>
-                <p style={{ margin: '8px 0 0', color: '#405371', fontSize: 12, fontWeight: 600, lineHeight: 1.5 }}>{justificativa.motivo}</p>
+                <p style={{ margin: '8px 0 0', color: '#405371', fontSize: 12, fontWeight: 600, lineHeight: 1.5 }}>{[rotuloTipoJustificativa(justificativa.tipo), justificativa.motivo].filter(Boolean).join(' — ')}</p>
                 {justificativa.anexoDataUrl && (
                   <button type="button" onClick={() => setImagemAmpliada(justificativa.anexoDataUrl)} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, border: 0, background: 'transparent', padding: 0, cursor: 'pointer', color: '#1767e8', fontSize: 11, fontWeight: 800 }}><FileText size={13} /> Ver atestado anexado</button>
                 )}

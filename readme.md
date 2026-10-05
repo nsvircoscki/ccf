@@ -130,6 +130,20 @@ Crie um arquivo `.env` apenas para uso local e nunca o comite no repositório.
 3. Só o que o servidor confirma (`criado` ou `duplicado`) sai da fila. Reenviar o mesmo `clientId` não duplica nada.
 4. A tela mostra quantos pontos ainda estão pendentes de envio.
 5. Uma sequência inválida (por exemplo, duas entradas seguidas) **não é descartada**: fica marcada como inconsistente e aparece na aba **Pontos a revisar** do admin.
+6. **Cada pessoa bate só o próprio ponto.** O servidor recusa batida para outra pessoa. Quem é do ENG alterna entre "Painel do ENG" e "Meu ponto".
+
+### Esquecimento de batida
+
+Isto vale para quem tem jornada definida (não horista). Quando um horário da jornada de um dia já encerrado fica sem batida, o servidor registra o **horário previsto** (origem `PREVISTA`, situação `PENDENTE`).
+- Os previstos são gerados ao subir o backend, a cada 30 min e antes da revisão e do export.
+- Na aba **Pontos a revisar**, o ENG vê os esquecimentos e as justificativas do dia, e decide:
+  - **Abonar:** conta as horas.
+  - **Falta:** desconta as horas e sai no CSV com 0 h e código `6` (falta).
+- Enquanto não há decisão, o horário sai com 0 h e aparece como pendência na conferência da folha.
+- Se a batida real chegar depois (aparelho estava offline), o previsto pendente some sozinho.
+- Nada é gerado para dias anteriores a `User.pontoDesde`, que recebe a data em que a pessoa passou a registrar ponto.
+
+A justificativa tem um campo **Motivo** com opções padrão (esquecimento, atestado, trabalho externo, etc.). A explicação por escrito só é obrigatória em "Outro".
 
 ### Export para o PC da folha
 

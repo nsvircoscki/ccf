@@ -104,6 +104,60 @@ export function montarPares(batidas) {
     for (const batida of [par.entrada, par.saida]) {
       if (batida?.inconsistente) par.observacoes.push(`INCONSISTENTE:${batida.motivoInconsistencia || 'SEQUENCIA'}`);
     }
+    // Horário previsto (pessoa não bateu): a decisão do ENG vai junto.
+    const previstas = [par.entrada, par.saida].filter((b) => b?.origem === 'PREVISTA');
+    if (previstas.some((b) => b.situacao === 'FALTA')) par.observacoes.push('FALTA');
+    else if (previstas.some((b) => !b.situacao || b.situacao === 'PENDENTE')) par.observacoes.push('PREVISTA_PENDENTE');
+    else if (previstas.length) par.observacoes.push('PREVISTA_ABONADA');
   }
   return pares;
+}
+
+// "YYYY-MM-DD" + "HH:MM" no fuso da empresa -> Date (UTC). Duas passadas
+// acertam a hora mesmo se o fuso tiver horário de verão.
+export function dataLocalParaUtc(dia, hora, tz = PONTO_TZ) {
+  const [ano, mes, d] = dia.split('-').map(Number);
+  const [h, m] = hora.split(':').map(Number);
+  const alvo = Date.UTC(ano, mes - 1, d, h, m);
+  let utc = alvo;
+  for (let i = 0; i < 2; i += 1) {
+    const p = partesLocais(new Date(utc), tz);
+    const visto = Date.UTC(p.ano, p.mes - 1, p.dia, p.hora, p.minuto);
+    utc += alvo - visto;
+  }
+  return new Date(utc);
+}
+
+const NOME_DIA = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+export function nomeDiaSemana(dia) {
+  const [ano, mes, d] = dia.split('-').map(Number);
+  return NOME_DIA[new Date(Date.UTC(ano, mes - 1, d)).getUTCDay()];
+}
+
+// Horários da jornada daquele dia: [{ indice, tipo, hora }] (ENTRADA/SAIDA de cada turno).
+export function horariosPrevistos(padrao, dia) {
+  const turnos = padrao?.dias?.[nomeDiaSemana(dia)];
+  if (!Array.isArray(turnos)) return [];
+  return turnos.flatMap((turno, i) => [
+    { indice: i * 2, tipo: 'ENTRADA', hora: turno.entrada },
+    { indice: i * 2 + 1, tipo: 'SAIDA', hora: turno.saida },
+  ]);
+}
+
+// Quais horários previstos do dia ficaram sem batida. Cada batida real
+// "cobre" o horário previsto mais próximo do mesmo tipo; os que ninguém cobriu
+// são esquecimento (ou falta, se o dia inteiro ficou vazio).
+export function horariosSemBatida(previstos, batidasReais, dia, tz = PONTO_TZ) {
+  const comData = previstos.map((p) => ({ ...p, em: dataLocalParaUtc(dia, p.hora, tz) }));
+  const cobertos = new Set();
+  for (const batida of batidasReais) {
+    const t = new Date(batida.batidoEm).getTime();
+    let melhor = null;
+    for (const p of comData) {
+      if (p.tipo !== batida.tipo) continue;
+      if (!melhor || Math.abs(p.em.getTime() - t) < Math.abs(melhor.em.getTime() - t)) melhor = p;
+    }
+    if (melhor) cobertos.add(melhor.indice);
+  }
+  return comData.filter((p) => !cobertos.has(p.indice));
 }

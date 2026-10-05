@@ -4,7 +4,7 @@
 //
 // Atenção: no lerCSV.js do Sistema Ponto, "Total Wages" é lido como CÓDIGO DE
 // OCORRÊNCIA (0 = normal, 1 esquecimento, 2 atestado, 3 férias, 6 falta...),
-// não como dinheiro. Por isso sai "0" e não vazio.
+// não como dinheiro. Por isso sai "0" (ou 6 quando o ENG marcou falta).
 import { montarPares, formatarDataPlanilha, chaveMesLocal, PONTO_TZ } from './sequencia.js';
 
 export const COLUNAS_EXPORT = ['O', 'Name', 'Time In', 'Time Out', 'Total Hours', 'Hourly Wage', 'Total Wages', 'CCF ID', 'Observacao'];
@@ -35,8 +35,12 @@ export function montarLinhasExport(usuarios, batidasPorUsuario, periodos, tz = P
     const pares = montarPares(batidasPorUsuario.get(usuario.id) || []);
     for (const par of pares) {
       if (!periodos.has(periodoDoPar(par, tz))) continue;
+      // Falta (decidida pelo ENG) e horário previsto ainda sem decisão não
+      // contam horas; falta sai com o código 6 do Sistema Ponto.
+      const falta = par.observacoes.includes('FALTA');
+      const naoConta = falta || par.observacoes.includes('PREVISTA_PENDENTE');
       const horas = par.entrada && par.saida
-        ? (new Date(par.saida.batidoEm) - new Date(par.entrada.batidoEm)) / 3600000
+        ? (naoConta ? 0 : (new Date(par.saida.batidoEm) - new Date(par.entrada.batidoEm)) / 3600000)
         : null;
       linhas.push({
         O: '',
@@ -45,7 +49,7 @@ export function montarLinhasExport(usuarios, batidasPorUsuario, periodos, tz = P
         'Time Out': par.saida ? formatarDataPlanilha(par.saida.batidoEm, tz) : '',
         'Total Hours': horas === null ? '' : horas.toFixed(2),
         'Hourly Wage': '',
-        'Total Wages': 0,
+        'Total Wages': falta ? 6 : 0,
         'CCF ID': usuario.id,
         Observacao: par.observacoes.join(';'),
         _ordem: new Date((par.entrada || par.saida).batidoEm).getTime(),

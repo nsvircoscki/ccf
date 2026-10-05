@@ -5,8 +5,9 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../prisma.js';
 import { notificationService } from '../notificationService.js';
-import { classificarSequencia, chaveDiaLocal, chaveMesLocal, montarPares, JANELA_PAR_MS } from './sequencia.js';
+import { classificarSequencia, chaveDiaLocal, chaveMesLocal, montarPares, JANELA_PAR_MS, horariosPrevistos, horariosSemBatida, dataLocalParaUtc } from './sequencia.js';
 import { COLUNAS_EXPORT, formatarCsv, montarLinhasExport } from './exportCsv.js';
+import { listarPadroesHorario } from '../sisPontoService.js';
 
 export const PADRAO_HORARIO_IDS = ['integral', 'manha', 'tarde'];
 const SETORES_ADMIN = ['ENG', 'DEV'];
@@ -79,10 +80,10 @@ function validarItem(item) {
   };
 }
 
-// Mesma regra do quiosque de hoje: cada setor bate o ponto do próprio
-// pessoal; a administração (ENG/DEV) pode bater por qualquer um.
-function podeBaterPor(quem, alvo) {
-  return SETORES_ADMIN.includes(quem.setor) || alvo.role.name === quem.setor;
+// Bater ponto: só o próprio. Corrigir (excluir uma batida): a própria pessoa
+// ou a administração (ENG/DEV).
+function podeCorrigirPontoDe(quem, alvoId) {
+  return quem.id === alvoId || SETORES_ADMIN.includes(quem.setor);
 }
 
 // Reaplica a regra de sequência em volta das batidas que mudaram. A batida
@@ -159,8 +160,8 @@ export async function sincronizar(itens, quem, dispositivo = {}) {
       resultados.set(v.clientId, { clientId: v.clientId, status: 'rejeitado', erro: 'Funcionário inexistente, inativo ou sem registro de ponto.' });
       continue;
     }
-    if (!podeBaterPor(quem, alvo)) {
-      resultados.set(v.clientId, { clientId: v.clientId, status: 'rejeitado', erro: 'Sem permissão para registrar ponto desta pessoa.' });
+    if (alvo.id !== quem.id) {
+      resultados.set(v.clientId, { clientId: v.clientId, status: 'rejeitado', erro: 'Cada pessoa só pode registrar o próprio ponto.' });
       continue;
     }
     novos.push(v);
@@ -232,7 +233,7 @@ export async function registrarAvulso(dados, quem) {
 // pra que as telas de admin/funcionário continuem funcionando sem mudança.
 export async function listarMapaRegistros() {
   const batidas = await prisma.pontoBatida.findMany({
-    where: { removidoEm: null },
+    where: { removidoEm: null, OR: [{ origem: { not: 'PREVISTA' } }, { situacao: 'ABONADA' }] },
     select: { userId: true, batidoEm: true },
     orderBy: { batidoEm: 'asc' },
   });
@@ -245,23 +246,48 @@ export async function listarMapaRegistros() {
   return mapa;
 }
 
-// Para a revisão do admin: pares do mês com observação (sem saída, sem
-// entrada, inconsistentes).
+// Para a revisão do admin: pares com problema (sem saída, sem entrada,
+// inconsistentes) e os horários previstos em que a pessoa não bateu.
+const OBS_DE_PREVISTA = ['PREVISTA_PENDENTE', 'PREVISTA_ABONADA', 'FALTA'];
+
 export async function listarParaRevisao(periodo) {
-  const { porUsuario, usuarios } = await carregarPeriodo(periodo);
-  const itens = [];
+  await gerarPrevistas();
+  const { batidas, porUsuario, usuarios } = await carregarPeriodo(periodo);
+  const pares = [];
   for (const usuario of usuarios) {
     for (const par of montarPares(porUsuario.get(usuario.id) || [])) {
       const ref = par.entrada || par.saida;
-      if (!par.observacoes.length || !periodo.periodos.has(chaveMesLocal(ref.batidoEm))) continue;
-      itens.push({
+      const observacoes = par.observacoes.filter((o) => !OBS_DE_PREVISTA.includes(o));
+      if (!observacoes.length || !periodo.periodos.has(chaveMesLocal(ref.batidoEm))) continue;
+      pares.push({
         funcionarioId: usuario.id, nome: usuario.name, setor: usuario.role.name,
         entrada: par.entrada?.batidoEm ?? null, saida: par.saida?.batidoEm ?? null,
-        observacoes: par.observacoes,
+        observacoes,
       });
     }
   }
-  return itens;
+  const previstas = batidas
+    .filter((b) => b.origem === 'PREVISTA' && periodo.periodos.has(chaveMesLocal(b.batidoEm)))
+    .map((b) => ({
+      id: b.id, funcionarioId: b.userId, nome: b.user.name, setor: b.user.role.name,
+      dia: chaveDiaLocal(b.batidoEm), tipo: b.tipo, batidoEm: b.batidoEm,
+      situacao: b.situacao || 'PENDENTE', decididoEm: b.decididoEm,
+    }));
+  return { pares, previstas };
+}
+
+// ENG decide: ABONADA (conta as horas), FALTA (desconta) ou PENDENTE (desfaz).
+export async function decidirPrevistas(ids, situacao, quem) {
+  if (!['ABONADA', 'FALTA', 'PENDENTE'].includes(situacao)) throw new Error('Decisão inválida.');
+  if (!Array.isArray(ids) || !ids.length) throw new Error('Informe os horários.');
+  const alvos = await prisma.pontoBatida.findMany({ where: { id: { in: ids }, origem: 'PREVISTA', removidoEm: null } });
+  if (alvos.length !== new Set(ids).size) throw new Error('Algum horário não existe mais ou não é previsto.');
+  const pendente = situacao === 'PENDENTE';
+  await prisma.pontoBatida.updateMany({
+    where: { id: { in: ids } },
+    data: { situacao, decididoPorId: pendente ? null : quem.id, decididoEm: pendente ? null : new Date() },
+  });
+  return { ok: true, atualizados: alvos.length };
 }
 
 export async function remover({ funcionarioId, tempo }, quem) {
@@ -269,10 +295,10 @@ export async function remover({ funcionarioId, tempo }, quem) {
   if (!funcionarioId || Number.isNaN(batidoEm.getTime())) throw new Error('Informe funcionário e horário.');
   const batida = await prisma.pontoBatida.findFirst({
     where: { userId: funcionarioId, batidoEm, removidoEm: null },
-    include: { user: { include: { role: true } } },
   });
   if (!batida) return null;
-  if (!podeBaterPor(quem, batida.user)) throw new Error('Sem permissão para alterar o ponto desta pessoa.');
+  if (!podeCorrigirPontoDe(quem, batida.userId)) throw new Error('Sem permissão para alterar o ponto desta pessoa.');
+  if (batida.origem === 'PREVISTA') throw new Error('Horário previsto não se exclui: o ENG decide se abona ou se é falta.');
 
   await prisma.$transaction(async (tx) => {
     await tx.pontoBatida.update({ where: { id: batida.id }, data: { removidoEm: new Date(), removidoPorId: quem.id } });
@@ -299,12 +325,14 @@ async function carregarPeriodo({ inicio, fim }) {
 }
 
 export async function exportarCsv(periodo) {
+  await gerarPrevistas();
   const { porUsuario, usuarios } = await carregarPeriodo(periodo);
   return formatarCsv(COLUNAS_EXPORT, montarLinhasExport(usuarios, porUsuario, periodo.periodos));
 }
 
 // Relatório à parte pra conferência antes de fechar a folha.
 export async function exportarPendencias(periodo) {
+  await gerarPrevistas();
   const { batidas, porUsuario, usuarios } = await carregarPeriodo(periodo);
   const linhas = montarLinhasExport(usuarios, porUsuario, periodo.periodos);
   const UMA_HORA = 3600 * 1000;
@@ -313,12 +341,101 @@ export async function exportarPendencias(periodo) {
   return {
     geradoEm: new Date().toISOString(),
     periodos: [...periodo.periodos],
-    paresComObservacao: linhas.filter((l) => l.Observacao),
+    // Abonado e falta já foram decididos pelo ENG: não são pendência.
+    paresComObservacao: linhas.filter((l) => l.Observacao && !['PREVISTA_ABONADA', 'FALTA'].includes(l.Observacao)),
     sincronizadasComAtraso: batidas
-      .filter((b) => periodo.periodos.has(chaveMesLocal(b.batidoEm)) && b.recebidoEm - b.batidoEm > UMA_HORA)
+      .filter((b) => b.origem === 'APP' && periodo.periodos.has(chaveMesLocal(b.batidoEm)) && b.recebidoEm - b.batidoEm > UMA_HORA)
       .map((b) => ({ ccfId: b.userId, email: b.user.email, tipo: b.tipo, batidoEm: b.batidoEm, recebidoEm: b.recebidoEm, deviceId: b.deviceId })),
     // O servidor não enxerga um celular offline; o que dá pra saber é quando
     // cada aparelho falou pela última vez e quantas batidas ele ainda tinha na fila.
     dispositivos: dispositivos.map((d) => ({ deviceId: d.deviceId, ultimoContato: d.ultimoContato, pendentes: d.pendentes, userAgent: d.userAgent })),
   };
+}
+
+// --- Esquecimento de batida -------------------------------------------------
+// Para quem tem jornada definida (não horista), cada horário previsto de um
+// dia já encerrado que ficou sem batida vira uma PontoBatida "PREVISTA" no
+// horário em que deveria ter sido registrada, aguardando o ENG (abonar ou
+// falta). Se a batida real chegar depois (aparelho estava offline), a
+// prevista ainda pendente sai sozinha. Idempotente: clientId determinístico.
+
+const JANELA_PREVISTAS_DIAS = 62;
+let geracaoEmAndamento = null;
+
+export function gerarPrevistas() {
+  if (!geracaoEmAndamento) {
+    geracaoEmAndamento = gerarPrevistasImpl().finally(() => { geracaoEmAndamento = null; });
+  }
+  return geracaoEmAndamento;
+}
+
+function diasEntre(inicio, fimExclusivo) {
+  const dias = [];
+  const [a, m, d] = inicio.split('-').map(Number);
+  for (let t = Date.UTC(a, m - 1, d); ; t += UM_DIA) {
+    const dia = new Date(t).toISOString().slice(0, 10);
+    if (dia >= fimExclusivo) break;
+    dias.push(dia);
+  }
+  return dias;
+}
+
+async function gerarPrevistasImpl(agora = new Date()) {
+  const padroes = await listarPadroesHorario();
+  const hoje = chaveDiaLocal(agora);
+  const limite = chaveDiaLocal(new Date(agora.getTime() - JANELA_PREVISTAS_DIAS * UM_DIA));
+  const usuarios = await prisma.user.findMany({
+    where: { ativo: true, registraPonto: true, horista: false, padraoHorarioId: { not: null } },
+  });
+
+  for (const usuario of usuarios) {
+    const padrao = padroes[usuario.padraoHorarioId];
+    const desde = chaveDiaLocal(usuario.pontoDesde);
+    const inicio = desde > limite ? desde : limite;
+    const dias = diasEntre(inicio, hoje); // só dias já encerrados
+    if (!dias.length || !padrao) continue;
+
+    const batidas = await prisma.pontoBatida.findMany({
+      where: { userId: usuario.id, batidoEm: { gte: dataLocalParaUtc(dias[0], '00:00'), lt: dataLocalParaUtc(hoje, '00:00') } },
+    });
+    const porDia = new Map();
+    for (const b of batidas) {
+      const dia = chaveDiaLocal(b.batidoEm);
+      (porDia.get(dia) || porDia.set(dia, []).get(dia)).push(b);
+    }
+
+    const criar = [];
+    const remover = [];
+    const restaurar = [];
+    for (const dia of dias) {
+      const previstos = horariosPrevistos(padrao, dia);
+      if (!previstos.length) continue;
+      const doDia = porDia.get(dia) || [];
+      const reais = doDia.filter((b) => b.origem !== 'PREVISTA' && !b.removidoEm);
+      const faltantes = new Set(horariosSemBatida(previstos, reais, dia).map((p) => p.indice));
+
+      for (const p of previstos) {
+        const clientId = `prevista:${usuario.id}:${dia}:${p.indice}`;
+        const existente = doDia.find((b) => b.clientId === clientId);
+        if (faltantes.has(p.indice)) {
+          if (!existente) {
+            criar.push({ clientId, userId: usuario.id, tipo: p.tipo, batidoEm: dataLocalParaUtc(dia, p.hora), origem: 'PREVISTA', situacao: 'PENDENTE' });
+          } else if (existente.removidoEm && existente.situacao === 'PENDENTE') {
+            restaurar.push(existente);
+          }
+        } else if (existente && !existente.removidoEm && existente.situacao === 'PENDENTE') {
+          // A batida real chegou depois: o previsto pendente não vale mais.
+          remover.push(existente);
+        }
+      }
+    }
+
+    if (!criar.length && !remover.length && !restaurar.length) continue;
+    await prisma.$transaction(async (tx) => {
+      if (criar.length) await tx.pontoBatida.createMany({ data: criar, skipDuplicates: true });
+      if (remover.length) await tx.pontoBatida.updateMany({ where: { id: { in: remover.map((b) => b.id) } }, data: { removidoEm: new Date() } });
+      if (restaurar.length) await tx.pontoBatida.updateMany({ where: { id: { in: restaurar.map((b) => b.id) } }, data: { removidoEm: null } });
+      await reclassificar(usuario.id, [...criar, ...remover, ...restaurar].map((b) => b.batidoEm), tx);
+    });
+  }
 }
