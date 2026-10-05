@@ -3,8 +3,22 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// /api -> backend (porta 3000), igual ao proxy reverso de produção. Assim o
+// celular abre o site e fala com a API pelo mesmo endereço (rede local ou
+// túnel HTTPS), sem expor a porta 3000.
+const servidorLocal = {
+  host: true,
+  // Túneis de teste: Cloudflare (trycloudflare.com) e Tailscale (ts.net).
+  allowedHosts: ['.trycloudflare.com', '.ts.net'],
+  proxy: {
+    '/api': { target: 'http://localhost:3000', changeOrigin: true, rewrite: (caminho) => caminho.replace(/^\/api/, '') },
+  },
+}
+
 // https://vite.dev/config/
 export default defineConfig({
+  server: servidorLocal,
+  preview: servidorLocal,
   plugins: [
     react(),
     tailwindcss(),

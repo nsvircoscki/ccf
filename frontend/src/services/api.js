@@ -1,4 +1,8 @@
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// Sem VITE_API_URL: no próprio computador fala direto com o backend; aberto por
+// outro endereço (celular via rede/túnel HTTPS), usa /api no mesmo endereço —
+// o servidor do Vite (dev/preview) ou o proxy reverso repassam para o backend.
+const ehLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const BASE_URL = import.meta.env.VITE_API_URL || (ehLocal ? 'http://localhost:3000' : '/api');
 
 // ---- SESSÃO ----
 // O token vem do login (ver authService no backend) e vai em toda requisição.
