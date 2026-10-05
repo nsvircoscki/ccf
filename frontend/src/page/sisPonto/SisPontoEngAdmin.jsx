@@ -8,6 +8,7 @@ import { BancoHoras, Card, ConfirmacaoPonto, ModalRegistros } from './SisPontoCo
 import SisPontoJustificativasAdmin from './SisPontoJustificativasAdmin.jsx';
 import SisPontoJornadaAdmin from './SisPontoJornadaAdmin.jsx';
 import SisPontoRevisaoAdmin from './SisPontoRevisaoAdmin.jsx';
+import SisPontoExportFolha from './SisPontoExportFolha.jsx';
 import './sisPonto.css';
 
 export default function SisPontoEngAdminScreen({ destino }) {
@@ -338,7 +339,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
                 <option>Finalizado</option>
               </select>
             </div>
-            <button className="sis-export-button" onClick={exportarRelatorio} type="button">Exportar relatório</button>
+            <button className="sis-export-button" onClick={exportarRelatorio} type="button" title="Resumo do dia. Para a folha, use Relatórios → Baixar CSV para a folha.">Exportar relatório do dia</button>
           </section>
 
           <section className="sis-grid">
@@ -508,11 +509,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
 
           {activePage === 'revisao' && <SisPontoRevisaoAdmin />}
 
-          {activePage === 'relatorios' && (
-            <section className="sis-empty-view">
-              <Card style={{ padding: 26, minHeight: 280 }}><h2 style={{ margin: 0, fontSize: 20 }}>Relatórios</h2><p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Relatórios e exportações do SIS Ponto aparecerão aqui.</p><button onClick={exportarRelatorio} type="button" style={{ border: 0, borderRadius: 9, padding: '11px 15px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>Exportar relatório</button></Card>
-            </section>
-          )}
+          {activePage === 'relatorios' && <SisPontoExportFolha onExportarDia={exportarRelatorio} />}
 
           {activePage === 'configuracoes' && (
             <SisPontoJornadaAdmin

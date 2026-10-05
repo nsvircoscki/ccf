@@ -147,6 +147,12 @@ A justificativa tem um campo **Motivo** com opções padrão (esquecimento, ates
 
 ### Export para o PC da folha
 
+Há duas formas de levar os pontos para o Sistema Ponto. As duas geram o mesmo CSV.
+- **Pela tela:** Painel do ENG → Relatórios → **Baixar CSV para a folha**, escolhendo o mês. No Sistema Ponto, use `FONTE_PONTOS=arquivo` e o botão "Importar CSV". A rota é `GET /sis-ponto/folha.csv?mes=YYYY-MM`, com a sessão do ENG/DEV.
+- **Automático:** o Sistema Ponto busca sozinho o `export.csv` com o token de máquina (`FONTE_PONTOS=ccf`), como descrito abaixo.
+
+O botão **"Exportar relatório do dia"** do Dashboard gera só o resumo de um dia e **não** é aceito pelo Sistema Ponto.
+
 ```
 GET /sis-ponto/export.csv?mes=YYYY-MM        (ou ?ano=YYYY)
 GET /sis-ponto/export-pendencias.json?mes=YYYY-MM

@@ -1,7 +1,7 @@
 import express from 'express';
 import { exigirSetor } from '../middlewares/autenticar.js';
 import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario } from '../services/sisPontoService.js';
-import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes } from '../services/ponto/batidaService.js';
+import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes, exportarCsv } from '../services/ponto/batidaService.js';
 import { interpretarPeriodo } from '../services/ponto/exportCsv.js';
 
 const router = express.Router();
@@ -68,6 +68,23 @@ router.delete('/registros', async (req, res) => {
     res.json({ ok: true });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Erro ao excluir registro.' });
+  }
+});
+
+// Mesmo CSV do export do PC da folha (/sis-ponto/export.csv), mas baixado
+// pela tela, com a sessão do ENG — para importar no Sistema Ponto
+// (FONTE_PONTOS=arquivo, botão "Importar CSV").
+router.get('/folha.csv', exigirSetor('ENG', 'DEV'), async (req, res) => {
+  try {
+    const periodo = interpretarPeriodo(req.query);
+    if (!periodo) return res.status(400).json({ error: 'Informe ?mes=YYYY-MM.' });
+    const csv = await exportarCsv(periodo);
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', `attachment; filename="pontos-${req.query.mes || req.query.ano}.csv"`);
+    res.set('Cache-Control', 'no-store');
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao gerar o CSV da folha.' });
   }
 });
 
