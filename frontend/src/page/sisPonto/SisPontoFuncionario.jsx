@@ -214,7 +214,7 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
   const idFuncionarioAtual = funcionarioAtual?.id || usuarioLogado;
   // Banco de horas acumulado do mês exibido no calendário (no máximo 31 dias:
   // barato o bastante para recalcular a cada render).
-  const bancoDoMes = calcularBancoHoras(funcionarioAtual, registros, padroesHorario, justificativas, mes, hoje, feriados);
+  const bancoDoMes = calcularBancoHoras(funcionarioAtual, registros, padroesHorario, justificativas, mes, hoje, feriados, agora);
   // Todo atraso/saída antecipada (em qualquer mês, não só o exibido no
   // calendário), do mais antigo pro mais recente. O badge da aba
   // "Justificativas" conta só quem ainda não teve NENHUMA justificativa

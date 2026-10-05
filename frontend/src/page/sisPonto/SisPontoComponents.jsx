@@ -94,6 +94,15 @@ export function BancoHoras({ itens = [], rotulo = '' }) {
   const soma = (campo) => comBanco.reduce((acc, item) => acc + (item.banco?.[campo] || 0), 0);
   const trabalhado = itens.reduce((acc, item) => acc + (item.banco?.trabalhado || 0), 0);
   const saldo = soma('saldo');
+  // Hoje fica fora do saldo (só fecha amanhã), mas aparece com as horas até agora.
+  const comHoje = itens.filter((item) => item.banco?.hoje);
+  const hojeTrabalhado = comHoje.reduce((acc, item) => acc + item.banco.hoje.trabalhado, 0);
+  const previstoUnico = comHoje.length === 1 ? comHoje[0].banco.hoje.previsto : 0;
+  const textoHoje = (hoje) => [
+    formatMinutos(hoje.trabalhado) + (hoje.previsto ? ` de ${formatMinutos(hoje.previsto)}` : ''),
+    hoje.feriado,
+    hoje.emAndamento ? 'em andamento' : null,
+  ].filter(Boolean).join(' · ');
   return <Card style={{ padding: 26, minHeight: 410 }}>
     <h2 style={{ margin: 0, fontSize: 20 }}>Banco de horas</h2>
     <p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Saldo acumulado {rotulo ? `de ${rotulo}` : 'do mês'}, só com dias já encerrados: horas trabalhadas + justificativas aceitas − jornada prevista.</p>
@@ -102,7 +111,9 @@ export function BancoHoras({ itens = [], rotulo = '' }) {
       <Saldo titulo="Créditos" valor={formatSaldoMinutos(soma('creditos'))} cor="#38bc7b" />
       <Saldo titulo="Débitos" valor={formatSaldoMinutos(-soma('debitos'))} cor="#ff5d66" />
       <Saldo titulo="Saldo" valor={formatSaldoMinutos(saldo)} cor={saldo < 0 ? '#ff5d66' : '#38bc7b'} />
+      {comHoje.length > 0 && <Saldo titulo={comHoje.length === 1 ? `Hoje até agora${previstoUnico ? ` (de ${formatMinutos(previstoUnico)})` : ''}` : 'Hoje até agora (todos)'} valor={formatMinutos(hojeTrabalhado)} cor="#7c3aed" />}
     </div>
+    {comHoje.length > 0 && <p style={{ margin: '10px 0 0', color: '#7183a3', fontSize: 11, fontWeight: 600 }}>As horas de hoje entram no saldo amanhã, quando o dia fecha.</p>}
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, marginTop: 20 }}>
       {itens.length ? itens.map((item) => {
         const banco = item.banco || {};
@@ -110,6 +121,7 @@ export function BancoHoras({ itens = [], rotulo = '' }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 12, fontWeight: 900, color: '#1d3156' }}>{item.nome}</span><span style={{ fontSize: 11, fontWeight: 800, color: '#7183a3' }}>{item.setor}</span></div>
           <div style={{ display: 'grid', gap: 7, marginTop: 12, color: '#405371', fontSize: 11, fontWeight: 700 }}>
             <span>Horas: <b style={{ color: '#1767e8' }}>{formatMinutos(banco.trabalhado || 0)}</b></span>
+            {banco.hoje && <span>Hoje: <b style={{ color: '#7c3aed' }}>{textoHoje(banco.hoje)}</b></span>}
             {banco.semBanco
               ? <span style={{ color: '#7183a3' }}>Sem banco (horista ou sem jornada)</span>
               : <>

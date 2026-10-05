@@ -412,7 +412,7 @@ export function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Dat
 // trabalho vira crédito. Horista e quem não tem jornada não têm banco (null).
 // Só conta a partir de `funcionario.pontoDesde` (quando passou a registrar ponto).
 // Feriado (feriados: Map 'YYYY-MM-DD' -> nome) não tem jornada: trabalho no dia vira crédito.
-export function calcularBancoHoras(funcionario, registrosBlob = {}, padroes = {}, justificativas = [], mesRef = new Date(), hoje = chaveData(new Date()), feriados = new Map()) {
+export function calcularBancoHoras(funcionario, registrosBlob = {}, padroes = {}, justificativas = [], mesRef = new Date(), hoje = chaveData(new Date()), feriados = new Map(), agora = new Date()) {
   const resultado = { trabalhado: 0, creditos: 0, debitos: 0, saldo: 0, dias: [] };
   const semBanco = !funcionario || ehHorista(funcionario) || !funcionario.padraoHorarioId || !padroes[funcionario.padraoHorarioId];
   const desde = funcionario?.pontoDesde ? chaveData(new Date(funcionario.pontoDesde)) : null;
@@ -440,6 +440,21 @@ export function calcularBancoHoras(funcionario, registrosBlob = {}, padroes = {}
     if (saldo > 0) resultado.creditos += saldo;
     else resultado.debitos += -saldo;
     resultado.saldo += saldo;
+  }
+
+  // Hoje (fora do saldo, que só fecha amanhã): horas até agora, contando o
+  // intervalo ainda aberto (entrada sem saída) até este instante.
+  const dataHoje = new Date(`${hoje}T12:00:00`);
+  const hojeNoMes = dataHoje.getFullYear() === mesRef.getFullYear() && dataHoje.getMonth() === mesRef.getMonth();
+  if (hojeNoMes && (!desde || hoje >= desde)) {
+    const batidas = [...(registrosBlob[hoje] || [])].sort();
+    const aberta = batidas.length % 2 === 1 ? Math.max(0, Math.round((agora - new Date(batidas[batidas.length - 1])) / 60000)) : 0;
+    resultado.hoje = {
+      trabalhado: getTotalMinutosDePontos(batidas) + aberta,
+      emAndamento: aberta > 0,
+      previsto: semBanco || feriados.has(hoje) ? 0 : minutosPrevistos(expectativasDoFuncionario(funcionario, padroes, dataHoje) || []),
+      feriado: feriados.get(hoje) || null,
+    };
   }
 
   return semBanco ? { ...resultado, semBanco: true } : resultado;
