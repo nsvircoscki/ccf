@@ -50,6 +50,11 @@ export default function SisPontoEngAdminScreen({ destino }) {
       .finally(() => setCarregandoJustificativas(false));
   };
 
+  // Batidas incluídas pelo ENG, por "funcionarioId|iso" — marcadas no calendário.
+  const [ajustes, setAjustes] = useState(new Map());
+  const carregarAjustes = () => api.getSispontoAjustes()
+    .then((lista) => setAjustes(new Map((Array.isArray(lista) ? lista : []).map((a) => [`${a.funcionarioId}|${a.batidoEm}`, a]))))
+    .catch(() => {});
   const carregarRegistros = () => api.getSispontoRegistros()
     .then((registros) => setRegistrosBackend(registros && typeof registros === 'object' ? registros : {}))
     .catch(() => {});
@@ -87,27 +92,21 @@ export default function SisPontoEngAdminScreen({ destino }) {
     return expectativas[indice % expectativas.length];
   };
   // Horário digitado é o horário local do dia corrigido.
-  const incluirBatidaEng = async ({ tipo, horario }) => {
+  const incluirBatidaEng = async ({ tipo, horario, motivo }) => {
     const [ano, mesNumero, diaNumero] = diaCorrecao.split('-').map(Number);
     const [h, m] = horario.split(':').map(Number);
-    await api.inserirSispontoAjuste({ funcionarioId: calendarioFuncionarioId, tipo, batidoEm: new Date(ano, mesNumero - 1, diaNumero, h, m).toISOString() });
-    await carregarRegistros();
+    await api.inserirSispontoAjuste({ funcionarioId: calendarioFuncionarioId, tipo, motivo, batidoEm: new Date(ano, mesNumero - 1, diaNumero, h, m).toISOString() });
+    await Promise.all([carregarRegistros(), carregarAjustes()]);
   };
-  const excluirBatidaEng = (indice) => {
+  const excluirBatidaEng = async (indice, motivo) => {
     const tempo = registrosCorrecao[indice];
     if (!tempo) return;
-    setConfirmacaoModal({
-      titulo: 'Excluir batida',
-      mensagem: `Excluir a batida de ${hora(new Date(tempo)).slice(0, 5)} de ${funcionarioCalendario?.nome || 'funcionário'}? A exclusão fica registrada.`,
-      destrutivo: true,
-      confirmar: () => {
-        setConfirmacaoModal(null);
-        api.deleteSispontoRegistro({ funcionarioId: calendarioFuncionarioId, data: diaCorrecao, tempo })
-          .then(() => carregarRegistros())
-          .catch((erro) => window.alert(erro?.message || 'Não foi possível excluir a batida.'));
-      },
-    });
+    await api.deleteSispontoRegistro({ funcionarioId: calendarioFuncionarioId, data: diaCorrecao, tempo, motivo });
+    await Promise.all([carregarRegistros(), carregarAjustes()]);
   };
+  const ajustesDoCalendario = new Map([...ajustes.values()]
+    .filter((a) => a.funcionarioId === calendarioFuncionarioId)
+    .map((a) => [a.batidoEm, a]));
 
   const statusRegistroEng = (registro, indice, _registrosDoDia, chaveDia = date) => {
     const expectativas = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, new Date(`${chaveDia}T12:00:00`)) || [];
@@ -126,6 +125,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
 
   useEffect(() => { carregarJustificativas(); }, [activePage]);
   useEffect(() => { carregarRegistros(); }, [activePage]);
+  useEffect(() => { carregarAjustes(); }, [activePage]);
   useEffect(() => { carregarHorarios(); }, [activePage]);
   // Se o admin trocar de funcionário no calendário com o popup de
   // justificativa aberto, fecha — do contrário ele continuaria mostrando o
@@ -607,7 +607,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
                             return <motion.div key={chave} role={justificativasDoDia.length ? 'button' : undefined} tabIndex={justificativasDoDia.length ? 0 : undefined} onClick={() => { if (justificativasDoDia.length) setPopupDiaJustificativa(chave); }} onKeyDown={(evento) => { if (justificativasDoDia.length && (evento.key === 'Enter' || evento.key === ' ')) setPopupDiaJustificativa(chave); }} title={justificativasDoDia.length ? 'Ver justificativa(s) deste dia' : undefined} initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .2 }} whileHover={{ backgroundColor: '#f8fbff' }} className={`sis-eng-calendar-number ${pertenceAoMes ? '' : 'outside'} ${ehHoje ? 'today' : ''}`} style={justificativasDoDia.length ? { cursor: 'pointer' } : undefined}>
                               <div className="sis-eng-calendar-day-head"><span className="sis-eng-calendar-day-circle">{dia.getDate()}</span>{itens.length > 0 && <i className={`sis-eng-calendar-dot ${temAtraso ? 'late' : temJustificado ? 'justified' : ''}`} style={temJustificadoPendente && !temAtraso ? { background: '#f2c14e' } : undefined} />}{itens.length === 0 && temJustificado && <i className="sis-eng-calendar-dot justified" style={temJustificadoPendente ? { background: '#f2c14e' } : undefined} title="Justificado" />}</div>
                               {(itens.length > 0 || horariosPreenchidos.some(Boolean)) && <div className="sis-eng-calendar-entries">
-                                {itens.slice(0, 4).map((registro, registroIndex) => <span key={registro.toISOString()} className={`sis-eng-calendar-entry ${statusItens[registroIndex] === 'Atrasado/Saída Antecipada' ? 'late' : statusItens[registroIndex] === 'Justificado' ? 'justified' : ''}`}><LogIn size={11} style={registroIndex % 2 ? { transform: 'rotate(180deg)' } : undefined} />{hora(registro).slice(0, 5)}</span>)}
+                                {itens.slice(0, 4).map((registro, registroIndex) => { const ajuste = ajustesDoCalendario.get(registro.toISOString()); return <span key={registro.toISOString()} title={ajuste ? `Ajuste do ENG${ajuste.por ? ` (${ajuste.por})` : ''}: ${ajuste.motivo || ''}` : undefined} style={ajuste ? { color: '#7c3aed', fontStyle: 'italic' } : undefined} className={`sis-eng-calendar-entry ${statusItens[registroIndex] === 'Atrasado/Saída Antecipada' ? 'late' : statusItens[registroIndex] === 'Justificado' ? 'justified' : ''}`}><LogIn size={11} style={registroIndex % 2 ? { transform: 'rotate(180deg)' } : undefined} />{hora(registro).slice(0, 5)}{ajuste ? '*' : ''}</span>; })}
                                 {horariosPreenchidos.map((horarioJustificado, indexHorario) => { if (!horarioJustificado || indexHorario < itens.length) return null; const entradaTipo = horariosDia[indexHorario][0] === 'Entrada'; return <span key={`justificado-${chave}-${indexHorario}`} className="sis-eng-calendar-entry justified" style={{ fontStyle: 'italic' }} title="Preenchido pela justificativa aprovada"><LogIn size={11} style={entradaTipo ? undefined : { transform: 'rotate(180deg)' }} />{horarioJustificado}</span>; })}
                               </div>}
                               {pertenceAoMes && chave <= chaveData(new Date()) && calendarioFuncionarioId && <button type="button" onClick={(evento) => { evento.stopPropagation(); setDiaCorrecao(chave); }} style={{ marginTop: 4, padding: '2px 6px', border: '1px solid #d8e6fc', borderRadius: 6, background: '#fff', color: '#1767e8', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>Corrigir</button>}
@@ -666,6 +666,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
         horarioEsperado={horarioEsperadoCorrecao}
         onExcluir={excluirBatidaEng}
         onAdicionar={incluirBatidaEng}
+        ajustes={ajustesDoCalendario}
         onClose={() => setDiaCorrecao(null)}
       />}
       {confirmacaoModal && <ConfirmacaoPonto {...confirmacaoModal} onClose={() => setConfirmacaoModal(null)} />}

@@ -291,18 +291,31 @@ export async function decidirPrevistas(ids, situacao, quem) {
   return { ok: true, atualizados: alvos.length };
 }
 
-export async function remover({ funcionarioId, tempo }, quem) {
+// Toda correção do ENG (incluir ou excluir batida) precisa de motivo escrito.
+const MOTIVO_MINIMO = 5;
+function validarMotivo(motivo) {
+  const texto = String(motivo || '').trim();
+  if (texto.length < MOTIVO_MINIMO) throw new Error('Informe o motivo da correção.');
+  return texto.slice(0, 500);
+}
+
+export async function remover({ funcionarioId, tempo, motivo }, quem) {
   const batidoEm = new Date(tempo);
   if (!funcionarioId || Number.isNaN(batidoEm.getTime())) throw new Error('Informe funcionário e horário.');
-  const batida = await prisma.pontoBatida.findFirst({
-    where: { userId: funcionarioId, batidoEm, removidoEm: null },
-  });
-  if (!batida) return null;
   if (!podeCorrigirPonto(quem)) throw new Error('Só o ENG pode corrigir batidas. Envie uma justificativa.');
-  if (batida.origem === 'PREVISTA') throw new Error('Horário previsto não se exclui: o ENG decide se abona ou se é falta.');
+  const motivoRemocao = validarMotivo(motivo);
+  // Se houver um previsto abonado no mesmo instante, a batida real/ajuste vem primeiro.
+  const batida = await prisma.pontoBatida.findFirst({
+    where: { userId: funcionarioId, batidoEm, removidoEm: null, origem: { not: 'PREVISTA' } },
+  });
+  if (!batida) {
+    const prevista = await prisma.pontoBatida.findFirst({ where: { userId: funcionarioId, batidoEm, removidoEm: null } });
+    if (prevista) throw new Error('Horário previsto não se exclui: o ENG decide se abona ou se é falta (aba Pontos a revisar).');
+    return null;
+  }
 
   await prisma.$transaction(async (tx) => {
-    await tx.pontoBatida.update({ where: { id: batida.id }, data: { removidoEm: new Date(), removidoPorId: quem.id } });
+    await tx.pontoBatida.update({ where: { id: batida.id }, data: { removidoEm: new Date(), removidoPorId: quem.id, motivoRemocao } });
     await reclassificar(funcionarioId, [batidoEm], tx);
   });
   // Sem a batida, o horário da jornada pode voltar a ficar "sem batida".
@@ -313,8 +326,9 @@ export async function remover({ funcionarioId, tempo }, quem) {
 // Inclusão de batida pelo ENG (correção). Fica marcada como origem "AJUSTE",
 // com quem incluiu (registradoPorId) e quando (recebidoEm), para nunca se
 // confundir com uma marcação feita pela própria pessoa no aparelho.
-export async function inserirAjuste({ funcionarioId, tipo, batidoEm }, quem) {
+export async function inserirAjuste({ funcionarioId, tipo, batidoEm, motivo }, quem) {
   if (!podeCorrigirPonto(quem)) throw new Error('Só o ENG pode corrigir batidas.');
+  const motivoAjuste = validarMotivo(motivo);
   const tipoNormalizado = normalizarTipo(tipo);
   if (!tipoNormalizado) throw new Error('Tipo deve ser ENTRADA ou SAIDA.');
   const quando = new Date(batidoEm);
@@ -333,6 +347,7 @@ export async function inserirAjuste({ funcionarioId, tipo, batidoEm }, quem) {
         batidoEm: quando,
         origem: 'AJUSTE',
         registradoPorId: quem.id,
+        motivoAjuste,
       },
     });
     await reclassificar(alvo.id, [quando], tx);
@@ -341,6 +356,27 @@ export async function inserirAjuste({ funcionarioId, tipo, batidoEm }, quem) {
   // Se cobriu um horário previsto ainda pendente, ele sai sozinho.
   await gerarPrevistas();
   return { id: criada.id, batidoEm: criada.batidoEm.toISOString(), tipo: criada.tipo };
+}
+
+// Batidas incluídas pelo ENG, para as telas marcarem como "ajuste" e
+// mostrarem o motivo. A pessoa vê os ajustes do próprio ponto; o ENG vê todos.
+export async function listarAjustes(quem) {
+  const ajustes = await prisma.pontoBatida.findMany({
+    where: { origem: 'AJUSTE', removidoEm: null, ...(podeCorrigirPonto(quem) ? {} : { userId: quem.id }) },
+    select: { userId: true, batidoEm: true, motivoAjuste: true, registradoPorId: true, recebidoEm: true },
+    orderBy: { batidoEm: 'asc' },
+  });
+  const autores = new Map((await prisma.user.findMany({
+    where: { id: { in: [...new Set(ajustes.map((a) => a.registradoPorId).filter(Boolean))] } },
+    select: { id: true, name: true },
+  })).map((u) => [u.id, u.name]));
+  return ajustes.map((a) => ({
+    funcionarioId: a.userId,
+    batidoEm: a.batidoEm.toISOString(),
+    motivo: a.motivoAjuste,
+    por: autores.get(a.registradoPorId) || null,
+    em: a.recebidoEm.toISOString(),
+  }));
 }
 
 // --- Export pro PC da folha ----------------------------------------------

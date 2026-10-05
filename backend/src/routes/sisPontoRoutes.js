@@ -1,7 +1,7 @@
 import express from 'express';
 import { exigirSetor } from '../middlewares/autenticar.js';
 import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario } from '../services/sisPontoService.js';
-import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste } from '../services/ponto/batidaService.js';
+import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes } from '../services/ponto/batidaService.js';
 import { interpretarPeriodo } from '../services/ponto/exportCsv.js';
 
 const router = express.Router();
@@ -71,7 +71,16 @@ router.delete('/registros', async (req, res) => {
   }
 });
 
-// Correção pelo ENG: inclui uma batida { funcionarioId, tipo, batidoEm }.
+// Batidas incluídas pelo ENG (com motivo), para as telas marcarem.
+router.get('/batidas/ajustes', async (req, res) => {
+  try {
+    res.json(await listarAjustes(req.usuario));
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao listar ajustes.' });
+  }
+});
+
+// Correção pelo ENG: inclui uma batida { funcionarioId, tipo, batidoEm, motivo }.
 router.post('/batidas/ajuste', exigirSetor('ENG'), async (req, res) => {
   try {
     res.status(201).json(await inserirAjuste(req.body || {}, req.usuario));

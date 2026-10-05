@@ -223,6 +223,9 @@ model PontoBatida {
   // mas o registro de que existiu (e quem tirou) fica.
   removidoEm           DateTime?
   removidoPorId        String?
+  // Correções do ENG exigem motivo: o da inclusão (origem AJUSTE) e o da exclusão.
+  motivoAjuste         String?
+  motivoRemocao        String?
 
   @@index([userId, batidoEm])
 }

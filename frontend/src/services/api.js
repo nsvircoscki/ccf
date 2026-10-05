@@ -214,7 +214,14 @@ export const api = {
         return res.json();
     },
 
-    // Correção pelo ENG: inclui uma batida { funcionarioId, tipo: 'ENTRADA'|'SAIDA', batidoEm }.
+    // Batidas incluídas pelo ENG: [{ funcionarioId, batidoEm, motivo, por, em }].
+    getSispontoAjustes: async () => {
+        const res = await req(`${BASE_URL}/sis-ponto/batidas/ajustes`);
+        if (!res.ok) return [];
+        return res.json();
+    },
+
+    // Correção pelo ENG: inclui uma batida { funcionarioId, tipo: 'ENTRADA'|'SAIDA', batidoEm, motivo }.
     inserirSispontoAjuste: async (dados) => {
         const res = await req(`${BASE_URL}/sis-ponto/batidas/ajuste`, {
             method: 'POST',
