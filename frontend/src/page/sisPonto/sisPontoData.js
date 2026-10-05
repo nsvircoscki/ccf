@@ -28,7 +28,8 @@ export const PADROES_HORARIO_INFO = {
   tarde: { id: 'tarde', nome: 'Horário Tarde' },
 };
 export const PADROES_HORARIO_PADRAO = {
-  integral: { dias: diasIguais([{ entrada: '08:00', saida: '12:00' }, { entrada: '13:00', saida: '18:00' }]) },
+  // Horário da CCF: 07:40–12:00 e 13:00–17:30 (sexta até 17:20) = 44 h/semana.
+  integral: { dias: { ...diasIguais([{ entrada: '07:40', saida: '12:00' }, { entrada: '13:00', saida: '17:30' }]), sexta: [{ entrada: '07:40', saida: '12:00' }, { entrada: '13:00', saida: '17:20' }] } },
   manha: { dias: diasIguais([{ entrada: '07:00', saida: '13:00' }]) },
   tarde: { dias: diasIguais([{ entrada: '13:00', saida: '19:00' }]) },
 };
