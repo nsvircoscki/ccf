@@ -109,7 +109,6 @@ export function Navbar({
   setUsuarioLogado,
   onVoltarModulos,
   kanban,
-  onIrParaSisPonto,
 }) {
   const [alterarSenhaAberto, setAlterarSenhaAberto] = useState(false);
   // Qual grupo (Cadastros, Relatórios, Configurações) está com o menu aberto — um por vez.
@@ -189,18 +188,6 @@ export function Navbar({
       } catch (erro) {
         console.error('Erro ao marcar notificação como lida:', erro);
       }
-    }
-    if (notificacao.tipo === 'sis-ponto-justificativa') {
-      setTelaAtiva('sis-ponto');
-      onIrParaSisPonto?.('justificativas');
-      return;
-    }
-    if (notificacao.tipo === 'sis-ponto') {
-      // Atraso/saída antecipada: leva direto pra aba onde dá pra enviar a
-      // justificativa, em vez de só abrir o módulo na tela padrão.
-      setTelaAtiva('sis-ponto');
-      onIrParaSisPonto?.('justificativas');
-      return;
     }
     if (notificacao.workflowId && kanban?.setWorkflowAtivo) {
       kanban.setWorkflowAtivo(notificacao.workflowId);

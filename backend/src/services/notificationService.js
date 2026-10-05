@@ -1,12 +1,17 @@
 // src/services/notificationService.js
 import { prisma } from '../prisma.js';
 
+// O ponto não usa o sininho: os avisos dele ficam nos contadores das próprias
+// abas do SIS Ponto. Notificações antigas do ponto continuam no banco, mas
+// ficam de fora da lista e da contagem.
+const SEM_PONTO = { NOT: { tipo: { startsWith: 'sis-ponto' } } };
+
 export const notificationService = {
   async listarPorSetor(nomeSetor) {
     const role = await prisma.role.findUnique({ where: { name: nomeSetor } });
     if (!role) return [];
     return prisma.notification.findMany({
-      where: { roleId: role.id },
+      where: { roleId: role.id, ...SEM_PONTO },
       orderBy: { created_at: 'desc' },
       take: 30,
     });
@@ -15,7 +20,7 @@ export const notificationService = {
   async contarNaoLidas(nomeSetor) {
     const role = await prisma.role.findUnique({ where: { name: nomeSetor } });
     if (!role) return 0;
-    return prisma.notification.count({ where: { roleId: role.id, lida: false } });
+    return prisma.notification.count({ where: { roleId: role.id, lida: false, ...SEM_PONTO } });
   },
 
   async marcarComoLida(id) {
@@ -29,12 +34,10 @@ export const notificationService = {
   async marcarTodasComoLidas(nomeSetor) {
     const role = await prisma.role.findUnique({ where: { name: nomeSetor } });
     if (!role) return;
-    await prisma.notification.updateMany({ where: { roleId: role.id, lida: false }, data: { lida: true } });
+    await prisma.notification.updateMany({ where: { roleId: role.id, lida: false, ...SEM_PONTO }, data: { lida: true } });
   },
 
-  // Notificação avulsa (fora do fluxo de ticket/workflow), usada hoje pelo
-  // SIS Ponto: atraso no registro de ponto avisa o próprio setor, e uma
-  // justificativa enviada avisa o ENG.
+  // Notificação avulsa (fora do fluxo de ticket/workflow).
   async notificarSetor(nomeSetor, mensagem, tipo = 'kanban') {
     const role = await prisma.role.findUnique({ where: { name: nomeSetor } });
     if (!role) return;

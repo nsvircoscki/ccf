@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { notificationService } from './notificationService.js';
 import { CONFIG_FERIADOS_PADRAO, validarConfigFeriados } from './ponto/feriados.js';
 import { dataLocalParaUtc } from './ponto/sequencia.js';
 
@@ -130,11 +129,12 @@ export async function listarJustificativas() {
 }
 
 // Cada pessoa justifica o próprio ponto: quem, nome e setor vêm da sessão.
-export async function criarJustificativa(dados, quem) {
-  return comFila(() => criarJustificativaImpl(dados, quem));
+// opcoes.ignorarPrazo: só para scripts de teste (seed).
+export async function criarJustificativa(dados, quem, opcoes = {}) {
+  return comFila(() => criarJustificativaImpl(dados, quem, opcoes));
 }
 
-async function criarJustificativaImpl(dados, quem) {
+async function criarJustificativaImpl(dados, quem, { ignorarPrazo = false } = {}) {
   const store = await readStore();
   const dia = String(dados.dia || '').trim();
   const horaInicio = String(dados.horaInicio || '').trim();
@@ -147,7 +147,7 @@ async function criarJustificativaImpl(dados, quem) {
   }
   validarTipoEMotivo(tipo, motivo);
   const prazoHoras = lerPrazoJustificativa(store);
-  if (!ehAdmin(quem) && HORA_REGEX.test(horaFim) && /^d{4}-d{2}-d{2}$/.test(dia) && prazoJustificativaEncerrado(dia, horaFim, prazoHoras)) {
+  if (!ehAdmin(quem) && !ignorarPrazo && HORA_REGEX.test(horaFim) && /^d{4}-d{2}-d{2}$/.test(dia) && prazoJustificativaEncerrado(dia, horaFim, prazoHoras)) {
     throw new Error(`O prazo para justificar ${dia.split('-').reverse().join('/')} (${prazoHoras} h) já terminou. Fale com o ENG.`);
   }
 
@@ -171,12 +171,7 @@ async function criarJustificativaImpl(dados, quem) {
 
   store.justificativas = [...(store.justificativas || []), nova];
   await writeStore(store);
-
-  const mensagem = `"${nova.nome}" (${nova.setor}) enviou uma justificativa de ponto para ${nova.dia}.`;
-  notificationService.notificarSetor('ENG', mensagem, 'sis-ponto-justificativa').catch((erro) => {
-    console.error('Erro ao notificar justificativa de ponto:', erro);
-  });
-
+  // Sem notificação no sininho: o ENG vê pelo contador da aba Justificativas.
   return nova;
 }
 

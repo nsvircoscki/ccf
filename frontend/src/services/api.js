@@ -195,6 +195,16 @@ export const api = {
     },
 
     // Pares sem saída/sem entrada/inconsistentes do mês (só ENG/DEV).
+    // Contador da aba "Pontos a revisar": { previstas, registros, total }.
+    getSispontoRevisaoContagem: async () => {
+        const res = await req(`${BASE_URL}/sis-ponto/revisao/contagem`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao contar pontos para revisão.');
+        }
+        return res.json();
+    },
+
     getSispontoRevisao: async (mes) => {
         const res = await req(`${BASE_URL}/sis-ponto/revisao?mes=${encodeURIComponent(mes)}`);
         if (!res.ok) {

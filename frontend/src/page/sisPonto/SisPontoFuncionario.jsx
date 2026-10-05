@@ -617,8 +617,10 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
   const mostrarForm = secao === 'nova';
   const mostrarPendentes = secao === 'pendentes' || (compacto && secao === 'minhas');
   const mostrarLista = secao === 'minhas' && !compacto;
-  const rotulo = { display: 'grid', gap: 5, fontSize: 11, fontWeight: 800, color: '#7183a3' };
-  const campo = { height: 40, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 10px', fontSize: 13, fontWeight: 700, color: '#405371', minWidth: 0, width: '100%', boxSizing: 'border-box', background: '#fff' };
+  const rotulo = { display: 'grid', gap: 5, minWidth: 0, fontSize: 11, fontWeight: 800, color: '#7183a3' };
+  const campo = { height: 40, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 10px', fontSize: 13, fontWeight: 700, color: '#405371', minWidth: 0, width: '100%', boxSizing: 'border-box', background: '#fff', maxWidth: '100%' };
+  // iOS dá largura mínima própria a date/time e estoura a tela; sem a aparência nativa ele obedece o width.
+  const campoData = { ...campo, WebkitAppearance: 'none', appearance: 'none', display: 'flex', alignItems: 'center' };
   const abaSecao = (ativa) => ({ flex: 1, border: 0, borderRadius: 8, padding: '9px 6px', background: ativa ? '#fff' : 'transparent', color: ativa ? '#1767e8' : '#5b6d89', fontSize: 12, fontWeight: 800, cursor: 'pointer', boxShadow: ativa ? '0 1px 4px rgba(15,35,70,.12)' : 'none' });
 
   return (
@@ -668,7 +670,7 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
         <button type="button" onClick={() => { cancelarEdicao(); setSecao('nova'); }} style={{ marginTop: 10, marginLeft: compacto || selecionados.size === 0 ? 0 : 8, width: compacto ? '100%' : undefined, border: '1px solid #d8e4f3', borderRadius: 9, padding: '10px 14px', background: '#fff', color: '#52637f', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Nova justificativa avulsa</button>
       </Card>}
 
-      {mostrarForm && <Card style={{ padding: compacto ? 16 : 26 }}>
+      {mostrarForm && <Card style={{ padding: compacto ? 16 : 26, minWidth: 0, maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
         <h2 style={{ margin: 0, fontSize: compacto ? 16 : 20 }}>{editandoId ? 'Refazer justificativa' : lote ? `Justificar ${lote.length} pendência(s)` : 'Nova justificativa'}</h2>
         {!compacto && <p style={{ margin: '6px 0 20px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Descreva uma ausência, atraso ou saída antecipada e, se tiver, anexe um documento.</p>}
         {compacto && <div style={{ height: 12 }} />}
@@ -692,25 +694,25 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
           </div>
         ) : <div style={{ display: 'grid', gridTemplateColumns: compacto ? '1fr 1fr' : 'repeat(auto-fit, minmax(160px, 1fr))', gap: compacto ? 10 : 12 }}>
           <label style={{ ...rotulo, gridColumn: compacto ? '1 / -1' : undefined }}>Dia a justificar
-            <input type="date" value={form.dia} onChange={(event) => setForm((atual) => ({ ...atual, dia: event.target.value }))} style={campo} />
+            <input type="date" value={form.dia} onChange={(event) => setForm((atual) => ({ ...atual, dia: event.target.value }))} style={campoData} />
           </label>
           <label style={rotulo}>{compacto ? 'Das' : 'Do horário'}
-            <input type="time" value={form.horaInicio} onChange={(event) => setForm((atual) => ({ ...atual, horaInicio: event.target.value }))} style={campo} />
+            <input type="time" value={form.horaInicio} onChange={(event) => setForm((atual) => ({ ...atual, horaInicio: event.target.value }))} style={campoData} />
           </label>
           <label style={rotulo}>{compacto ? 'Até' : 'Até o horário'}
-            <input type="time" value={form.horaFim} onChange={(event) => setForm((atual) => ({ ...atual, horaFim: event.target.value }))} style={campo} />
+            <input type="time" value={form.horaFim} onChange={(event) => setForm((atual) => ({ ...atual, horaFim: event.target.value }))} style={campoData} />
           </label>
         </div>}
 
-        <label style={{ display: 'grid', gap: 5, marginTop: 12, fontSize: 11, fontWeight: 800, color: '#7183a3' }}>Motivo
-          <select value={form.tipo} onChange={(event) => setForm((atual) => ({ ...atual, tipo: event.target.value }))} style={{ height: 40, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 10px', fontSize: 13, fontWeight: 700, color: form.tipo ? '#405371' : '#8a99b1', background: '#fff' }}>
+        <label style={{ display: 'grid', gap: 5, marginTop: 12, minWidth: 0, fontSize: 11, fontWeight: 800, color: '#7183a3' }}>Motivo
+          <select value={form.tipo} onChange={(event) => setForm((atual) => ({ ...atual, tipo: event.target.value }))} style={{ ...campo, color: form.tipo ? '#405371' : '#8a99b1', textOverflow: 'ellipsis' }}>
             <option value="">Selecione o motivo...</option>
             {JUSTIFICATIVA_TIPOS.map((tipo) => <option key={tipo.id} value={tipo.id}>{tipo.nome}</option>)}
           </select>
         </label>
 
-        <label style={{ display: 'grid', gap: 5, marginTop: 12, fontSize: 11, fontWeight: 800, color: '#7183a3' }}>Descrição
-          <textarea value={form.motivo} onChange={(event) => setForm((atual) => ({ ...atual, motivo: event.target.value }))} rows={compacto ? 2 : 3} placeholder="Descreva o motivo da ausência, atraso ou saída antecipada..." style={{ borderRadius: 8, border: '1px solid #d8e6fc', padding: 10, fontSize: 13, fontWeight: 600, color: '#405371', resize: 'vertical', fontFamily: 'inherit' }} />
+        <label style={{ display: 'grid', gap: 5, marginTop: 12, minWidth: 0, fontSize: 11, fontWeight: 800, color: '#7183a3' }}>Descrição
+          <textarea value={form.motivo} onChange={(event) => setForm((atual) => ({ ...atual, motivo: event.target.value }))} rows={compacto ? 2 : 3} placeholder="Descreva o motivo da ausência, atraso ou saída antecipada..." style={{ borderRadius: 8, border: '1px solid #d8e6fc', padding: 10, fontSize: 13, fontWeight: 600, color: '#405371', resize: 'vertical', fontFamily: 'inherit', width: '100%', minWidth: 0, boxSizing: 'border-box' }} />
         </label>
 
         <div style={{ marginTop: 14 }}>
@@ -724,7 +726,7 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
 
         {mensagem && <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: mensagem.tipo === 'erro' ? '#fff4f3' : '#effaf6', color: mensagem.tipo === 'erro' ? '#c23b34' : '#1f9d63' }}>{mensagem.texto}</div>}
 
-        <div style={{ display: 'flex', gap: 10, marginTop: compacto ? 14 : 18 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: compacto ? 14 : 18 }}>
           <button type="button" disabled={enviando} onClick={enviar} style={{ flex: compacto ? 1 : undefined, border: 0, borderRadius: 9, padding: '11px 18px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: enviando ? 'default' : 'pointer', opacity: enviando ? .7 : 1 }}>{enviando ? 'Enviando...' : editandoId ? 'Reenviar justificativa' : lote ? `Enviar ${lote.length} justificativa(s)` : 'Enviar justificativa'}</button>
           {(editandoId || lote) && <button type="button" onClick={cancelarEdicao} style={{ border: '1px solid #d8e4f3', borderRadius: 9, padding: '11px 15px', background: '#fff', color: '#52637f', fontWeight: 800, cursor: 'pointer' }}>Cancelar</button>}
         </div>

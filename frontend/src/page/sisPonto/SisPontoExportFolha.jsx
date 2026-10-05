@@ -38,7 +38,7 @@ export default function SisPontoExportFolha({ onExportarDia }) {
       <Card style={{ padding: 26 }}>
         <h2 style={{ margin: 0, fontSize: 20 }}>Pontos para a folha (Sistema Ponto)</h2>
         <p style={{ margin: '6px 0 18px', color: '#7183a3', fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>
-          Baixa todas as batidas do mês no formato que o Sistema Ponto importa (botão "Importar CSV", com FONTE_PONTOS=arquivo).
+          Baixa todos os registros do mês no formato que o Sistema Ponto importa (botão "Importar CSV", com FONTE_PONTOS=arquivo).
           Faltas marcadas pelo ENG saem com 0 h e código 6; esquecimentos ainda sem decisão saem com 0 h e aparecem na conferência da folha.
           Confira a aba "Pontos a revisar" antes de exportar.
         </p>

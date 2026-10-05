@@ -148,9 +148,9 @@ export default function SisPontoRevisaoAdmin() {
       </Card>
 
       <Card style={{ padding: 26 }}>
-        <h2 style={{ margin: 0, fontSize: 18 }}>Batidas com problema</h2>
-        <p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Para corrigir, exclua a batida errada no calendário do funcionário.</p>
-        {!estado.carregando && !dados.pares.length && !estado.erro && <p style={{ color: '#2b8761', fontWeight: 700, marginTop: 18 }}>Nenhuma batida com problema neste mês.</p>}
+        <h2 style={{ margin: 0, fontSize: 18 }}>Registros com problema</h2>
+        <p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Para corrigir, exclua o registro errado no calendário do funcionário.</p>
+        {!estado.carregando && !dados.pares.length && !estado.erro && <p style={{ color: '#2b8761', fontWeight: 700, marginTop: 18 }}>Nenhum registro com problema neste mês.</p>}
         {dados.pares.length > 0 && (
           <div style={{ overflowX: 'auto', marginTop: 18 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: '#405371' }}>

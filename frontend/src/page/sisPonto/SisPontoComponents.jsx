@@ -157,7 +157,7 @@ function FormAdicionarBatida({ onAdicionar, tipoSugerido, horaSugerida }) {
       setHorario('');
       setMotivo('');
     } catch (e) {
-      setErro(e?.message || 'Não foi possível incluir a batida.');
+      setErro(e?.message || 'Não foi possível incluir o registro.');
     } finally {
       setEnviando(false);
     }
@@ -169,7 +169,7 @@ function FormAdicionarBatida({ onAdicionar, tipoSugerido, horaSugerida }) {
       <input type="time" value={horario} onChange={(e) => setHorario(e.target.value)} style={campoCorrecao} />
     </div>
     <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo da inclusão (obrigatório). Ex.: esqueceu de bater a saída, confirmado com a chefia." style={{ ...textoCorrecao, marginTop: 8 }} />
-    <button type="button" disabled={enviando} onClick={enviar} style={{ marginTop: 8, border: 0, borderRadius: 8, padding: '0 14px', height: 36, background: '#1767e8', color: '#fff', fontSize: 12, fontWeight: 800, cursor: enviando ? 'default' : 'pointer', opacity: enviando ? .7 : 1 }}>{enviando ? 'Incluindo...' : 'Incluir batida'}</button>
+    <button type="button" disabled={enviando} onClick={enviar} style={{ marginTop: 8, border: 0, borderRadius: 8, padding: '0 14px', height: 36, background: '#1767e8', color: '#fff', fontSize: 12, fontWeight: 800, cursor: enviando ? 'default' : 'pointer', opacity: enviando ? .7 : 1 }}>{enviando ? 'Incluindo...' : 'Incluir registro'}</button>
     {erro && <div style={{ marginTop: 8, color: '#c23b34', fontSize: 12, fontWeight: 700 }}>{erro}</div>}
   </div>;
 }
@@ -186,14 +186,14 @@ function ConfirmarExclusao({ onConfirmar, onCancelar }) {
     try {
       await onConfirmar(motivo.trim());
     } catch (e) {
-      setErro(e?.message || 'Não foi possível excluir a batida.');
+      setErro(e?.message || 'Não foi possível excluir o registro.');
       setEnviando(false);
     }
   };
   return <div style={{ padding: '0 0 12px 22px' }}>
-    <textarea autoFocus value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo da exclusão (obrigatório). Ex.: batida duplicada." style={textoCorrecao} />
+    <textarea autoFocus value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo da exclusão (obrigatório). Ex.: registro duplicado." style={textoCorrecao} />
     <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-      <button type="button" disabled={enviando} onClick={confirmar} style={{ border: 0, borderRadius: 8, padding: '7px 12px', background: '#e5484d', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>{enviando ? 'Excluindo...' : 'Excluir batida'}</button>
+      <button type="button" disabled={enviando} onClick={confirmar} style={{ border: 0, borderRadius: 8, padding: '7px 12px', background: '#e5484d', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>{enviando ? 'Excluindo...' : 'Excluir registro'}</button>
       <button type="button" disabled={enviando} onClick={onCancelar} style={{ border: '1px solid #d8e4f3', borderRadius: 8, padding: '7px 12px', background: '#fff', color: '#52637f', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Cancelar</button>
     </div>
     {erro && <div style={{ marginTop: 6, color: '#c23b34', fontSize: 12, fontWeight: 700 }}>{erro}</div>}
@@ -228,7 +228,7 @@ export function ModalRegistros({ registros, statusRegistro, horarioEsperado, onE
           {onExcluir && excluindo === indice && <ConfirmarExclusao onCancelar={() => setExcluindo(null)} onConfirmar={async (motivo) => { await onExcluir(indice, motivo); setExcluindo(null); }} />}
         </div>;
       })}
-      {!registros.length && <p style={{ margin: '4px 0 0', color: '#7183a3', fontSize: 12, fontWeight: 700 }}>Nenhuma batida neste dia.</p>}
+      {!registros.length && <p style={{ margin: '4px 0 0', color: '#7183a3', fontSize: 12, fontWeight: 700 }}>Nenhum registro neste dia.</p>}
       {onAdicionar && <FormAdicionarBatida key={registros.length} onAdicionar={onAdicionar} tipoSugerido={registros.length % 2 ? 'SAIDA' : 'ENTRADA'} horaSugerida={horarioEsperado(registros.length, registros)[1]} />}
       <p style={{ margin: '16px 0 0', padding: 12, background: '#f4f8ff', borderRadius: 9, color: '#42618d', fontSize: 12, fontWeight: 700 }}>Os intervalos e o total trabalhado são calculados a partir da entrada, intervalo, retorno e saída do dia.</p>
     </motion.section>

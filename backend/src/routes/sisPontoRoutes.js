@@ -2,7 +2,7 @@ import express from 'express';
 import { exigirSetor } from '../middlewares/autenticar.js';
 import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario, obterConfigFeriados, atualizarConfigFeriados, obterRegrasPonto, atualizarRegrasPonto } from '../services/sisPontoService.js';
 import { feriadosDoAno } from '../services/ponto/feriados.js';
-import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes, exportarCsv, gerarPrevistas, listarMeusEsquecimentos, abonarPrevistasDaJustificativa } from '../services/ponto/batidaService.js';
+import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes, exportarCsv, gerarPrevistas, listarMeusEsquecimentos, abonarPrevistasDaJustificativa, contarParaRevisao } from '../services/ponto/batidaService.js';
 import { interpretarPeriodo } from '../services/ponto/exportCsv.js';
 
 const router = express.Router();
@@ -113,12 +113,21 @@ router.post('/batidas/ajuste', exigirSetor('ENG'), async (req, res) => {
   try {
     res.status(201).json(await inserirAjuste(req.body || {}, req.usuario));
   } catch (error) {
-    res.status(400).json({ error: error.message || 'Erro ao incluir batida.' });
+    res.status(400).json({ error: error.message || 'Erro ao incluir registro.' });
   }
 });
 
 // Revisão do admin: { pares (sem saída/sem entrada/inconsistentes), previstas
 // (horários em que a pessoa não bateu, para abonar ou marcar falta) }.
+// Contador da aba "Pontos a revisar": { previstas, registros, total }.
+router.get('/revisao/contagem', exigirSetor('ENG', 'DEV'), async (_req, res) => {
+  try {
+    res.json(await contarParaRevisao());
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao contar pontos para revisão.' });
+  }
+});
+
 router.get('/revisao', exigirSetor('ENG', 'DEV'), async (req, res) => {
   try {
     const periodo = interpretarPeriodo(req.query);

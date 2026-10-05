@@ -4,9 +4,8 @@
 // o clientId gerado lá é a chave de idempotência.
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../prisma.js';
-import { notificationService } from '../notificationService.js';
 import { classificarSequencia, chaveDiaLocal, chaveMesLocal, montarPares, JANELA_PAR_MS, horariosPrevistos, horariosSemBatida, dataLocalParaUtc, partesLocais } from './sequencia.js';
-import { COLUNAS_EXPORT, formatarCsv, montarLinhasExport } from './exportCsv.js';
+import { COLUNAS_EXPORT, formatarCsv, montarLinhasExport, interpretarPeriodo } from './exportCsv.js';
 import { listarPadroesHorario, obterConfigFeriados } from '../sisPontoService.js';
 import { mapaFeriados } from './feriados.js';
 
@@ -124,7 +123,7 @@ export async function reclassificar(userId, datas, tx = prisma) {
 // Resposta por item: criado | duplicado (os dois = pode marcar como enviado) | rejeitado.
 export async function sincronizar(itens, quem, dispositivo = {}) {
   if (!Array.isArray(itens)) throw new Error('Envie { batidas: [...] }.');
-  if (itens.length > MAX_ITENS_SYNC) throw new Error(`Máximo de ${MAX_ITENS_SYNC} batidas por envio.`);
+  if (itens.length > MAX_ITENS_SYNC) throw new Error(`Máximo de ${MAX_ITENS_SYNC} registros por envio.`);
 
   const resultados = new Map();
   const validos = [];
@@ -183,7 +182,6 @@ export async function sincronizar(itens, quem, dispositivo = {}) {
       for (const v of novos) porUsuario.set(v.funcionarioId, [...(porUsuario.get(v.funcionarioId) || []), v.batidoEm]);
       for (const [userId, datas] of porUsuario) await reclassificar(userId, datas, tx);
     });
-    notificarAtrasos(novos, alvos);
   }
 
   const aceitos = [...resultados.values()].filter((r) => r.status !== 'rejeitado').length;
@@ -198,20 +196,6 @@ export async function sincronizar(itens, quem, dispositivo = {}) {
   }
 
   return { resultados: [...resultados.values()] };
-}
-
-// O front decide se a batida ficou fora do horário (ele já resolveu a jornada
-// do dia); aqui só avisa o setor — mesmo comportamento do POST /registros antigo.
-function notificarAtrasos(novos, alvos) {
-  for (const v of novos) {
-    if (!v.atrasado) continue;
-    const alvo = alvos.get(v.funcionarioId);
-    const direcao = v.tipo === 'SAIDA' ? 'antes do' : 'após o';
-    const mensagem = `"${alvo.name}" bateu o ponto ${v.minutosAtraso ?? ''} min ${direcao} horário em ${chaveDiaLocal(v.batidoEm)}. Envie uma justificativa.`;
-    notificationService.notificarSetor(alvo.role.name, mensagem, 'sis-ponto').catch((erro) => {
-      console.error('Erro ao notificar atraso de ponto:', erro);
-    });
-  }
 }
 
 // Compatibilidade com o front antigo (POST /registros sem fila offline).
@@ -278,6 +262,31 @@ export async function listarParaRevisao(periodo) {
   return { pares, previstas };
 }
 
+// Contador da aba "Pontos a revisar" (o aviso do ponto não vai pro sininho):
+// horários previstos ainda sem decisão + registros com problema (sem saída,
+// sem entrada, inconsistentes) do mês atual e do anterior.
+export async function contarParaRevisao(agora = new Date()) {
+  const previstas = await prisma.pontoBatida.count({
+    where: { origem: 'PREVISTA', removidoEm: null, OR: [{ situacao: 'PENDENTE' }, { situacao: null }] },
+  });
+  const mesAtual = chaveMesLocal(agora);
+  const [ano, mes] = mesAtual.split('-').map(Number);
+  const mesAnterior = mes === 1 ? `${ano - 1}-12` : `${ano}-${String(mes - 1).padStart(2, '0')}`;
+  let registros = 0;
+  for (const m of [mesAnterior, mesAtual]) {
+    const periodo = interpretarPeriodo({ mes: m });
+    const { porUsuario, usuarios } = await carregarPeriodo(periodo);
+    for (const usuario of usuarios) {
+      for (const par of montarPares(porUsuario.get(usuario.id) || [])) {
+        const ref = par.entrada || par.saida;
+        if (!periodo.periodos.has(chaveMesLocal(ref.batidoEm))) continue;
+        if (par.observacoes.some((o) => !OBS_DE_PREVISTA.includes(o))) registros += 1;
+      }
+    }
+  }
+  return { previstas, registros, total: previstas + registros };
+}
+
 // ENG decide: ABONADA (conta as horas), FALTA (desconta) ou PENDENTE (desfaz).
 export async function decidirPrevistas(ids, situacao, quem) {
   if (!['ABONADA', 'FALTA', 'PENDENTE'].includes(situacao)) throw new Error('Decisão inválida.');
@@ -340,7 +349,7 @@ function validarMotivo(motivo) {
 export async function remover({ funcionarioId, tempo, motivo }, quem) {
   const batidoEm = new Date(tempo);
   if (!funcionarioId || Number.isNaN(batidoEm.getTime())) throw new Error('Informe funcionário e horário.');
-  if (!podeCorrigirPonto(quem)) throw new Error('Só o ENG pode corrigir batidas. Envie uma justificativa.');
+  if (!podeCorrigirPonto(quem)) throw new Error('Só o ENG pode corrigir registros de ponto. Envie uma justificativa.');
   const motivoRemocao = validarMotivo(motivo);
   // Se houver um previsto abonado no mesmo instante, a batida real/ajuste vem primeiro.
   const batida = await prisma.pontoBatida.findFirst({
@@ -365,13 +374,13 @@ export async function remover({ funcionarioId, tempo, motivo }, quem) {
 // com quem incluiu (registradoPorId) e quando (recebidoEm), para nunca se
 // confundir com uma marcação feita pela própria pessoa no aparelho.
 export async function inserirAjuste({ funcionarioId, tipo, batidoEm, motivo }, quem) {
-  if (!podeCorrigirPonto(quem)) throw new Error('Só o ENG pode corrigir batidas.');
+  if (!podeCorrigirPonto(quem)) throw new Error('Só o ENG pode corrigir registros de ponto.');
   const motivoAjuste = validarMotivo(motivo);
   const tipoNormalizado = normalizarTipo(tipo);
   if (!tipoNormalizado) throw new Error('Tipo deve ser ENTRADA ou SAIDA.');
   const quando = new Date(batidoEm);
   if (Number.isNaN(quando.getTime())) throw new Error('Horário inválido.');
-  if (quando.getTime() > Date.now() + 5 * 60 * 1000) throw new Error('Não dá para incluir batida no futuro.');
+  if (quando.getTime() > Date.now() + 5 * 60 * 1000) throw new Error('Não dá para incluir registro no futuro.');
 
   const alvo = await prisma.user.findUnique({ where: { id: String(funcionarioId || '') } });
   if (!alvo || !alvo.ativo || !alvo.registraPonto) throw new Error('Funcionário inexistente, inativo ou sem registro de ponto.');

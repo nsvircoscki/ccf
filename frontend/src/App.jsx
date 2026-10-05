@@ -71,7 +71,6 @@ export default function App() {
   // de uma notificação (ex.: justificativa nova → abre direto a aba certa no
   // painel do ENG). O "ts" força o efeito a rodar de novo mesmo clicando em
   // duas notificações seguidas com a mesma página de destino.
-  const [sisPontoDestino, setSisPontoDestino] = useState(null);
 
   // Recarregou a página com um token guardado: confere com o backend se ele
   // ainda vale (pode ter expirado, ou a pessoa pode ter sido desativada).
@@ -212,7 +211,7 @@ export default function App() {
       <>
         {globalCss}
         <div style={{ height: '100dvh', overflow: 'hidden', background: '#f8fafc' }}>
-          <SisPontoFuncionarioScreen usuario={usuarioAtual} destino={sisPontoDestino} onSair={handleLogout} />
+          <SisPontoFuncionarioScreen usuario={usuarioAtual} onSair={handleLogout} />
         </div>
       </>
     );
@@ -249,7 +248,6 @@ export default function App() {
           setUsuarioLogado={handleLogout}
           onVoltarModulos={() => setModuloEscolhido(false)}
           kanban={kanban}
-          onIrParaSisPonto={(pagina) => setSisPontoDestino({ pagina, ts: Date.now() })}
         />
 
         <div className="flex-1 flex flex-col min-h-0" style={{ minHeight: 0, overflow: 'hidden' }}>
@@ -333,7 +331,7 @@ export default function App() {
             <TarefasView onBack={() => setModuloEscolhido(false)} usuarioLogado={usuarioLogado} />
           )}
 
-          {telaAtiva === 'sis-ponto' && <SisPontoView usuario={usuarioAtual} destino={sisPontoDestino} />}
+          {telaAtiva === 'sis-ponto' && <SisPontoView usuario={usuarioAtual} />}
         </div>
 
 

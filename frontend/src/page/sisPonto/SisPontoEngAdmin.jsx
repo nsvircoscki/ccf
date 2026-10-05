@@ -138,6 +138,16 @@ export default function SisPontoEngAdminScreen({ destino }) {
     });
 
   useEffect(() => { carregarJustificativas(); }, [activePage]);
+  // Os avisos do ponto não vão pro sininho: ficam nos contadores das abas
+  // Justificativas e Pontos a revisar, atualizados a cada minuto.
+  const [revisaoPendente, setRevisaoPendente] = useState(0);
+  useEffect(() => {
+    let ativo = true;
+    const atualizar = () => api.getSispontoRevisaoContagem().then((c) => { if (ativo) setRevisaoPendente(c.total || 0); }).catch(() => {});
+    atualizar();
+    const intervalo = window.setInterval(() => { atualizar(); carregarJustificativas(); }, 60000);
+    return () => { ativo = false; window.clearInterval(intervalo); };
+  }, [activePage]);
   useEffect(() => { carregarRegistros(); }, [activePage]);
   useEffect(() => { carregarAjustes(); }, [activePage]);
   useEffect(() => { carregarHorarios(); }, [activePage]);
@@ -276,7 +286,14 @@ export default function SisPontoEngAdminScreen({ destino }) {
                 </span>
               )}
             </button>
-            <button className={`sis-admin-nav-item ${activePage === 'revisao' ? 'active' : ''}`} onClick={() => setActivePage('revisao')}><CircleAlert size={16} /> Pontos a revisar</button>
+            <button className={`sis-admin-nav-item ${activePage === 'revisao' ? 'active' : ''}`} onClick={() => setActivePage('revisao')}>
+              <CircleAlert size={16} /> Pontos a revisar
+              {revisaoPendente > 0 && (
+                <span title="Horários sem registro aguardando decisão e registros com problema" style={{ marginLeft: 'auto', minWidth: 20, height: 20, padding: '0 5px', borderRadius: 999, background: '#e5484d', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: activePage === 'revisao' ? '0 0 0 2px #1767e8' : '0 0 0 2px #fff' }}>
+                  {revisaoPendente > 99 ? '99+' : revisaoPendente}
+                </span>
+              )}
+            </button>
             <button className={`sis-admin-nav-item ${activePage === 'relatorios' ? 'active' : ''}`} onClick={() => setActivePage('relatorios')}><ChartNoAxesColumn size={16} /> Relatórios</button>
             <button className={`sis-admin-nav-item ${activePage === 'configuracoes' ? 'active' : ''}`} onClick={() => setActivePage('configuracoes')}><Clock3 size={16} /> Jornada</button>
             <button className={`sis-admin-nav-item ${activePage === 'feriados' ? 'active' : ''}`} onClick={() => setActivePage('feriados')}><CalendarDays size={16} /> Feriados e prazos</button>
@@ -674,7 +691,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
         </section>
       </div>
       {diaCorrecao && <ModalRegistros
-        titulo={`Batidas de ${funcionarioCalendario?.nome || ''} · ${new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(`${diaCorrecao}T12:00:00`))}`}
+        titulo={`Registros de ${funcionarioCalendario?.nome || ''} · ${new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(`${diaCorrecao}T12:00:00`))}`}
         registros={registrosCorrecao}
         statusRegistro={(registro, indice, lista) => statusRegistroEng(new Date(registro), indice, lista, diaCorrecao)}
         horarioEsperado={horarioEsperadoCorrecao}

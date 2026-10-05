@@ -492,7 +492,7 @@ const somarMinutosHora = (horario, minutos) => {
 //  - esquecimentos: horários da jornada sem batida, que o servidor registrou
 //    como previstos (GET /sis-ponto/meus-esquecimentos). O período a justificar
 //    é o turno daquele horário; se faltaram entrada e saída do mesmo turno,
-//    vira um item só ("sem nenhuma batida no período").
+//    vira um item só ("sem nenhum registro no período").
 // Prazo: `prazoHoras` depois do fim do período (dia + horaFim). Passado o
 // prazo, a pessoa não justifica mais (o backend também recusa) — o ENG decide.
 // Cada item: { chave, dia, horaInicio, horaFim, descricao, categoria, sugestaoTipo, jaEnviada, marcadoFalta, prazoAte, prazoEncerrado }.
@@ -530,13 +530,13 @@ export function montarItensParaJustificar({ atrasos = [], esquecimentos = [], fu
     const chave = `esquecimento|${e.dia}|${horaInicio}|${horaFim}`;
     const existente = itens.get(chave);
     if (existente) {
-      existente.descricao = `Sem nenhuma batida no período ${horaInicio}–${horaFim}`;
+      existente.descricao = `Sem nenhum registro no período ${horaInicio}–${horaFim}`;
       existente.marcadoFalta = existente.marcadoFalta || e.situacao === 'FALTA';
       return;
     }
     itens.set(chave, {
       chave, dia: e.dia, horaInicio, horaFim, categoria: 'esquecimento',
-      descricao: `Sem batida: ${tipoTela.toLowerCase()} das ${e.hora}`,
+      descricao: `Sem registro: ${tipoTela.toLowerCase()} das ${e.hora}`,
       sugestaoTipo: 'esquecimento', jaEnviada: jaEnviada(e.dia, horaInicio, horaFim), marcadoFalta: e.situacao === 'FALTA',
     });
   });
