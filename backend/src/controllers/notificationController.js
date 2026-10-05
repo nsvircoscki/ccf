@@ -19,7 +19,7 @@ export const notificationController = {
 
   async marcarComoLida(req, res) {
     try {
-      const resultado = await notificationService.marcarComoLida(req.params.id);
+      const resultado = await notificationService.marcarComoLida(req.params.id, req.usuario.setor);
       res.status(200).json(resultado);
     } catch (error) {
       res.status(400).json({ error: error.message });
@@ -37,7 +37,7 @@ export const notificationController = {
 
   async excluir(req, res) {
     try {
-      await notificationService.excluir(req.params.id);
+      await notificationService.excluir(req.params.id, req.usuario.setor);
       res.status(200).json({ message: 'ok' });
     } catch (error) {
       res.status(400).json({ error: error.message });

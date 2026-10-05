@@ -11,7 +11,7 @@ const servidorLocal = {
   // Túneis de teste: Cloudflare (trycloudflare.com) e Tailscale (ts.net).
   allowedHosts: ['.trycloudflare.com', '.ts.net'],
   proxy: {
-    '/api': { target: 'http://localhost:3000', changeOrigin: true, rewrite: (caminho) => caminho.replace(/^\/api/, '') },
+    '/api': { target: 'http://localhost:3000', changeOrigin: true, xfwd: true, rewrite: (caminho) => caminho.replace(/^\/api/, '') },
   },
 }
 

@@ -3,7 +3,7 @@ import { exigirSetor } from '../middlewares/autenticar.js';
 import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario, obterConfigFeriados, atualizarConfigFeriados, obterRegrasPonto, atualizarRegrasPonto } from '../services/sisPontoService.js';
 import { feriadosDoAno } from '../services/ponto/feriados.js';
 import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes, exportarCsv, gerarPrevistas, listarMeusEsquecimentos, abonarPrevistasDaJustificativa, contarParaRevisao } from '../services/ponto/batidaService.js';
-import { interpretarPeriodo } from '../services/ponto/exportCsv.js';
+import { interpretarPeriodo, nomePeriodo } from '../services/ponto/exportCsv.js';
 
 const router = express.Router();
 
@@ -81,7 +81,7 @@ router.get('/folha.csv', exigirSetor('ENG', 'DEV'), async (req, res) => {
     if (!periodo) return res.status(400).json({ error: 'Informe ?mes=YYYY-MM.' });
     const csv = await exportarCsv(periodo);
     res.set('Content-Type', 'text/csv; charset=utf-8');
-    res.set('Content-Disposition', `attachment; filename="pontos-${req.query.mes || req.query.ano}.csv"`);
+    res.set('Content-Disposition', `attachment; filename="pontos-${nomePeriodo(periodo)}.csv"`);
     res.set('Cache-Control', 'no-store');
     res.send(csv);
   } catch (error) {

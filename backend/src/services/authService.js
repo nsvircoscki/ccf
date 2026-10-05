@@ -40,15 +40,14 @@ async function buscarUsuarioAtivo(usuarioId) {
 }
 
 export const authService = {
-  // password_hash nulo = conta antiga que ainda não criou a própria senha — o
-  // front usa precisaCriarSenha pra abrir o fluxo de criação. Contas novas
-  // (Configurações → Usuários) já nascem com senha inicial.
   async login(login, senha) {
     const user = await buscarPorLogin(login);
 
-    if (!user.password_hash) {
-      return { precisaCriarSenha: true, nome: user.name };
-    }
+    // Conta sem senha (password_hash nulo, contas antigas): antes a própria
+    // tela deixava criar a senha só com o login — quem soubesse o nome de
+    // usuário tomava a conta. Agora quem define a senha inicial é a
+    // administração (Configurações → Usuários); até lá a conta não entra.
+    if (!user.password_hash) throw new Error(CREDENCIAIS_INVALIDAS);
 
     const senhaConfere = await bcrypt.compare(senha || '', user.password_hash);
     if (!senhaConfere) throw new Error(CREDENCIAIS_INVALIDAS);
@@ -56,17 +55,10 @@ export const authService = {
     return { precisaCriarSenha: false, token: gerarToken(user.id), usuario: paraSessao(user) };
   },
 
-  // Primeiro acesso: define a senha e já devolve a sessão, pra pessoa não
-  // precisar digitar a senha recém-criada de novo.
-  async criarSenha(login, novaSenha) {
-    const user = await buscarPorLogin(login);
-    if (user.password_hash) throw new Error('Este usuário já tem senha definida — use "Alterar senha".');
-    if (!novaSenha || novaSenha.length < SENHA_MIN) throw new Error(`A senha deve ter pelo menos ${SENHA_MIN} caracteres.`);
-
-    const hash = await bcrypt.hash(novaSenha, 10);
-    await prisma.user.update({ where: { id: user.id }, data: { password_hash: hash } });
-
-    return { token: gerarToken(user.id), usuario: paraSessao(user) };
+  // Desativado: criar a própria senha só com o login permitia tomar a conta
+  // de outra pessoa. A senha inicial agora vem da administração.
+  async criarSenha() {
+    throw new Error('Peça à administração para definir sua senha inicial (Configurações → Usuários).');
   },
 
   // Só pra quem já está logado: o usuarioId vem do token (req.usuario), nunca

@@ -134,22 +134,53 @@ export async function criarJustificativa(dados, quem, opcoes = {}) {
   return comFila(() => criarJustificativaImpl(dados, quem, opcoes));
 }
 
+// Tudo o que vem da tela é conferido aqui: formato do dia e dos horários,
+// tamanho dos textos e o anexo (só imagem JPG/PNG, até ~8 MB).
+const DIA_REGEX = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const ANEXO_REGEX = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+=*$/;
+const ANEXO_MAX_CARACTERES = 11 * 1024 * 1024; // ~8 MB de imagem em base64
+const MOTIVO_MAX = 2000;
+
+function validarPeriodo(dia, horaInicio, horaFim) {
+  if (!DIA_REGEX.test(dia) || !HORA_REGEX.test(horaInicio) || !HORA_REGEX.test(horaFim)) {
+    throw new Error('Preencha o dia e o período da justificativa.');
+  }
+  if (horaFim <= horaInicio) throw new Error('O horário final precisa ser depois do inicial.');
+}
+
+function validarAnexo(dados) {
+  const dataUrl = dados.anexoDataUrl;
+  if (dataUrl === undefined) return {};
+  if (dataUrl === null || dataUrl === '') return { anexoNome: null, anexoTipo: null, anexoDataUrl: null };
+  if (typeof dataUrl !== 'string' || dataUrl.length > ANEXO_MAX_CARACTERES || !ANEXO_REGEX.test(dataUrl)) {
+    throw new Error('O documento precisa ser uma imagem JPG ou PNG de até 8 MB.');
+  }
+  return {
+    anexoNome: String(dados.anexoNome || 'documento').slice(0, 200),
+    anexoTipo: dataUrl.startsWith('data:image/png') ? 'image/png' : 'image/jpeg',
+    anexoDataUrl: dataUrl,
+  };
+}
+
+function conferirPrazo(store, dia, horaFim, quem) {
+  const prazoHoras = lerPrazoJustificativa(store);
+  if (!ehAdmin(quem) && prazoJustificativaEncerrado(dia, horaFim, prazoHoras)) {
+    throw new Error(`O prazo para justificar ${dia.split('-').reverse().join('/')} (${prazoHoras} h) já terminou. Fale com o ENG.`);
+  }
+}
+
 async function criarJustificativaImpl(dados, quem, { ignorarPrazo = false } = {}) {
   const store = await readStore();
   const dia = String(dados.dia || '').trim();
   const horaInicio = String(dados.horaInicio || '').trim();
   const horaFim = String(dados.horaFim || '').trim();
   const tipo = String(dados.tipo || '').trim();
-  const motivo = String(dados.motivo || '').trim();
+  const motivo = String(dados.motivo || '').trim().slice(0, MOTIVO_MAX);
 
-  if (!dia || !horaInicio || !horaFim) {
-    throw new Error('Preencha o dia e o período da justificativa.');
-  }
+  validarPeriodo(dia, horaInicio, horaFim);
   validarTipoEMotivo(tipo, motivo);
-  const prazoHoras = lerPrazoJustificativa(store);
-  if (!ehAdmin(quem) && !ignorarPrazo && HORA_REGEX.test(horaFim) && /^d{4}-d{2}-d{2}$/.test(dia) && prazoJustificativaEncerrado(dia, horaFim, prazoHoras)) {
-    throw new Error(`O prazo para justificar ${dia.split('-').reverse().join('/')} (${prazoHoras} h) já terminou. Fale com o ENG.`);
-  }
+  if (!ignorarPrazo) conferirPrazo(store, dia, horaFim, quem);
+  const anexo = validarAnexo(dados);
 
   const nova = {
     id: `just-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -161,9 +192,9 @@ async function criarJustificativaImpl(dados, quem, { ignorarPrazo = false } = {}
     horaFim,
     tipo,
     motivo,
-    anexoNome: dados.anexoNome || null,
-    anexoTipo: dados.anexoTipo || null,
-    anexoDataUrl: dados.anexoDataUrl || null,
+    anexoNome: anexo.anexoNome ?? null,
+    anexoTipo: anexo.anexoTipo ?? null,
+    anexoDataUrl: anexo.anexoDataUrl ?? null,
     status: 'Em análise',
     criadoEm: new Date().toISOString(),
     atualizadoEm: new Date().toISOString(),
@@ -198,6 +229,22 @@ async function atualizarJustificativaImpl(id, dados, quem) {
   if (!ehAdmin(quem) && dados.status && proximoStatus !== 'Em análise') {
     throw new Error('Só a administração aceita ou recusa justificativas.');
   }
+  // O funcionário só edita o que ainda está em análise ou foi devolvido; uma
+  // justificativa já aceita não muda mais (senão dava pra ampliar o período
+  // depois de aprovado). Toda edição dele volta para "Em análise".
+  const alteraConteudo = ['dia', 'horaInicio', 'horaFim', 'tipo', 'motivo', 'anexoDataUrl'].some((campo) => dados[campo] !== undefined);
+  if (!ehAdmin(quem) && alteraConteudo && existente.status === 'Aceita') {
+    throw new Error('Esta justificativa já foi aceita e não pode ser alterada.');
+  }
+  const dia = dados.dia !== undefined ? String(dados.dia).trim() : existente.dia;
+  const horaInicio = dados.horaInicio !== undefined ? String(dados.horaInicio).trim() : existente.horaInicio;
+  const horaFim = dados.horaFim !== undefined ? String(dados.horaFim).trim() : existente.horaFim;
+  if (dados.dia !== undefined || dados.horaInicio !== undefined || dados.horaFim !== undefined) {
+    validarPeriodo(dia, horaInicio, horaFim);
+    // Mudar para outro dia/horário é como justificar algo novo: vale o prazo.
+    if (dia !== existente.dia || horaFim !== existente.horaFim) conferirPrazo(store, dia, horaFim, quem);
+  }
+  const anexo = validarAnexo(dados);
   if (dados.tipo !== undefined || dados.motivo !== undefined) {
     validarTipoEMotivo(
       String(dados.tipo ?? existente.tipo ?? '').trim(),
@@ -208,15 +255,13 @@ async function atualizarJustificativaImpl(id, dados, quem) {
 
   atual[index] = {
     ...existente,
-    ...(dados.dia !== undefined ? { dia: dados.dia } : {}),
-    ...(dados.horaInicio !== undefined ? { horaInicio: dados.horaInicio } : {}),
-    ...(dados.horaFim !== undefined ? { horaFim: dados.horaFim } : {}),
+    dia,
+    horaInicio,
+    horaFim,
     ...(dados.tipo !== undefined ? { tipo: String(dados.tipo).trim() } : {}),
-    ...(dados.motivo !== undefined ? { motivo: String(dados.motivo).trim() } : {}),
-    ...(dados.anexoNome !== undefined ? { anexoNome: dados.anexoNome } : {}),
-    ...(dados.anexoTipo !== undefined ? { anexoTipo: dados.anexoTipo } : {}),
-    ...(dados.anexoDataUrl !== undefined ? { anexoDataUrl: dados.anexoDataUrl } : {}),
-    status: proximoStatus,
+    ...(dados.motivo !== undefined ? { motivo: String(dados.motivo).trim().slice(0, MOTIVO_MAX) } : {}),
+    ...anexo,
+    status: !ehAdmin(quem) && alteraConteudo ? 'Em análise' : proximoStatus,
     atualizadoEm: new Date().toISOString(),
   };
 

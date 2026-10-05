@@ -16,7 +16,7 @@ export const tarefaController = {
 
   async criar(req, res) {
     try {
-      const tarefa = await tarefaService.criar(req.body);
+      const tarefa = await tarefaService.criar({ ...req.body, criadoPor: req.usuario.setor });
       res.status(201).json(tarefa);
     } catch (error) {
       res.status(400).json({ error: error.message });

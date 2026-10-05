@@ -5,7 +5,7 @@
 import { Router } from 'express';
 import { tokenExportPonto } from '../middlewares/tokenExportPonto.js';
 import { exportarCsv, exportarPendencias } from '../services/ponto/batidaService.js';
-import { interpretarPeriodo } from '../services/ponto/exportCsv.js';
+import { interpretarPeriodo, nomePeriodo } from '../services/ponto/exportCsv.js';
 
 const router = Router();
 
@@ -20,7 +20,7 @@ router.get('/export.csv', tokenExportPonto, async (req, res) => {
   if (!periodo) return;
   try {
     const csv = await exportarCsv(periodo);
-    const nome = `pontos-${req.query.mes || req.query.ano}.csv`;
+    const nome = `pontos-${nomePeriodo(periodo)}.csv`;
     res.set('Content-Type', 'text/csv; charset=utf-8');
     res.set('Content-Disposition', `attachment; filename="${nome}"`);
     res.set('Cache-Control', 'no-store');

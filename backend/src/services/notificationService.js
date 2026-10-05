@@ -6,6 +6,12 @@ import { prisma } from '../prisma.js';
 // ficam de fora da lista e da contagem.
 const SEM_PONTO = { NOT: { tipo: { startsWith: 'sis-ponto' } } };
 
+async function notificacaoDoSetor(id, nomeSetor) {
+  const notificacao = await prisma.notification.findUnique({ where: { id: String(id) }, include: { role: true } });
+  if (!notificacao || notificacao.role?.name !== nomeSetor) throw new Error('Notificação não encontrada.');
+  return notificacao;
+}
+
 export const notificationService = {
   async listarPorSetor(nomeSetor) {
     const role = await prisma.role.findUnique({ where: { name: nomeSetor } });
@@ -23,12 +29,16 @@ export const notificationService = {
     return prisma.notification.count({ where: { roleId: role.id, lida: false, ...SEM_PONTO } });
   },
 
-  async marcarComoLida(id) {
-    return prisma.notification.update({ where: { id }, data: { lida: true } });
+  // Só as notificações do setor de quem está logado (o id vem da URL; sem
+  // essa checagem, qualquer pessoa apagava as notificações de outro setor).
+  async marcarComoLida(id, nomeSetor) {
+    const notificacao = await notificacaoDoSetor(id, nomeSetor);
+    return prisma.notification.update({ where: { id: notificacao.id }, data: { lida: true } });
   },
 
-  async excluir(id) {
-    return prisma.notification.delete({ where: { id } });
+  async excluir(id, nomeSetor) {
+    const notificacao = await notificacaoDoSetor(id, nomeSetor);
+    return prisma.notification.delete({ where: { id: notificacao.id } });
   },
 
   async marcarTodasComoLidas(nomeSetor) {

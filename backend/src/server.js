@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import { garantirSegredoJwt } from './config/jwt.js';
 import { autenticar, exigirSetor } from './middlewares/autenticar.js';
+import { cabecalhosSeguranca, bloquearOperadores, limitarTentativasLogin, opcoesCors, tratarErros } from './middlewares/seguranca.js';
 import workflowRoutes from './routes/workflowRoutes.js';
 import ticketRoutes from './routes/ticketRoutes.js';
 import servicoRoutes from './routes/servicoRoutes.js';
@@ -26,14 +27,23 @@ import { gerarPrevistas } from './services/ponto/batidaService.js';
 garantirSegredoJwt();
 
 const app = express();
+app.disable('x-powered-by');
+// Atrás do proxy local (vite preview / nginx / Tailscale), o IP real vem no
+// X-Forwarded-For — usado pelo limite de tentativas de login.
+app.set('trust proxy', 'loopback');
 
-app.use(cors());
-// O cadastro envia a imagem do mapa embutida em base64; o limite padrão do
-// express.json (100kb) rejeitaria qualquer print de tela.
-app.use(express.json({ limit: '25mb' }));
+app.use(cabecalhosSeguranca);
+app.use(cors(opcoesCors()));
+// Só as rotas que recebem arquivo em base64 (imagem do mapa, matrícula em
+// PDF, anexo de justificativa) aceitam corpo grande; o resto fica em 2 MB.
+const corpoGrande = express.json({ limit: '25mb' });
+app.use(['/servicos', '/imoveis', '/sis-ponto'], corpoGrande);
+app.use(express.json({ limit: '2mb' }));
+app.use(bloquearOperadores);
 
 // Única rota aberta: é por ela que a pessoa consegue o token. As rotas dela
 // que exigem sessão (/me, /alterar-senha) aplicam o autenticar por conta própria.
+app.use(['/auth/login', '/auth/criar-senha', '/auth/alterar-senha'], limitarTentativasLogin);
 app.use('/auth', authRoutes);
 
 // Export de pontos pro PC da folha: token de máquina (PONTO_EXPORT_TOKENS) em
@@ -58,6 +68,9 @@ app.use('/tarefas', autenticar, tarefaRoutes);
 app.use('/sis-ponto', autenticar, sisPontoRoutes);
 // Cadastro de pessoas: só a administração.
 app.use('/usuarios', autenticar, exigirSetor('ENG', 'DEV'), usuarioRoutes);
+
+app.use((_req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));
+app.use(tratarErros);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

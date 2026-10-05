@@ -62,6 +62,12 @@ export function montarLinhasExport(usuarios, batidasPorUsuario, periodos, tz = P
 
 // ?mes=YYYY-MM ou ?ano=YYYY -> { periodos, inicio, fim } (fim exclusivo, com
 // folga de 1 dia em cada ponta por causa do fuso e de pares na virada do mês).
+// Nome do arquivo baixado, a partir do período já validado ("2026-10" ou "2026").
+export function nomePeriodo(periodo) {
+  const meses = [...periodo.periodos].sort();
+  return meses.length === 1 ? meses[0] : meses[0].slice(0, 4);
+}
+
 export function interpretarPeriodo({ mes, ano }) {
   let meses;
   if (typeof mes === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) {
