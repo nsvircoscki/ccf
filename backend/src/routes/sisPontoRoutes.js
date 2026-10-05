@@ -1,6 +1,6 @@
 import express from 'express';
 import { exigirSetor } from '../middlewares/autenticar.js';
-import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario, obterConfigFeriados, atualizarConfigFeriados } from '../services/sisPontoService.js';
+import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario, obterConfigFeriados, atualizarConfigFeriados, obterRegrasPonto, atualizarRegrasPonto } from '../services/sisPontoService.js';
 import { feriadosDoAno } from '../services/ponto/feriados.js';
 import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes, exportarCsv, gerarPrevistas, listarMeusEsquecimentos, abonarPrevistasDaJustificativa } from '../services/ponto/batidaService.js';
 import { interpretarPeriodo } from '../services/ponto/exportCsv.js';
@@ -216,6 +216,23 @@ router.put('/feriados', exigirSetor('ENG'), async (req, res) => {
     res.json(config);
   } catch (error) {
     res.status(400).json({ error: error.message || 'Erro ao salvar feriados.' });
+  }
+});
+
+// Regras do ponto (prazo para justificar): todos leem, só o ENG muda.
+router.get('/regras', async (_req, res) => {
+  try {
+    res.json(await obterRegrasPonto());
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao carregar as regras do ponto.' });
+  }
+});
+
+router.put('/regras', exigirSetor('ENG'), async (req, res) => {
+  try {
+    res.json(await atualizarRegrasPonto(req.body || {}));
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao salvar as regras do ponto.' });
   }
 });
 

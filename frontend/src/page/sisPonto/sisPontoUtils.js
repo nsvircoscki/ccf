@@ -255,11 +255,16 @@ export function pendenciasDeJustificativa(registros = {}, funcionario, padroes =
       const jaEnviada = justificativas.some((justificativa) => justificativa.funcionarioId === funcionario?.id
         && justificativa.dia === dia
         && periodosSeSobrepoem(justificativa.horaInicio, justificativa.horaFim, horaInicio, horaFim));
-      pendencias.push({ dia, horaInicio, horaFim, tipo, criadoEm: registroIso, jaEnviada });
+      pendencias.push({ dia, horaInicio, horaFim, tipo, retornoAlmoco: tipo === 'Entrada' && indice % expectativas.length > 0, criadoEm: registroIso, jaEnviada });
     });
   });
   return pendencias.sort((a, b) => new Date(a.criadoEm) - new Date(b.criadoEm));
 }
+
+// Tolerância de 5 min na entrada do dia e na saída. A volta do almoço
+// (entrada de um turno depois do primeiro) não tem tolerância: o almoço é das
+// 12:00 às 13:00, e voltar depois das 13:00 precisa ser justificado.
+export const toleranciaEntrada = (indice, expectativas) => (indice % expectativas.length === 0 ? 5 : 1);
 
 export function statusRegistroComExpectativa(registro, indice, expectativas, justificativas, funcionarioId, chaveDia) {
   if (!expectativas || !expectativas.length) return 'Normal';
@@ -267,7 +272,7 @@ export function statusRegistroComExpectativa(registro, indice, expectativas, jus
   const [horaEsperada, minutoEsperado] = horarioStr.split(':').map(Number);
   const instante = new Date(registro);
   const diferenca = (instante.getHours() * 60 + instante.getMinutes()) - (horaEsperada * 60 + minutoEsperado);
-  const foraDoHorario = (tipo === 'Entrada' && diferenca >= 5) || (tipo === 'Saída' && diferenca <= -5);
+  const foraDoHorario = (tipo === 'Entrada' && diferenca >= toleranciaEntrada(indice, expectativas)) || (tipo === 'Saída' && diferenca <= -5);
   if (!foraDoHorario) return 'Normal';
   if (encontrarJustificativaAceita(justificativas, funcionarioId, chaveDia, hora(instante))) return 'Justificado';
   return 'Atrasado/Saída Antecipada';
@@ -488,8 +493,12 @@ const somarMinutosHora = (horario, minutos) => {
 //    como previstos (GET /sis-ponto/meus-esquecimentos). O período a justificar
 //    é o turno daquele horário; se faltaram entrada e saída do mesmo turno,
 //    vira um item só ("sem nenhuma batida no período").
-// Cada item: { chave, dia, horaInicio, horaFim, descricao, categoria, sugestaoTipo, jaEnviada, marcadoFalta }.
-export function montarItensParaJustificar({ atrasos = [], esquecimentos = [], funcionario, padroes = {}, justificativas = [] }) {
+// Prazo: `prazoHoras` depois do fim do período (dia + horaFim). Passado o
+// prazo, a pessoa não justifica mais (o backend também recusa) — o ENG decide.
+// Cada item: { chave, dia, horaInicio, horaFim, descricao, categoria, sugestaoTipo, jaEnviada, marcadoFalta, prazoAte, prazoEncerrado }.
+export const fimDoPrazo = (dia, horaFim, prazoHoras) => new Date(new Date(`${dia}T${horaFim}:00`).getTime() + prazoHoras * 3600 * 1000);
+
+export function montarItensParaJustificar({ atrasos = [], esquecimentos = [], funcionario, padroes = {}, justificativas = [], prazoHoras = 48, agora = new Date() }) {
   const itens = new Map();
   const jaEnviada = (dia, inicio, fim) => justificativas.some((j) => j.funcionarioId === funcionario?.id && j.dia === dia
     && j.status !== 'Recusada' && periodosSeSobrepoem(j.horaInicio, j.horaFim, inicio, fim));
@@ -498,7 +507,7 @@ export function montarItensParaJustificar({ atrasos = [], esquecimentos = [], fu
     const chave = `atraso|${a.dia}|${a.horaInicio}|${a.horaFim}`;
     itens.set(chave, {
       chave, dia: a.dia, horaInicio: a.horaInicio, horaFim: a.horaFim, categoria: 'atraso',
-      descricao: a.tipo === 'Entrada' ? `Entrada atrasada (prevista ${a.horaInicio}, bateu ${a.horaFim})` : `Saída antecipada (bateu ${a.horaInicio}, prevista ${a.horaFim})`,
+      descricao: a.tipo === 'Entrada' ? `${a.retornoAlmoco ? 'Volta do almoço' : 'Entrada'} atrasada (prevista ${a.horaInicio}, bateu ${a.horaFim})` : `Saída antecipada (bateu ${a.horaInicio}, prevista ${a.horaFim})`,
       sugestaoTipo: '', jaEnviada: a.jaEnviada, marcadoFalta: false,
     });
   });
@@ -532,5 +541,8 @@ export function montarItensParaJustificar({ atrasos = [], esquecimentos = [], fu
     });
   });
 
-  return [...itens.values()].sort((a, b) => a.dia.localeCompare(b.dia) || a.horaInicio.localeCompare(b.horaInicio));
+  return [...itens.values()].map((item) => {
+    const prazoAte = fimDoPrazo(item.dia, item.horaFim, prazoHoras);
+    return { ...item, prazoAte, prazoEncerrado: agora > prazoAte };
+  }).sort((a, b) => a.dia.localeCompare(b.dia) || a.horaInicio.localeCompare(b.horaInicio));
 }

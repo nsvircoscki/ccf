@@ -35,20 +35,27 @@ export const PADROES_HORARIO_PADRAO = {
 };
 
 // Motivos padrão de ajuste de ponto (mesma lista do backend em
-// services/sisPontoService.js, TIPOS_JUSTIFICATIVA). Em "Outro", a explicação
+// services/sisPontoService.js, TIPOS_JUSTIFICATIVA). Em "Outro", a descrição
 // por escrito é obrigatória; nos demais ela é opcional.
 export const JUSTIFICATIVA_TIPOS = [
   { id: 'esquecimento', nome: 'Esquecimento de marcação' },
   { id: 'falha_registro', nome: 'Falha no sistema ou no aparelho de ponto' },
-  { id: 'trabalho_externo', nome: 'Trabalho externo / em campo' },
   { id: 'atestado', nome: 'Atestado médico' },
   { id: 'consulta', nome: 'Consulta ou exame médico (declaração de comparecimento)' },
   { id: 'falta_justificada', nome: 'Falta justificada (luto, casamento, doação de sangue...)' },
-  { id: 'atraso_transporte', nome: 'Atraso por problema no transporte' },
-  { id: 'saida_autorizada', nome: 'Saída antecipada autorizada pela chefia' },
+  { id: 'saida_autorizada', nome: 'Saída antecipada autorizada' },
   { id: 'compensacao', nome: 'Compensação de banco de horas' },
-  { id: 'hora_extra', nome: 'Hora extra autorizada' },
   { id: 'outro', nome: 'Outro' },
 ];
 
-export const rotuloTipoJustificativa = (tipo) => JUSTIFICATIVA_TIPOS.find((item) => item.id === tipo)?.nome || null;
+// Motivos que saíram da lista: só pra mostrar o nome em justificativas antigas.
+const JUSTIFICATIVA_TIPOS_ANTIGOS = {
+  trabalho_externo: 'Trabalho externo / em campo',
+  atraso_transporte: 'Atraso por problema no transporte',
+  hora_extra: 'Hora extra autorizada',
+};
+
+export const rotuloTipoJustificativa = (tipo) => JUSTIFICATIVA_TIPOS.find((item) => item.id === tipo)?.nome || JUSTIFICATIVA_TIPOS_ANTIGOS[tipo] || null;
+
+// Prazo para justificar (horas depois do fim do período), até carregar do backend.
+export const PRAZO_JUSTIFICATIVA_PADRAO_HORAS = 48;

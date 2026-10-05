@@ -242,6 +242,29 @@ export const api = {
         return res.json();
     },
 
+    // Regras do ponto: { prazoJustificativaHoras }. Todos leem; só o ENG salva.
+    getSispontoRegras: async () => {
+        const res = await req(`${BASE_URL}/sis-ponto/regras`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao carregar as regras do ponto.');
+        }
+        return res.json();
+    },
+
+    salvarSispontoRegras: async (regras) => {
+        const res = await req(`${BASE_URL}/sis-ponto/regras`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(regras)
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao salvar as regras do ponto.');
+        }
+        return res.json();
+    },
+
     // CSV do mês no formato do Sistema Ponto (mesmo do /export.csv), pela sessão do ENG.
     baixarSispontoFolhaCsv: async (mes) => {
         const res = await req(`${BASE_URL}/sis-ponto/folha.csv?mes=${encodeURIComponent(mes)}`);

@@ -279,7 +279,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
             <button className={`sis-admin-nav-item ${activePage === 'revisao' ? 'active' : ''}`} onClick={() => setActivePage('revisao')}><CircleAlert size={16} /> Pontos a revisar</button>
             <button className={`sis-admin-nav-item ${activePage === 'relatorios' ? 'active' : ''}`} onClick={() => setActivePage('relatorios')}><ChartNoAxesColumn size={16} /> Relatórios</button>
             <button className={`sis-admin-nav-item ${activePage === 'configuracoes' ? 'active' : ''}`} onClick={() => setActivePage('configuracoes')}><Clock3 size={16} /> Jornada</button>
-            <button className={`sis-admin-nav-item ${activePage === 'feriados' ? 'active' : ''}`} onClick={() => setActivePage('feriados')}><CalendarDays size={16} /> Feriados</button>
+            <button className={`sis-admin-nav-item ${activePage === 'feriados' ? 'active' : ''}`} onClick={() => setActivePage('feriados')}><CalendarDays size={16} /> Feriados e prazos</button>
           </nav>
         </aside>
 

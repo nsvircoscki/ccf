@@ -10,6 +10,39 @@ const TIPOS = { nacional: 'Nacional', facultativo: 'Ponto facultativo', municipa
 const formatarDia = (dia) => new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(`${dia}T12:00:00`));
 const formatarExtra = (data) => (data.length === 5 ? `${data.slice(3)}/${data.slice(0, 2)} (todo ano)` : `${data.slice(8)}/${data.slice(5, 7)}/${data.slice(0, 4)}`);
 
+// Prazo que a pessoa tem para justificar um atraso/esquecimento, contado do
+// fim do período. Depois disso só o ENG resolve (abonar ou marcar falta).
+function PrazoJustificativa() {
+  const [prazo, setPrazo] = useState('');
+  const [estado, setEstado] = useState({ salvando: false, erro: null, ok: null });
+  useEffect(() => {
+    api.getSispontoRegras().then((regras) => setPrazo(String(regras.prazoJustificativaHoras))).catch((erro) => setEstado({ salvando: false, erro: erro.message, ok: null }));
+  }, []);
+  const salvar = async () => {
+    setEstado({ salvando: true, erro: null, ok: null });
+    try {
+      const regras = await api.salvarSispontoRegras({ prazoJustificativaHoras: Number(prazo) });
+      setPrazo(String(regras.prazoJustificativaHoras));
+      setEstado({ salvando: false, erro: null, ok: 'Prazo salvo.' });
+    } catch (erro) {
+      setEstado({ salvando: false, erro: erro.message, ok: null });
+    }
+  };
+  return (
+    <Card style={{ padding: 26 }}>
+      <h2 style={{ margin: 0, fontSize: 16 }}>Prazo para justificar</h2>
+      <p style={{ margin: '4px 0 14px', color: '#7183a3', fontSize: 12, fontWeight: 600 }}>Horas que o funcionário tem, depois do horário, para justificar um atraso, saída antecipada ou esquecimento. Passado o prazo, só o ENG resolve.</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <input type="number" min={1} max={1440} step={1} value={prazo} onChange={(e) => setPrazo(e.target.value)} style={{ height: 36, width: 90, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 8px', fontSize: 13, fontWeight: 700, color: '#405371' }} />
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#405371' }}>horas</span>
+        <button type="button" disabled={estado.salvando || !prazo} onClick={salvar} style={{ border: 0, borderRadius: 8, padding: '9px 16px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: 'pointer', opacity: estado.salvando ? .7 : 1 }}>{estado.salvando ? 'Salvando...' : 'Salvar'}</button>
+        {estado.ok && <span style={{ color: '#1f9d63', fontSize: 12, fontWeight: 700 }}>{estado.ok}</span>}
+        {estado.erro && <span style={{ color: '#c23b34', fontSize: 12, fontWeight: 700 }}>{estado.erro}</span>}
+      </div>
+    </Card>
+  );
+}
+
 export default function SisPontoFeriadosAdmin() {
   const [ano, setAno] = useState(() => new Date().getFullYear());
   const [config, setConfig] = useState(null);
@@ -45,6 +78,7 @@ export default function SisPontoFeriadosAdmin() {
   const campo = { height: 36, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 8px', fontSize: 13, fontWeight: 700, color: '#405371', background: '#fff' };
   return (
     <section className="sis-empty-view" style={{ display: 'grid', gap: 16 }}>
+      <PrazoJustificativa />
       <Card style={{ padding: 26 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div>

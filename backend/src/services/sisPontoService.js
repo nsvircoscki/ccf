@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { notificationService } from './notificationService.js';
 import { CONFIG_FERIADOS_PADRAO, validarConfigFeriados } from './ponto/feriados.js';
+import { dataLocalParaUtc } from './ponto/sequencia.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DATA_FILE = path.resolve(DATA_DIR, 'sis-ponto.json');
@@ -45,18 +46,31 @@ const STATUS_VALIDOS = ['Em análise', 'Aceita', 'Recusada', 'Inválida'];
 
 // Motivos padrão de ajuste de ponto (a lista da tela fica em
 // frontend/src/page/sisPonto/sisPontoData.js — manter as duas iguais).
-// Em "outro", a explicação por escrito é obrigatória.
+// Em "outro", a descrição por escrito é obrigatória.
 export const TIPOS_JUSTIFICATIVA = [
-  'esquecimento', 'falha_registro', 'trabalho_externo', 'atestado', 'consulta',
-  'falta_justificada', 'atraso_transporte', 'saida_autorizada', 'compensacao', 'hora_extra', 'outro',
+  'esquecimento', 'falha_registro', 'atestado', 'consulta',
+  'falta_justificada', 'saida_autorizada', 'compensacao', 'outro',
 ];
+// Motivos que saíram da lista: justificativas antigas continuam válidas
+// (e podem ser editadas sem trocar o motivo), mas não dá pra escolhê-los de novo.
+const TIPOS_JUSTIFICATIVA_ANTIGOS = ['trabalho_externo', 'atraso_transporte', 'hora_extra'];
+
+// Prazo para a pessoa justificar, contado a partir do fim do período
+// justificado (dia + horaFim). O ENG muda pela tela; sem nada salvo, 48 h.
+export const PRAZO_JUSTIFICATIVA_PADRAO_HORAS = 48;
+
+export function prazoJustificativaEncerrado(dia, horaFim, prazoHoras, agora = new Date()) {
+  const fim = dataLocalParaUtc(dia, horaFim);
+  return agora.getTime() > fim.getTime() + prazoHoras * 3600 * 1000;
+}
 
 const SETORES_ADMIN = ['ENG', 'DEV'];
 const ehAdmin = (quem) => SETORES_ADMIN.includes(quem?.setor);
 
-function validarTipoEMotivo(tipo, motivo) {
-  if (!TIPOS_JUSTIFICATIVA.includes(tipo)) throw new Error('Escolha o motivo da justificativa.');
-  if (tipo === 'outro' && !motivo) throw new Error('Explique o motivo quando escolher "Outro".');
+function validarTipoEMotivo(tipo, motivo, tipoAnterior = null) {
+  const antigoMantido = tipo === tipoAnterior && TIPOS_JUSTIFICATIVA_ANTIGOS.includes(tipo);
+  if (!TIPOS_JUSTIFICATIVA.includes(tipo) && !antigoMantido) throw new Error('Escolha o motivo da justificativa.');
+  if (tipo === 'outro' && !motivo) throw new Error('Escreva a descrição quando escolher "Outro".');
 }
 
 async function ensureStore() {
@@ -132,6 +146,10 @@ async function criarJustificativaImpl(dados, quem) {
     throw new Error('Preencha o dia e o período da justificativa.');
   }
   validarTipoEMotivo(tipo, motivo);
+  const prazoHoras = lerPrazoJustificativa(store);
+  if (!ehAdmin(quem) && HORA_REGEX.test(horaFim) && /^d{4}-d{2}-d{2}$/.test(dia) && prazoJustificativaEncerrado(dia, horaFim, prazoHoras)) {
+    throw new Error(`O prazo para justificar ${dia.split('-').reverse().join('/')} (${prazoHoras} h) já terminou. Fale com o ENG.`);
+  }
 
   const nova = {
     id: `just-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -189,6 +207,7 @@ async function atualizarJustificativaImpl(id, dados, quem) {
     validarTipoEMotivo(
       String(dados.tipo ?? existente.tipo ?? '').trim(),
       String(dados.motivo ?? existente.motivo ?? '').trim(),
+      existente.tipo,
     );
   }
 
@@ -284,5 +303,29 @@ export async function atualizarConfigFeriados(config) {
     store.feriados = validado;
     await writeStore(store);
     return validado;
+  });
+}
+
+// Regras do ponto que o ENG ajusta pela tela (por enquanto, só o prazo).
+function lerPrazoJustificativa(store) {
+  const valor = Number(store.regrasPonto?.prazoJustificativaHoras);
+  return Number.isFinite(valor) && valor > 0 ? valor : PRAZO_JUSTIFICATIVA_PADRAO_HORAS;
+}
+
+export async function obterRegrasPonto() {
+  const store = await comFila(readStore);
+  return { prazoJustificativaHoras: lerPrazoJustificativa(store) };
+}
+
+export async function atualizarRegrasPonto(dados = {}) {
+  const prazo = Number(dados.prazoJustificativaHoras);
+  if (!Number.isInteger(prazo) || prazo < 1 || prazo > 24 * 60) {
+    throw new Error('O prazo precisa ser um número inteiro de horas (de 1 a 1440).');
+  }
+  return comFila(async () => {
+    const store = await readStore();
+    store.regrasPonto = { ...(store.regrasPonto || {}), prazoJustificativaHoras: prazo };
+    await writeStore(store);
+    return { prazoJustificativaHoras: prazo };
   });
 }
