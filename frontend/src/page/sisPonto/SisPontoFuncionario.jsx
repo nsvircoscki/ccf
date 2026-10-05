@@ -401,7 +401,7 @@ function lerArquivoComoDataUrl(arquivo) {
 // Dá para justificar um item só ou marcar vários e enviar de uma vez com o
 // mesmo motivo — vira uma justificativa por item, e o ENG decide cada uma.
 function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas, onAtualizado, pendenciaSugerida, pendenciaRefazerSugerida, compacto = false, itensPendentes = [] }) {
-  const [secao, setSecao] = useState(compacto ? 'pendentes' : 'nova');
+  const [secao, setSecao] = useState('pendentes');
   const [selecionados, setSelecionados] = useState(() => new Set());
   // lote = itens marcados sendo justificados juntos (null = formulário de um dia só).
   const [lote, setLote] = useState(null);
@@ -606,22 +606,21 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
     }
   };
 
-  const mostrarForm = !compacto || secao === 'nova';
-  const mostrarPendentes = compacto ? secao === 'pendentes' : itensPendentes.length > 0;
-  const mostrarLista = !compacto || secao === 'minhas';
+  // Pendentes / Nova / Minhas: uma seção de cada vez (computador e celular).
+  const mostrarForm = secao === 'nova';
+  const mostrarPendentes = secao === 'pendentes';
+  const mostrarLista = secao === 'minhas';
   const rotulo = { display: 'grid', gap: 5, fontSize: 11, fontWeight: 800, color: '#7183a3' };
   const campo = { height: 40, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 10px', fontSize: 13, fontWeight: 700, color: '#405371', minWidth: 0, width: '100%', boxSizing: 'border-box', background: '#fff' };
   const abaSecao = (ativa) => ({ flex: 1, border: 0, borderRadius: 8, padding: '9px 6px', background: ativa ? '#fff' : 'transparent', color: ativa ? '#1767e8' : '#5b6d89', fontSize: 12, fontWeight: 800, cursor: 'pointer', boxShadow: ativa ? '0 1px 4px rgba(15,35,70,.12)' : 'none' });
 
   return (
     <div style={{ display: 'grid', gap: compacto ? 12 : 16 }}>
-      {compacto && (
-        <div role="tablist" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 10, background: '#eaf0f8' }}>
-          <button type="button" role="tab" aria-selected={secao === 'pendentes'} onClick={() => setSecao('pendentes')} style={abaSecao(secao === 'pendentes')}>Pendentes ({itensAbertos.length})</button>
-          <button type="button" role="tab" aria-selected={secao === 'nova'} onClick={() => setSecao('nova')} style={abaSecao(secao === 'nova')}>{editandoId ? 'Refazer' : lote ? `Justificar (${lote.length})` : 'Nova'}</button>
-          <button type="button" role="tab" aria-selected={secao === 'minhas'} onClick={() => setSecao('minhas')} style={abaSecao(secao === 'minhas')}>Minhas ({minhasJustificativas.length})</button>
-        </div>
-      )}
+      <div role="tablist" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 10, background: '#eaf0f8', maxWidth: compacto ? undefined : 560 }}>
+        <button type="button" role="tab" aria-selected={secao === 'pendentes'} onClick={() => setSecao('pendentes')} style={abaSecao(secao === 'pendentes')}>Pendentes ({itensAbertos.length})</button>
+        <button type="button" role="tab" aria-selected={secao === 'nova'} onClick={() => setSecao('nova')} style={abaSecao(secao === 'nova')}>{editandoId ? 'Refazer' : lote ? `Justificar (${lote.length})` : 'Nova'}</button>
+        <button type="button" role="tab" aria-selected={secao === 'minhas'} onClick={() => setSecao('minhas')} style={abaSecao(secao === 'minhas')}>Minhas ({minhasJustificativas.length})</button>
+      </div>
       {mostrarPendentes && <Card style={{ padding: compacto ? 14 : 22 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div>
@@ -646,7 +645,7 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
           ))}
         </div>
         {selecionados.size > 0 && <button type="button" onClick={justificarSelecionados} style={{ marginTop: 12, width: compacto ? '100%' : undefined, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, border: 0, borderRadius: 9, padding: '11px 16px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: 'pointer' }}><CheckSquare size={15} /> Justificar selecionados ({selecionados.size})</button>}
-        {compacto && <button type="button" onClick={() => { cancelarEdicao(); setSecao('nova'); }} style={{ marginTop: 10, width: '100%', border: '1px solid #d8e4f3', borderRadius: 9, padding: '10px 14px', background: '#fff', color: '#52637f', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Nova justificativa avulsa</button>}
+        <button type="button" onClick={() => { cancelarEdicao(); setSecao('nova'); }} style={{ marginTop: 10, marginLeft: compacto || selecionados.size === 0 ? 0 : 8, width: compacto ? '100%' : undefined, border: '1px solid #d8e4f3', borderRadius: 9, padding: '10px 14px', background: '#fff', color: '#52637f', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Nova justificativa avulsa</button>
       </Card>}
 
       {mostrarForm && <Card style={{ padding: compacto ? 16 : 26 }}>
