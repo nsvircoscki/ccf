@@ -51,11 +51,11 @@ async function garantirEmailLivre(email, idAtual = null) {
 }
 
 async function listar() {
-  const usuarios = await prisma.user.findMany({
-    include: { role: true },
-    orderBy: [{ ativo: 'desc' }, { role: { name: 'asc' } }, { name: 'asc' }],
-  });
-  return usuarios.map(paraResposta);
+  const usuarios = await prisma.user.findMany({ include: { role: true } });
+  // Ativos primeiro; dentro de cada grupo, ordem alfabética pelo nome.
+  return usuarios
+    .sort((a, b) => Number(b.ativo) - Number(a.ativo) || a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
+    .map(paraResposta);
 }
 
 // A senha inicial é obrigatória e definida por quem cadastra: uma conta sem

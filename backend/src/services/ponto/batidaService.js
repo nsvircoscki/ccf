@@ -31,9 +31,9 @@ export async function listarFuncionarios() {
   const users = await prisma.user.findMany({
     where: { ativo: true, registraPonto: true },
     include: { role: true },
-    orderBy: [{ role: { name: 'asc' } }, { name: 'asc' }],
   });
-  return users.map(paraFuncionario);
+  // Ordem alfabética pelo nome, com acento no lugar certo (Á junto do A).
+  return users.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })).map(paraFuncionario);
 }
 
 // Pela tela de jornada só muda a jornada e horista/mensalista; nome, setor e
