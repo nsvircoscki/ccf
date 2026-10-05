@@ -214,6 +214,20 @@ export const api = {
         return res.json();
     },
 
+    // Correção pelo ENG: inclui uma batida { funcionarioId, tipo: 'ENTRADA'|'SAIDA', batidoEm }.
+    inserirSispontoAjuste: async (dados) => {
+        const res = await req(`${BASE_URL}/sis-ponto/batidas/ajuste`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao incluir batida.');
+        }
+        return res.json();
+    },
+
     deleteSispontoRegistro: async (dados) => {
         const res = await req(`${BASE_URL}/sis-ponto/registros`, {
             method: 'DELETE',

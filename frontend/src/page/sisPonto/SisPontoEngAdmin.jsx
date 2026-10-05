@@ -86,6 +86,13 @@ export default function SisPontoEngAdminScreen({ destino }) {
     if (!expectativas.length) return [indice % 2 === 0 ? 'Entrada' : 'Saída', null];
     return expectativas[indice % expectativas.length];
   };
+  // Horário digitado é o horário local do dia corrigido.
+  const incluirBatidaEng = async ({ tipo, horario }) => {
+    const [ano, mesNumero, diaNumero] = diaCorrecao.split('-').map(Number);
+    const [h, m] = horario.split(':').map(Number);
+    await api.inserirSispontoAjuste({ funcionarioId: calendarioFuncionarioId, tipo, batidoEm: new Date(ano, mesNumero - 1, diaNumero, h, m).toISOString() });
+    await carregarRegistros();
+  };
   const excluirBatidaEng = (indice) => {
     const tempo = registrosCorrecao[indice];
     if (!tempo) return;
@@ -603,7 +610,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
                                 {itens.slice(0, 4).map((registro, registroIndex) => <span key={registro.toISOString()} className={`sis-eng-calendar-entry ${statusItens[registroIndex] === 'Atrasado/Saída Antecipada' ? 'late' : statusItens[registroIndex] === 'Justificado' ? 'justified' : ''}`}><LogIn size={11} style={registroIndex % 2 ? { transform: 'rotate(180deg)' } : undefined} />{hora(registro).slice(0, 5)}</span>)}
                                 {horariosPreenchidos.map((horarioJustificado, indexHorario) => { if (!horarioJustificado || indexHorario < itens.length) return null; const entradaTipo = horariosDia[indexHorario][0] === 'Entrada'; return <span key={`justificado-${chave}-${indexHorario}`} className="sis-eng-calendar-entry justified" style={{ fontStyle: 'italic' }} title="Preenchido pela justificativa aprovada"><LogIn size={11} style={entradaTipo ? undefined : { transform: 'rotate(180deg)' }} />{horarioJustificado}</span>; })}
                               </div>}
-                              {itens.length > 0 && <button type="button" onClick={(evento) => { evento.stopPropagation(); setDiaCorrecao(chave); }} style={{ marginTop: 4, padding: '2px 6px', border: '1px solid #d8e6fc', borderRadius: 6, background: '#fff', color: '#1767e8', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>Corrigir</button>}
+                              {pertenceAoMes && chave <= chaveData(new Date()) && calendarioFuncionarioId && <button type="button" onClick={(evento) => { evento.stopPropagation(); setDiaCorrecao(chave); }} style={{ marginTop: 4, padding: '2px 6px', border: '1px solid #d8e6fc', borderRadius: 6, background: '#fff', color: '#1767e8', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>Corrigir</button>}
                               {temAtraso && <div className="sis-eng-calendar-status">Atrasado/Saída Antecipada</div>}
                               {!temAtraso && temJustificado && <div className="sis-eng-calendar-status" style={{ color: temJustificadoPendente ? '#b9770e' : '#3177dd' }}>Justificado</div>}
                             </motion.div>;
@@ -658,6 +665,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
         statusRegistro={(registro, indice, lista) => statusRegistroEng(new Date(registro), indice, lista, diaCorrecao)}
         horarioEsperado={horarioEsperadoCorrecao}
         onExcluir={excluirBatidaEng}
+        onAdicionar={incluirBatidaEng}
         onClose={() => setDiaCorrecao(null)}
       />}
       {confirmacaoModal && <ConfirmacaoPonto {...confirmacaoModal} onClose={() => setConfirmacaoModal(null)} />}

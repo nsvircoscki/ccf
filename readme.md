@@ -211,7 +211,7 @@ O banco de horas é acumulado no mês e só conta dias já encerrados. Para cada
 - **Horista** não tem banco.
 - O banco só conta a partir de `User.pontoDesde`.
 
-**Só o ENG corrige (exclui) batidas**, pelo botão "Corrigir" no calendário do painel. O funcionário que errou envia uma justificativa.
+**Só o ENG corrige batidas**, pelo botão "Corrigir" em cada dia do calendário do painel: exclui batidas erradas e inclui as que faltaram (ficam com origem `AJUSTE` e o registro de qual ENG incluiu). Incluir uma batida no horário de um previsto pendente resolve o previsto. O funcionário que errou envia uma justificativa.
 
 ## Deploy com HTTPS (necessário para o ponto offline)
 

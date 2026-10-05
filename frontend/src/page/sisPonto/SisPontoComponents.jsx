@@ -123,4 +123,37 @@ export function BancoHoras({ itens = [], rotulo = '' }) {
   </Card>;
 }
 
-export function ModalRegistros({ registros, statusRegistro, horarioEsperado, onExcluir, onClose, titulo = 'Registros de hoje' }) { return <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 20, background: 'rgba(15,30,55,.42)', zIndex: 80 }}><motion.section initial={{ opacity: 0, scale: .96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} role="dialog" aria-modal="true" aria-label={titulo} onMouseDown={(event) => event.stopPropagation()} style={{ width: 'min(440px, 100%)', background: '#fff', borderRadius: 16, padding: 22, boxShadow: '0 22px 60px rgba(0,0,0,.25)' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}><div><h2 style={{ margin: 0, fontSize: 18 }}>{titulo}</h2><p style={{ margin: '4px 0 16px', color: '#7183a3', fontSize: 12 }}>Lapso temporal da sua jornada</p></div><button type="button" onClick={onClose} aria-label="Fechar" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button></div>{registros.map((registro, indice) => { const status = statusRegistro(registro, indice, registros); const previsto = horarioEsperado(indice, registros)[1]; return <div key={registro} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid #edf1f6' }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: status === 'Normal' ? (indice % 2 ? '#ef5350' : '#38bc7b') : '#ffb24a' }} /><div style={{ flex: 1 }}><strong>{indice % 2 ? 'Saída' : 'Entrada'}</strong><div style={{ marginTop: 2, color: status === 'Normal' ? '#7183a3' : '#d97706', fontSize: 11, fontWeight: 700 }}>{status}{previsto ? ` · previsto ${previsto}` : ''}</div></div><span style={{ color: '#4e607e', fontWeight: 700 }}>{hora(new Date(registro))}</span>{onExcluir && <button type="button" onClick={() => onExcluir(indice)} aria-label={`Excluir registro de ${indice % 2 ? 'saída' : 'entrada'}`} title="Excluir registro" style={{ border: 0, borderRadius: 7, background: '#fff0f1', color: '#e5484d', padding: 7, cursor: 'pointer', display: 'grid', placeItems: 'center' }}><Trash2 size={15} /></button>}</div>; })}<p style={{ margin: '16px 0 0', padding: 12, background: '#f4f8ff', borderRadius: 9, color: '#42618d', fontSize: 12, fontWeight: 700 }}>Os intervalos e o total trabalhado são calculados a partir da entrada, intervalo, retorno e saída do dia.</p></motion.section></motion.div>; }
+// Inclusão de batida pelo ENG dentro do "Corrigir". O tipo sugerido segue a
+// alternância (depois de uma entrada, uma saída) e o horário é o da jornada.
+function FormAdicionarBatida({ onAdicionar, tipoSugerido, horaSugerida }) {
+  const [tipo, setTipo] = useState(tipoSugerido);
+  const [horario, setHorario] = useState(horaSugerida || '');
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState(null);
+  const enviar = async () => {
+    if (!/^\d{2}:\d{2}$/.test(horario)) { setErro('Informe o horário.'); return; }
+    setEnviando(true);
+    setErro(null);
+    try {
+      await onAdicionar({ tipo, horario });
+      setHorario('');
+    } catch (e) {
+      setErro(e?.message || 'Não foi possível incluir a batida.');
+    } finally {
+      setEnviando(false);
+    }
+  };
+  const campo = { height: 36, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 8px', fontSize: 13, fontWeight: 700, color: '#405371', background: '#fff' };
+  return <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: '#f6faff', border: '1px solid #e2ebf8' }}>
+    <div style={{ fontSize: 11, fontWeight: 800, color: '#7183a3', marginBottom: 8 }}>INCLUIR BATIDA</div>
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={campo}><option value="ENTRADA">Entrada</option><option value="SAIDA">Saída</option></select>
+      <input type="time" value={horario} onChange={(e) => setHorario(e.target.value)} style={campo} />
+      <button type="button" disabled={enviando} onClick={enviar} style={{ border: 0, borderRadius: 8, padding: '0 14px', height: 36, background: '#1767e8', color: '#fff', fontSize: 12, fontWeight: 800, cursor: enviando ? 'default' : 'pointer', opacity: enviando ? .7 : 1 }}>{enviando ? 'Incluindo...' : 'Incluir'}</button>
+    </div>
+    {erro && <div style={{ marginTop: 8, color: '#c23b34', fontSize: 12, fontWeight: 700 }}>{erro}</div>}
+    <p style={{ margin: '8px 0 0', color: '#7183a3', fontSize: 11, fontWeight: 600 }}>A batida fica registrada como ajuste do ENG.</p>
+  </div>;
+}
+
+export function ModalRegistros({ registros, statusRegistro, horarioEsperado, onExcluir, onAdicionar, onClose, titulo = 'Registros de hoje' }) { return <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 20, background: 'rgba(15,30,55,.42)', zIndex: 80 }}><motion.section initial={{ opacity: 0, scale: .96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} role="dialog" aria-modal="true" aria-label={titulo} onMouseDown={(event) => event.stopPropagation()} style={{ width: 'min(440px, 100%)', background: '#fff', borderRadius: 16, padding: 22, boxShadow: '0 22px 60px rgba(0,0,0,.25)' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}><div><h2 style={{ margin: 0, fontSize: 18 }}>{titulo}</h2><p style={{ margin: '4px 0 16px', color: '#7183a3', fontSize: 12 }}>Lapso temporal da sua jornada</p></div><button type="button" onClick={onClose} aria-label="Fechar" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button></div>{registros.map((registro, indice) => { const status = statusRegistro(registro, indice, registros); const previsto = horarioEsperado(indice, registros)[1]; return <div key={registro} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid #edf1f6' }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: status === 'Normal' ? (indice % 2 ? '#ef5350' : '#38bc7b') : '#ffb24a' }} /><div style={{ flex: 1 }}><strong>{indice % 2 ? 'Saída' : 'Entrada'}</strong><div style={{ marginTop: 2, color: status === 'Normal' ? '#7183a3' : '#d97706', fontSize: 11, fontWeight: 700 }}>{status}{previsto ? ` · previsto ${previsto}` : ''}</div></div><span style={{ color: '#4e607e', fontWeight: 700 }}>{hora(new Date(registro))}</span>{onExcluir && <button type="button" onClick={() => onExcluir(indice)} aria-label={`Excluir registro de ${indice % 2 ? 'saída' : 'entrada'}`} title="Excluir registro" style={{ border: 0, borderRadius: 7, background: '#fff0f1', color: '#e5484d', padding: 7, cursor: 'pointer', display: 'grid', placeItems: 'center' }}><Trash2 size={15} /></button>}</div>; })}{!registros.length && <p style={{ margin: '4px 0 0', color: '#7183a3', fontSize: 12, fontWeight: 700 }}>Nenhuma batida neste dia.</p>}{onAdicionar && <FormAdicionarBatida key={registros.length} onAdicionar={onAdicionar} tipoSugerido={registros.length % 2 ? 'SAIDA' : 'ENTRADA'} horaSugerida={horarioEsperado(registros.length, registros)[1]} />}<p style={{ margin: '16px 0 0', padding: 12, background: '#f4f8ff', borderRadius: 9, color: '#42618d', fontSize: 12, fontWeight: 700 }}>Os intervalos e o total trabalhado são calculados a partir da entrada, intervalo, retorno e saída do dia.</p></motion.section></motion.div>; }

@@ -305,7 +305,42 @@ export async function remover({ funcionarioId, tempo }, quem) {
     await tx.pontoBatida.update({ where: { id: batida.id }, data: { removidoEm: new Date(), removidoPorId: quem.id } });
     await reclassificar(funcionarioId, [batidoEm], tx);
   });
+  // Sem a batida, o horário da jornada pode voltar a ficar "sem batida".
+  await gerarPrevistas();
   return { ok: true };
+}
+
+// Inclusão de batida pelo ENG (correção). Fica marcada como origem "AJUSTE",
+// com quem incluiu (registradoPorId) e quando (recebidoEm), para nunca se
+// confundir com uma marcação feita pela própria pessoa no aparelho.
+export async function inserirAjuste({ funcionarioId, tipo, batidoEm }, quem) {
+  if (!podeCorrigirPonto(quem)) throw new Error('Só o ENG pode corrigir batidas.');
+  const tipoNormalizado = normalizarTipo(tipo);
+  if (!tipoNormalizado) throw new Error('Tipo deve ser ENTRADA ou SAIDA.');
+  const quando = new Date(batidoEm);
+  if (Number.isNaN(quando.getTime())) throw new Error('Horário inválido.');
+  if (quando.getTime() > Date.now() + 5 * 60 * 1000) throw new Error('Não dá para incluir batida no futuro.');
+
+  const alvo = await prisma.user.findUnique({ where: { id: String(funcionarioId || '') } });
+  if (!alvo || !alvo.ativo || !alvo.registraPonto) throw new Error('Funcionário inexistente, inativo ou sem registro de ponto.');
+
+  const criada = await prisma.$transaction(async (tx) => {
+    const nova = await tx.pontoBatida.create({
+      data: {
+        clientId: `ajuste:${randomUUID()}`,
+        userId: alvo.id,
+        tipo: tipoNormalizado,
+        batidoEm: quando,
+        origem: 'AJUSTE',
+        registradoPorId: quem.id,
+      },
+    });
+    await reclassificar(alvo.id, [quando], tx);
+    return nova;
+  });
+  // Se cobriu um horário previsto ainda pendente, ele sai sozinho.
+  await gerarPrevistas();
+  return { id: criada.id, batidoEm: criada.batidoEm.toISOString(), tipo: criada.tipo };
 }
 
 // --- Export pro PC da folha ----------------------------------------------

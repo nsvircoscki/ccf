@@ -1,7 +1,7 @@
 import express from 'express';
 import { exigirSetor } from '../middlewares/autenticar.js';
 import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario } from '../services/sisPontoService.js';
-import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover } from '../services/ponto/batidaService.js';
+import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste } from '../services/ponto/batidaService.js';
 import { interpretarPeriodo } from '../services/ponto/exportCsv.js';
 
 const router = express.Router();
@@ -68,6 +68,15 @@ router.delete('/registros', async (req, res) => {
     res.json({ ok: true });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Erro ao excluir registro.' });
+  }
+});
+
+// Correção pelo ENG: inclui uma batida { funcionarioId, tipo, batidoEm }.
+router.post('/batidas/ajuste', exigirSetor('ENG'), async (req, res) => {
+  try {
+    res.status(201).json(await inserirAjuste(req.body || {}, req.usuario));
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao incluir batida.' });
   }
 });
 
