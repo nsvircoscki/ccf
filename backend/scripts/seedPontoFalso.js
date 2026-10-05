@@ -14,7 +14,8 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../src/prisma.js';
 import { classificarSequencia, chaveDiaLocal, dataLocalParaUtc, horariosPrevistos } from '../src/services/ponto/sequencia.js';
 import { gerarPrevistas } from '../src/services/ponto/batidaService.js';
-import { listarPadroesHorario, listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa } from '../src/services/sisPontoService.js';
+import { listarPadroesHorario, listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, obterConfigFeriados } from '../src/services/sisPontoService.js';
+import { mapaFeriados } from '../src/services/ponto/feriados.js';
 
 const DOMINIO = '@exemplo.test';
 const SENHA = 'teste123';
@@ -88,6 +89,7 @@ async function remover() {
 async function criar() {
   await remover();
   const padroes = await listarPadroesHorario();
+  const configFeriados = await obterConfigFeriados();
   const roles = new Map((await prisma.role.findMany()).map((r) => [r.name, r.id]));
   const senha = await bcrypt.hash(SENHA, 10);
   const agora = new Date();
@@ -95,6 +97,7 @@ async function criar() {
   const inicio = new Date(agora.getTime() - DIAS_DE_HISTORICO * UM_DIA);
   const dias = [];
   for (let t = inicio.getTime(); chaveDiaLocal(new Date(t)) < hoje; t += UM_DIA) dias.push(chaveDiaLocal(new Date(t)));
+  const feriados = mapaFeriados(dias.map((d) => d.slice(0, 4)), configFeriados);
   const ultimoDiaUtil = [...dias].reverse().find((d) => horariosPrevistos(padroes.integral, d).length);
 
   for (const pessoa of PESSOAS) {
@@ -116,7 +119,7 @@ async function criar() {
     for (const dia of dias) {
       const rnd = aleatorio(`${pessoa.login}:${dia}`);
       const previstos = horariosPrevistos(padroes[pessoa.padrao || 'integral'], dia);
-      if (!previstos.length) continue; // fim de semana
+      if (!previstos.length || feriados.has(dia)) continue; // fim de semana ou feriado
       const doDia = pessoa.horista ? batidasHorista(rnd) : batidasDoDia(pessoa, previstos, rnd, dia === ultimoDiaUtil);
       doDia.forEach((b, i) => {
         const batidoEm = dataLocalParaUtc(dia, b.hora);

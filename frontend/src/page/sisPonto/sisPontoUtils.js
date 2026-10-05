@@ -411,7 +411,8 @@ export function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Dat
 // pelo ENG) não conta em dobro. Dia sem jornada (fim de semana) que teve
 // trabalho vira crédito. Horista e quem não tem jornada não têm banco (null).
 // Só conta a partir de `funcionario.pontoDesde` (quando passou a registrar ponto).
-export function calcularBancoHoras(funcionario, registrosBlob = {}, padroes = {}, justificativas = [], mesRef = new Date(), hoje = chaveData(new Date())) {
+// Feriado (feriados: Map 'YYYY-MM-DD' -> nome) não tem jornada: trabalho no dia vira crédito.
+export function calcularBancoHoras(funcionario, registrosBlob = {}, padroes = {}, justificativas = [], mesRef = new Date(), hoje = chaveData(new Date()), feriados = new Map()) {
   const resultado = { trabalhado: 0, creditos: 0, debitos: 0, saldo: 0, dias: [] };
   const semBanco = !funcionario || ehHorista(funcionario) || !funcionario.padraoHorarioId || !padroes[funcionario.padraoHorarioId];
   const desde = funcionario?.pontoDesde ? chaveData(new Date(funcionario.pontoDesde)) : null;
@@ -427,7 +428,7 @@ export function calcularBancoHoras(funcionario, registrosBlob = {}, padroes = {}
     resultado.trabalhado += trabalhado;
     if (semBanco) continue;
 
-    const previsto = minutosPrevistos(expectativasDoFuncionario(funcionario, padroes, data) || []);
+    const previsto = feriados.has(dia) ? 0 : minutosPrevistos(expectativasDoFuncionario(funcionario, padroes, data) || []);
     const justificado = justificativas
       .filter((j) => j.status === 'Aceita' && j.funcionarioId === funcionario.id && j.dia === dia)
       .reduce((soma, j) => soma + Math.max(0, minutoDoHorario(j.horaFim) - minutoDoHorario(j.horaInicio)), 0);
@@ -443,6 +444,18 @@ export function calcularBancoHoras(funcionario, registrosBlob = {}, padroes = {}
 
   return semBanco ? { ...resultado, semBanco: true } : resultado;
 }
+
+// Feriados de um ano (cache da sessão, para o calendário e o banco de horas).
+const feriadosPorAno = new Map();
+export function carregarFeriados(api, ano) {
+  if (!feriadosPorAno.has(ano)) {
+    feriadosPorAno.set(ano, api.getSispontoFeriados([ano])
+      .then((dados) => new Map((dados.feriados || []).map((f) => [f.dia, f.nome])))
+      .catch(() => { feriadosPorAno.delete(ano); return new Map(); }));
+  }
+  return feriadosPorAno.get(ano);
+}
+export const esquecerFeriadosCarregados = () => feriadosPorAno.clear();
 
 export function formatSaldoMinutos(minutos = 0) {
   const sinal = minutos < 0 ? '-' : '+';

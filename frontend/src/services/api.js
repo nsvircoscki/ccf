@@ -214,6 +214,30 @@ export const api = {
         return res.json();
     },
 
+    // Feriados dos anos pedidos + configuração da empresa: { config, feriados: [{ dia, nome, tipo }] }.
+    getSispontoFeriados: async (anos) => {
+        const res = await req(`${BASE_URL}/sis-ponto/feriados?anos=${anos.join(',')}`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao carregar feriados.');
+        }
+        return res.json();
+    },
+
+    // Só o ENG: { carnaval, corpusChristi, extras: [{ data: 'MM-DD' | 'AAAA-MM-DD', nome, tipo }] }.
+    salvarSispontoFeriados: async (config) => {
+        const res = await req(`${BASE_URL}/sis-ponto/feriados`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao salvar feriados.');
+        }
+        return res.json();
+    },
+
     // CSV do mês no formato do Sistema Ponto (mesmo do /export.csv), pela sessão do ENG.
     baixarSispontoFolhaCsv: async (mes) => {
         const res = await req(`${BASE_URL}/sis-ponto/folha.csv?mes=${encodeURIComponent(mes)}`);

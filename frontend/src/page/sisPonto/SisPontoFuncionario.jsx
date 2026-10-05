@@ -5,7 +5,7 @@ import { api } from '../../services/api';
 import { useEhCelular } from '../../hooks/useEhCelular';
 import { registrarBatida, pendentesDoFuncionario, inscrever, obterEstado, sincronizarPendentes } from '../../services/pontoOffline.js';
 import { meses, diasSemana, JUSTIFICATIVA_CORES, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_TIPOS, rotuloTipoJustificativa } from './sisPontoData.js';
-import { chaveData, hora, calcularBancoHoras, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, pendenciasDeJustificativa, ehHorista } from './sisPontoUtils.js';
+import { chaveData, hora, calcularBancoHoras, carregarFeriados, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, pendenciasDeJustificativa, ehHorista } from './sisPontoUtils.js';
 import { Card, ConfirmacaoPonto, BancoHoras, Legenda, MenuPonto, ModalRegistros, Resumo, navButton } from './SisPontoComponents.jsx';
 import './sisPonto.css';
 
@@ -95,6 +95,14 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
     .catch(() => setJustificativas([]));
   useEffect(() => { carregarJustificativas(); }, [funcionarioAtual?.id, aba]);
   const carregarPendentes = () => pendentesDoFuncionario(funcionarioAtual?.id || usuarioLogado).then(setPendentesLocais).catch(() => {});
+  // Feriados do ano exibido (calendário e banco de horas).
+  const [feriados, setFeriados] = useState(new Map());
+  const anoExibido = mes.getFullYear();
+  useEffect(() => {
+    let ativo = true;
+    carregarFeriados(api, anoExibido).then((mapa) => { if (ativo) setFeriados(mapa); });
+    return () => { ativo = false; };
+  }, [anoExibido]);
   // Batidas que o ENG incluiu no meu ponto (iso -> { motivo, por }): aparecem marcadas.
   const [ajustes, setAjustes] = useState(new Map());
   const carregarRegistros = () => {
@@ -200,7 +208,7 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
   const idFuncionarioAtual = funcionarioAtual?.id || usuarioLogado;
   // Banco de horas acumulado do mês exibido no calendário (no máximo 31 dias:
   // barato o bastante para recalcular a cada render).
-  const bancoDoMes = calcularBancoHoras(funcionarioAtual, registros, padroesHorario, justificativas, mes, hoje);
+  const bancoDoMes = calcularBancoHoras(funcionarioAtual, registros, padroesHorario, justificativas, mes, hoje, feriados);
   // Todo atraso/saída antecipada (em qualquer mês, não só o exibido no
   // calendário), do mais antigo pro mais recente. O badge da aba
   // "Justificativas" conta só quem ainda não teve NENHUMA justificativa
@@ -265,7 +273,7 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
         <div style={{ padding: '4px 14px 14px' }}>
           {abaCelular === 'ponto'
             ? cartaoRegistrar
-            : <SisPontoJustificativaForm funcionarioId={funcionarioAtual?.id || usuarioLogado} nome={funcionarioAtual?.nome || usuarioLogado} setor={usuarioLogado} justificativas={justificativas} onAtualizado={carregarJustificativas} pendenciaSugerida={pendenciaSugerida} pendenciaRefazerSugerida={pendenciasRefazer[0] || null} />}
+            : <SisPontoJustificativaForm compacto funcionarioId={funcionarioAtual?.id || usuarioLogado} nome={funcionarioAtual?.nome || usuarioLogado} setor={usuarioLogado} justificativas={justificativas} onAtualizado={carregarJustificativas} pendenciaSugerida={pendenciaSugerida} pendenciaRefazerSugerida={pendenciasRefazer[0] || null} />}
         </div>
         <nav aria-label="Seções do ponto" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 90, display: 'flex', background: '#fff', borderTop: '1px solid #e2ebf8', boxShadow: '0 -6px 18px rgba(15,35,70,.06)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <button type="button" onClick={() => setAba('calendario')} aria-current={abaCelular === 'ponto' ? 'page' : undefined} style={botaoAba(abaCelular === 'ponto')}>
@@ -336,6 +344,7 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
                     {horariosPreenchidos.map((horarioJustificado, index) => { if (!horarioJustificado || index < itens.length) return null; const tipo = horariosDia.length ? horariosDia[index % horariosDia.length][0] : (index % 2 === 0 ? 'Entrada' : 'Saída'); const entrada = tipo === 'Entrada'; return <span key={`justificado-${chave}-${index}`} title={`${tipo} ${horarioJustificado} · preenchido pela justificativa aprovada`} style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, fontSize: 11, fontWeight: 800, fontStyle: 'italic', color: '#2f5bd6' }}><LogIn size={12} style={entrada ? undefined : { transform: 'rotate(180deg)' }} /><span>{horarioJustificado}</span></span>; })}
                   </div>}
                   {itens.length > 4 && <button type="button" onClick={() => { setDiaModal(chave); setModalRegistros(true); }} style={{ marginTop: 6, padding: 0, border: 0, background: 'transparent', color: '#1767e8', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>+{itens.length - 4} registros</button>}
+                  {feriados.get(chave) && <div title="Feriado" style={{ marginTop: 5, color: '#8e9bb0', fontSize: 10, fontWeight: 800 }}>{feriados.get(chave)}</div>}
                   {temAtraso && <div style={{ marginTop: 5, color: '#d97706', fontSize: 10, fontWeight: 800 }}>Atrasado/Saída Antecipada</div>}
                   {!temAtraso && temJustificado && <div style={{ marginTop: 5, color: temJustificadoPendente ? '#b9770e' : '#2f5bd6', fontSize: 10, fontWeight: 800 }}>Justificado</div>}
                 </motion.div>;
@@ -378,7 +387,10 @@ function lerArquivoComoDataUrl(arquivo) {
   });
 }
 
-function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas, onAtualizado, pendenciaSugerida, pendenciaRefazerSugerida }) {
+// compacto (celular): "Nova" e "Minhas" viram duas seções alternadas, com o
+// formulário mais enxuto — a tela inteira caberia em poucos celulares.
+function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas, onAtualizado, pendenciaSugerida, pendenciaRefazerSugerida, compacto = false }) {
+  const [secao, setSecao] = useState('nova');
   const [form, setForm] = useState(formularioJustificativaVazio);
   const [anexo, setAnexo] = useState(null);
   const [anexoExistente, setAnexoExistente] = useState(null);
@@ -442,6 +454,7 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
   };
 
   const refazer = (justificativa) => {
+    setSecao('nova');
     setEditandoId(justificativa.id);
     setForm({ dia: justificativa.dia, horaInicio: justificativa.horaInicio, horaFim: justificativa.horaFim, tipo: justificativa.tipo || '', motivo: justificativa.motivo });
     setAnexo(null);
@@ -517,11 +530,24 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
     }
   };
 
+  const mostrarForm = !compacto || secao === 'nova';
+  const mostrarLista = !compacto || secao === 'minhas';
+  const rotulo = { display: 'grid', gap: 5, fontSize: 11, fontWeight: 800, color: '#7183a3' };
+  const campo = { height: 40, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 10px', fontSize: 13, fontWeight: 700, color: '#405371', minWidth: 0, width: '100%', boxSizing: 'border-box', background: '#fff' };
+  const abaSecao = (ativa) => ({ flex: 1, border: 0, borderRadius: 8, padding: '9px 6px', background: ativa ? '#fff' : 'transparent', color: ativa ? '#1767e8' : '#5b6d89', fontSize: 12, fontWeight: 800, cursor: 'pointer', boxShadow: ativa ? '0 1px 4px rgba(15,35,70,.12)' : 'none' });
+
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <Card style={{ padding: 26 }}>
-        <h2 style={{ margin: 0, fontSize: 20 }}>{editandoId ? 'Refazer justificativa' : 'Nova justificativa'}</h2>
-        <p style={{ margin: '6px 0 20px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Explique uma ausência, atraso ou saída antecipada e, se tiver, anexe o atestado.</p>
+    <div style={{ display: 'grid', gap: compacto ? 12 : 16 }}>
+      {compacto && (
+        <div role="tablist" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 10, background: '#eaf0f8' }}>
+          <button type="button" role="tab" aria-selected={secao === 'nova'} onClick={() => setSecao('nova')} style={abaSecao(secao === 'nova')}>{editandoId ? 'Refazer' : 'Nova'}</button>
+          <button type="button" role="tab" aria-selected={secao === 'minhas'} onClick={() => setSecao('minhas')} style={abaSecao(secao === 'minhas')}>Minhas ({minhasJustificativas.length})</button>
+        </div>
+      )}
+      {mostrarForm && <Card style={{ padding: compacto ? 16 : 26 }}>
+        <h2 style={{ margin: 0, fontSize: compacto ? 16 : 20 }}>{editandoId ? 'Refazer justificativa' : 'Nova justificativa'}</h2>
+        {!compacto && <p style={{ margin: '6px 0 20px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Explique uma ausência, atraso ou saída antecipada e, se tiver, anexe o atestado.</p>}
+        {compacto && <div style={{ height: 12 }} />}
         {justificativaEmEdicao && (justificativaEmEdicao.status === 'Recusada' || justificativaEmEdicao.status === 'Inválida') && (
           <div style={{ marginBottom: 16, padding: '10px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: '#fff4f3', color: '#c23b34' }}>
             {justificativaEmEdicao.status === 'Recusada'
@@ -535,15 +561,15 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
-          <label style={{ display: 'grid', gap: 5, fontSize: 11, fontWeight: 800, color: '#7183a3' }}>Dia a justificar
-            <input type="date" value={form.dia} onChange={(event) => setForm((atual) => ({ ...atual, dia: event.target.value }))} style={{ height: 40, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 10px', fontSize: 13, fontWeight: 700, color: '#405371' }} />
+        <div style={{ display: 'grid', gridTemplateColumns: compacto ? '1fr 1fr' : 'repeat(auto-fit, minmax(160px, 1fr))', gap: compacto ? 10 : 12 }}>
+          <label style={{ ...rotulo, gridColumn: compacto ? '1 / -1' : undefined }}>Dia a justificar
+            <input type="date" value={form.dia} onChange={(event) => setForm((atual) => ({ ...atual, dia: event.target.value }))} style={campo} />
           </label>
-          <label style={{ display: 'grid', gap: 5, fontSize: 11, fontWeight: 800, color: '#7183a3' }}>Do horário
-            <input type="time" value={form.horaInicio} onChange={(event) => setForm((atual) => ({ ...atual, horaInicio: event.target.value }))} style={{ height: 40, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 10px', fontSize: 13, fontWeight: 700, color: '#405371' }} />
+          <label style={rotulo}>{compacto ? 'Das' : 'Do horário'}
+            <input type="time" value={form.horaInicio} onChange={(event) => setForm((atual) => ({ ...atual, horaInicio: event.target.value }))} style={campo} />
           </label>
-          <label style={{ display: 'grid', gap: 5, fontSize: 11, fontWeight: 800, color: '#7183a3' }}>Até o horário
-            <input type="time" value={form.horaFim} onChange={(event) => setForm((atual) => ({ ...atual, horaFim: event.target.value }))} style={{ height: 40, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 10px', fontSize: 13, fontWeight: 700, color: '#405371' }} />
+          <label style={rotulo}>{compacto ? 'Até' : 'Até o horário'}
+            <input type="time" value={form.horaFim} onChange={(event) => setForm((atual) => ({ ...atual, horaFim: event.target.value }))} style={campo} />
           </label>
         </div>
 
@@ -555,42 +581,42 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
         </label>
 
         <label style={{ display: 'grid', gap: 5, marginTop: 12, fontSize: 11, fontWeight: 800, color: '#7183a3' }}>{form.tipo === 'outro' ? 'Explicação' : 'Explicação (opcional)'}
-          <textarea value={form.motivo} onChange={(event) => setForm((atual) => ({ ...atual, motivo: event.target.value }))} rows={3} placeholder="Descreva o motivo da ausência, atraso ou saída antecipada..." style={{ borderRadius: 8, border: '1px solid #d8e6fc', padding: 10, fontSize: 13, fontWeight: 600, color: '#405371', resize: 'vertical', fontFamily: 'inherit' }} />
+          <textarea value={form.motivo} onChange={(event) => setForm((atual) => ({ ...atual, motivo: event.target.value }))} rows={compacto ? 2 : 3} placeholder="Descreva o motivo da ausência, atraso ou saída antecipada..." style={{ borderRadius: 8, border: '1px solid #d8e6fc', padding: 10, fontSize: 13, fontWeight: 600, color: '#405371', resize: 'vertical', fontFamily: 'inherit' }} />
         </label>
 
         <div style={{ marginTop: 14 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: '#7183a3' }}>Atestado (imagem, opcional)</span>
+          {!compacto && <span style={{ fontSize: 11, fontWeight: 800, color: '#7183a3' }}>Atestado (imagem, opcional)</span>}
           <input ref={inputArquivoRef} type="file" accept="image/jpeg,image/png" onChange={handleArquivo} style={{ display: 'none' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-            <button type="button" onClick={() => inputArquivoRef.current?.click()} style={{ display: 'flex', alignItems: 'center', gap: 7, border: '1px solid #d8e6fc', borderRadius: 8, padding: '9px 13px', background: '#f6faff', color: '#1767e8', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}><ImageIcon size={15} /> Selecionar imagem</button>
-            <span style={{ fontSize: 12, color: '#7183a3', fontWeight: 700 }}>{anexo ? anexo.name : anexoExistente ? anexoExistente.nome : 'Nenhum arquivo anexado.'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: compacto ? 0 : 6, minWidth: 0 }}>
+            <button type="button" onClick={() => inputArquivoRef.current?.click()} style={{ display: 'flex', alignItems: 'center', gap: 7, border: '1px solid #d8e6fc', borderRadius: 8, padding: '9px 13px', background: '#f6faff', color: '#1767e8', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}><ImageIcon size={15} /> {compacto ? 'Anexar atestado' : 'Selecionar imagem'}</button>
+            <span style={{ fontSize: 12, color: '#7183a3', fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{anexo ? anexo.name : anexoExistente ? anexoExistente.nome : (compacto ? 'opcional' : 'Nenhum arquivo anexado.')}</span>
           </div>
         </div>
 
         {mensagem && <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: mensagem.tipo === 'erro' ? '#fff4f3' : '#effaf6', color: mensagem.tipo === 'erro' ? '#c23b34' : '#1f9d63' }}>{mensagem.texto}</div>}
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-          <button type="button" disabled={enviando} onClick={enviar} style={{ border: 0, borderRadius: 9, padding: '11px 18px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: enviando ? 'default' : 'pointer', opacity: enviando ? .7 : 1 }}>{enviando ? 'Enviando...' : editandoId ? 'Reenviar justificativa' : 'Enviar justificativa'}</button>
+        <div style={{ display: 'flex', gap: 10, marginTop: compacto ? 14 : 18 }}>
+          <button type="button" disabled={enviando} onClick={enviar} style={{ flex: compacto ? 1 : undefined, border: 0, borderRadius: 9, padding: '11px 18px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: enviando ? 'default' : 'pointer', opacity: enviando ? .7 : 1 }}>{enviando ? 'Enviando...' : editandoId ? 'Reenviar justificativa' : 'Enviar justificativa'}</button>
           {editandoId && <button type="button" onClick={cancelarEdicao} style={{ border: '1px solid #d8e4f3', borderRadius: 9, padding: '11px 15px', background: '#fff', color: '#52637f', fontWeight: 800, cursor: 'pointer' }}>Cancelar</button>}
         </div>
-      </Card>
+      </Card>}
 
-      <Card style={{ padding: 26 }}>
-        <h2 style={{ margin: 0, fontSize: 16 }}>Minhas justificativas</h2>
-        <p style={{ margin: '4px 0 16px', fontSize: 12, color: '#7183a3', fontWeight: 600 }}>Acompanhe o status de cada solicitação enviada.</p>
+      {mostrarLista && <Card style={{ padding: compacto ? 14 : 26 }}>
+        {!compacto && <h2 style={{ margin: 0, fontSize: 16 }}>Minhas justificativas</h2>}
+        {!compacto && <p style={{ margin: '4px 0 16px', fontSize: 12, color: '#7183a3', fontWeight: 600 }}>Acompanhe o status de cada solicitação enviada.</p>}
         {!minhasJustificativas.length ? (
           <div style={{ padding: 24, border: '1px dashed #cbd8eb', borderRadius: 12, textAlign: 'center', color: '#7183a3', fontSize: 13 }}>Você ainda não enviou nenhuma justificativa.</div>
         ) : (
-          <div style={{ display: 'grid', gap: 10 }}>
+          <div style={{ display: 'grid', gap: compacto ? 8 : 10 }}>
             {minhasJustificativas.map((justificativa) => {
               const cor = JUSTIFICATIVA_CORES[justificativa.status] || JUSTIFICATIVA_CORES['Em análise'];
-              return <motion.div key={justificativa.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} style={{ border: `1px solid ${cor.borda}`, background: cor.fundo, borderRadius: 12, padding: 14 }}>
+              return <motion.div key={justificativa.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} style={{ border: `1px solid ${cor.borda}`, background: cor.fundo, borderRadius: 12, padding: compacto ? 11 : 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 900, color: '#1d3156', fontSize: 13 }}>{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(`${justificativa.dia}T12:00:00`))} · {justificativa.horaInicio}–{justificativa.horaFim}</span>
                   <span style={{ padding: '4px 10px', borderRadius: 99, background: cor.texto, color: '#fff', fontSize: 10, fontWeight: 900 }}>{justificativa.status}</span>
                 </div>
                 {rotuloTipoJustificativa(justificativa.tipo) && <p style={{ margin: '8px 0 0', color: '#1d3156', fontSize: 12, fontWeight: 800 }}>{rotuloTipoJustificativa(justificativa.tipo)}</p>}
-                {justificativa.motivo && <p style={{ margin: '4px 0 0', color: '#405371', fontSize: 12, fontWeight: 600 }}>{justificativa.motivo}</p>}
+                {justificativa.motivo && <p style={{ margin: '4px 0 0', color: '#405371', fontSize: 12, fontWeight: 600, ...(compacto ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}) }}>{justificativa.motivo}</p>}
                 {justificativa.anexoNome && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, color: '#7183a3', fontSize: 11, fontWeight: 700 }}><FileText size={13} /> {justificativa.anexoNome}</span>}
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                   {(justificativa.status === 'Inválida' || justificativa.status === 'Recusada') && <button type="button" onClick={() => refazer(justificativa)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 0, borderRadius: 8, padding: '8px 12px', background: '#c2650a', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}><Pencil size={12} /> Refazer justificativa</button>}
@@ -600,7 +626,7 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
             })}
           </div>
         )}
-      </Card>
+      </Card>}
       {confirmacaoExclusao && <ConfirmacaoPonto {...confirmacaoExclusao} onClose={() => setConfirmacaoExclusao(null)} />}
     </div>
   );

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { notificationService } from './notificationService.js';
+import { CONFIG_FERIADOS_PADRAO, validarConfigFeriados } from './ponto/feriados.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DATA_FILE = path.resolve(DATA_DIR, 'sis-ponto.json');
@@ -265,4 +266,22 @@ async function atualizarPadraoHorarioImpl(padraoId, dias) {
   store.padroesHorario = atuais;
   await writeStore(store);
   return atuais[padraoId];
+}
+
+// Feriados: os nacionais são calculados (services/ponto/feriados.js); aqui
+// fica só o que a empresa decide — Carnaval/Corpus Christi e os feriados
+// municipais/estaduais ou folgas avulsas. Sem nada salvo, vale o padrão da CCF.
+export async function obterConfigFeriados() {
+  const store = await comFila(readStore);
+  return validarConfigFeriados(store.feriados ?? CONFIG_FERIADOS_PADRAO);
+}
+
+export async function atualizarConfigFeriados(config) {
+  const validado = validarConfigFeriados(config);
+  return comFila(async () => {
+    const store = await readStore();
+    store.feriados = validado;
+    await writeStore(store);
+    return validado;
+  });
 }

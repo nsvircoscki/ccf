@@ -205,6 +205,28 @@ O seed cria um perfil de cada tipo:
 
 Isso gera horários previstos para a revisão do ENG, saldo positivo e negativo no banco de horas e algumas batidas que chegaram "offline".
 
+### Feriados
+
+Os feriados nacionais são calculados pelo sistema, sem depender de internet:
+- datas fixas: 01/01, 21/04, 01/05, 07/09, 12/10, 02/11, 15/11, 20/11 e 25/12;
+- Sexta-feira Santa, calculada a partir da Páscoa.
+
+O resto fica em `sis-ponto.json` (chave `feriados`) e o ENG edita em **Painel do ENG → Feriados**:
+- Carnaval e Corpus Christi entram como ponto facultativo, ligado ou desligado.
+- Feriados municipais, estaduais ou folgas da empresa são cadastrados à mão, como datas que repetem todo ano ou de um ano só.
+
+O padrão da CCF (São Bento do Sul - SC) é:
+- trabalha no Carnaval, na Quarta de Cinzas e em Corpus Christi;
+- tem feriado municipal em 23/09 (aniversário da cidade).
+
+A Data Magna de SC (11/08) não entra, porque é transferida para o domingo seguinte (Lei Estadual 18.531/2022).
+
+Em feriado:
+- **Jornada:** a prevista do dia é zero, então ninguém fica com esquecimento.
+- **Esquecimentos já gerados:** os pendentes daquele dia somem sozinhos.
+- **Trabalho no dia:** vira crédito no banco de horas.
+- **Calendários:** o do ENG e o do funcionário mostram o nome do feriado.
+
 ### Banco de horas
 
 O banco de horas é acumulado no mês e só conta dias já encerrados. Para cada dia:

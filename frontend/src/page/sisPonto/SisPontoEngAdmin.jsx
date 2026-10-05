@@ -3,12 +3,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChartNoAxesColumn, CircleAlert, Clock3, Files, FileText, LogIn, TimerReset, User, X } from 'lucide-react';
 import { api } from '../../services/api';
 import { meses, diasSemana, PADROES_HORARIO_INFO, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_CORES, rotuloTipoJustificativa } from './sisPontoData.js';
-import { chaveData, hora, calcularBancoHoras, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, calcularHistoricoSemanal, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, ehHorista } from './sisPontoUtils.js';
+import { chaveData, hora, calcularBancoHoras, carregarFeriados, esquecerFeriadosCarregados, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, calcularHistoricoSemanal, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, ehHorista } from './sisPontoUtils.js';
 import { BancoHoras, Card, ConfirmacaoPonto, ModalRegistros } from './SisPontoComponents.jsx';
 import SisPontoJustificativasAdmin from './SisPontoJustificativasAdmin.jsx';
 import SisPontoJornadaAdmin from './SisPontoJornadaAdmin.jsx';
 import SisPontoRevisaoAdmin from './SisPontoRevisaoAdmin.jsx';
 import SisPontoExportFolha from './SisPontoExportFolha.jsx';
+import SisPontoFeriadosAdmin from './SisPontoFeriadosAdmin.jsx';
 import './sisPonto.css';
 
 export default function SisPontoEngAdminScreen({ destino }) {
@@ -82,6 +83,18 @@ export default function SisPontoEngAdminScreen({ destino }) {
   }, [cadastroFuncionarios, calendarioFuncionarioId, registrosBackend]);
 
   const funcionarioCalendario = cadastroFuncionarios.find((funcionario) => funcionario.id === calendarioFuncionarioId);
+
+  // Feriados do ano do calendário (calendário e banco de horas). Ao sair da
+  // aba Feriados, recarrega — o ENG pode ter mudado a lista.
+  const [feriados, setFeriados] = useState(new Map());
+  const anoCalendario = mes.getFullYear();
+  useEffect(() => {
+    let ativo = true;
+    if (activePage !== 'feriados') {
+      carregarFeriados(api, anoCalendario).then((mapa) => { if (ativo) setFeriados(mapa); });
+    }
+    return () => { ativo = false; if (activePage === 'feriados') esquecerFeriadosCarregados(); };
+  }, [anoCalendario, activePage]);
 
   // Correção de batidas: só o ENG exclui marcações (o funcionário, se errou,
   // envia justificativa). Abre pelo botão "Corrigir" de cada dia do calendário.
@@ -266,6 +279,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
             <button className={`sis-admin-nav-item ${activePage === 'revisao' ? 'active' : ''}`} onClick={() => setActivePage('revisao')}><CircleAlert size={16} /> Pontos a revisar</button>
             <button className={`sis-admin-nav-item ${activePage === 'relatorios' ? 'active' : ''}`} onClick={() => setActivePage('relatorios')}><ChartNoAxesColumn size={16} /> Relatórios</button>
             <button className={`sis-admin-nav-item ${activePage === 'configuracoes' ? 'active' : ''}`} onClick={() => setActivePage('configuracoes')}><Clock3 size={16} /> Jornada</button>
+            <button className={`sis-admin-nav-item ${activePage === 'feriados' ? 'active' : ''}`} onClick={() => setActivePage('feriados')}><CalendarDays size={16} /> Feriados</button>
           </nav>
         </aside>
 
@@ -495,7 +509,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
                   id: funcionario.id,
                   nome: funcionario.nome,
                   setor: funcionario.setor,
-                  banco: calcularBancoHoras(funcionario, extrairRegistrosFuncionario(registrosBackend, funcionario.id), padroesHorario, justificativas, mes),
+                  banco: calcularBancoHoras(funcionario, extrairRegistrosFuncionario(registrosBackend, funcionario.id), padroesHorario, justificativas, mes, undefined, feriados),
                 }))}
               />
             </section>
@@ -510,6 +524,8 @@ export default function SisPontoEngAdminScreen({ destino }) {
           {activePage === 'revisao' && <SisPontoRevisaoAdmin />}
 
           {activePage === 'relatorios' && <SisPontoExportFolha onExportarDia={exportarRelatorio} />}
+
+          {activePage === 'feriados' && <SisPontoFeriadosAdmin />}
 
           {activePage === 'configuracoes' && (
             <SisPontoJornadaAdmin
@@ -608,6 +624,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
                                 {horariosPreenchidos.map((horarioJustificado, indexHorario) => { if (!horarioJustificado || indexHorario < itens.length) return null; const entradaTipo = horariosDia[indexHorario][0] === 'Entrada'; return <span key={`justificado-${chave}-${indexHorario}`} className="sis-eng-calendar-entry justified" style={{ fontStyle: 'italic' }} title="Preenchido pela justificativa aprovada"><LogIn size={11} style={entradaTipo ? undefined : { transform: 'rotate(180deg)' }} />{horarioJustificado}</span>; })}
                               </div>}
                               {pertenceAoMes && chave <= chaveData(new Date()) && calendarioFuncionarioId && <button type="button" onClick={(evento) => { evento.stopPropagation(); setDiaCorrecao(chave); }} style={{ marginTop: 4, padding: '2px 6px', border: '1px solid #d8e6fc', borderRadius: 6, background: '#fff', color: '#1767e8', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>Corrigir</button>}
+                              {feriados.get(chave) && <div className="sis-eng-calendar-status" title="Feriado" style={{ color: '#8e9bb0' }}>{feriados.get(chave)}</div>}
                               {temAtraso && <div className="sis-eng-calendar-status">Atrasado/Saída Antecipada</div>}
                               {!temAtraso && temJustificado && <div className="sis-eng-calendar-status" style={{ color: temJustificadoPendente ? '#b9770e' : '#3177dd' }}>Justificado</div>}
                             </motion.div>;

@@ -7,7 +7,8 @@ import { prisma } from '../../prisma.js';
 import { notificationService } from '../notificationService.js';
 import { classificarSequencia, chaveDiaLocal, chaveMesLocal, montarPares, JANELA_PAR_MS, horariosPrevistos, horariosSemBatida, dataLocalParaUtc } from './sequencia.js';
 import { COLUNAS_EXPORT, formatarCsv, montarLinhasExport } from './exportCsv.js';
-import { listarPadroesHorario } from '../sisPontoService.js';
+import { listarPadroesHorario, obterConfigFeriados } from '../sisPontoService.js';
+import { mapaFeriados } from './feriados.js';
 
 export const PADRAO_HORARIO_IDS = ['integral', 'manha', 'tarde'];
 export const MAX_ITENS_SYNC = 500;
@@ -456,6 +457,9 @@ async function gerarPrevistasImpl(agora = new Date()) {
   const padroes = await listarPadroesHorario();
   const hoje = chaveDiaLocal(agora);
   const limite = chaveDiaLocal(new Date(agora.getTime() - JANELA_PREVISTAS_DIAS * UM_DIA));
+  // Feriado não cobra jornada: nada vira "esquecimento" (e o que já tinha
+  // virado, ainda pendente, sai — ex.: feriado cadastrado depois).
+  const feriados = mapaFeriados([limite.slice(0, 4), hoje.slice(0, 4)], await obterConfigFeriados());
   const usuarios = await prisma.user.findMany({
     where: { ativo: true, registraPonto: true, horista: false, padraoHorarioId: { not: null } },
   });
@@ -484,7 +488,7 @@ async function gerarPrevistasImpl(agora = new Date()) {
       if (!previstos.length) continue;
       const doDia = porDia.get(dia) || [];
       const reais = doDia.filter((b) => b.origem !== 'PREVISTA' && !b.removidoEm);
-      const faltantes = new Set(horariosSemBatida(previstos, reais, dia).map((p) => p.indice));
+      const faltantes = feriados.has(dia) ? new Set() : new Set(horariosSemBatida(previstos, reais, dia).map((p) => p.indice));
 
       for (const p of previstos) {
         const clientId = `prevista:${usuario.id}:${dia}:${p.indice}`;
