@@ -461,3 +461,61 @@ export function formatSaldoMinutos(minutos = 0) {
   const sinal = minutos < 0 ? '-' : '+';
   return `${sinal}${formatMinutos(Math.abs(Math.round(minutos)))}`;
 }
+
+const somarMinutosHora = (horario, minutos) => {
+  const total = Math.min(23 * 60 + 59, Math.max(0, minutoDoHorario(horario) + minutos));
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+};
+
+// Tudo o que a pessoa ainda pode justificar, num formato só (lista "Pendentes"):
+//  - atrasos/saídas antecipadas (de pendenciasDeJustificativa);
+//  - esquecimentos: horários da jornada sem batida, que o servidor registrou
+//    como previstos (GET /sis-ponto/meus-esquecimentos). O período a justificar
+//    é o turno daquele horário; se faltaram entrada e saída do mesmo turno,
+//    vira um item só ("sem nenhuma batida no período").
+// Cada item: { chave, dia, horaInicio, horaFim, descricao, categoria, sugestaoTipo, jaEnviada, marcadoFalta }.
+export function montarItensParaJustificar({ atrasos = [], esquecimentos = [], funcionario, padroes = {}, justificativas = [] }) {
+  const itens = new Map();
+  const jaEnviada = (dia, inicio, fim) => justificativas.some((j) => j.funcionarioId === funcionario?.id && j.dia === dia
+    && j.status !== 'Recusada' && periodosSeSobrepoem(j.horaInicio, j.horaFim, inicio, fim));
+
+  atrasos.forEach((a) => {
+    const chave = `atraso|${a.dia}|${a.horaInicio}|${a.horaFim}`;
+    itens.set(chave, {
+      chave, dia: a.dia, horaInicio: a.horaInicio, horaFim: a.horaFim, categoria: 'atraso',
+      descricao: a.tipo === 'Entrada' ? `Entrada atrasada (prevista ${a.horaInicio}, bateu ${a.horaFim})` : `Saída antecipada (bateu ${a.horaInicio}, prevista ${a.horaFim})`,
+      sugestaoTipo: '', jaEnviada: a.jaEnviada, marcadoFalta: false,
+    });
+  });
+
+  esquecimentos.forEach((e) => {
+    const expectativas = expectativasDoFuncionario(funcionario, padroes, new Date(`${e.dia}T12:00:00`)) || [];
+    const tipoTela = e.tipo === 'ENTRADA' ? 'Entrada' : 'Saída';
+    const indice = expectativas.findIndex(([tipo, horario]) => tipo === tipoTela && horario === e.hora);
+    const inicioTurno = indice - (indice % 2);
+    let horaInicio;
+    let horaFim;
+    if (indice >= 0 && expectativas[inicioTurno + 1]) {
+      horaInicio = expectativas[inicioTurno][1];
+      horaFim = expectativas[inicioTurno + 1][1];
+    } else if (e.tipo === 'ENTRADA') {
+      [horaInicio, horaFim] = [e.hora, somarMinutosHora(e.hora, 60)];
+    } else {
+      [horaInicio, horaFim] = [somarMinutosHora(e.hora, -60), e.hora];
+    }
+    const chave = `esquecimento|${e.dia}|${horaInicio}|${horaFim}`;
+    const existente = itens.get(chave);
+    if (existente) {
+      existente.descricao = `Sem nenhuma batida no período ${horaInicio}–${horaFim}`;
+      existente.marcadoFalta = existente.marcadoFalta || e.situacao === 'FALTA';
+      return;
+    }
+    itens.set(chave, {
+      chave, dia: e.dia, horaInicio, horaFim, categoria: 'esquecimento',
+      descricao: `Sem batida: ${tipoTela.toLowerCase()} das ${e.hora}`,
+      sugestaoTipo: 'esquecimento', jaEnviada: jaEnviada(e.dia, horaInicio, horaFim), marcadoFalta: e.situacao === 'FALTA',
+    });
+  });
+
+  return [...itens.values()].sort((a, b) => a.dia.localeCompare(b.dia) || a.horaInicio.localeCompare(b.horaInicio));
+}

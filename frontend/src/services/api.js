@@ -248,6 +248,13 @@ export const api = {
         return res.blob();
     },
 
+    // Esquecimentos da própria pessoa: [{ id, dia, hora, tipo, situacao: 'PENDENTE' | 'FALTA' }].
+    getSispontoMeusEsquecimentos: async () => {
+        const res = await req(`${BASE_URL}/sis-ponto/meus-esquecimentos`);
+        if (!res.ok) return [];
+        return res.json();
+    },
+
     // Batidas incluídas pelo ENG: [{ funcionarioId, batidoEm, motivo, por, em }].
     getSispontoAjustes: async () => {
         const res = await req(`${BASE_URL}/sis-ponto/batidas/ajustes`);

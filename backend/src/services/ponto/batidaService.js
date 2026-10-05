@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../prisma.js';
 import { notificationService } from '../notificationService.js';
-import { classificarSequencia, chaveDiaLocal, chaveMesLocal, montarPares, JANELA_PAR_MS, horariosPrevistos, horariosSemBatida, dataLocalParaUtc } from './sequencia.js';
+import { classificarSequencia, chaveDiaLocal, chaveMesLocal, montarPares, JANELA_PAR_MS, horariosPrevistos, horariosSemBatida, dataLocalParaUtc, partesLocais } from './sequencia.js';
 import { COLUNAS_EXPORT, formatarCsv, montarLinhasExport } from './exportCsv.js';
 import { listarPadroesHorario, obterConfigFeriados } from '../sisPontoService.js';
 import { mapaFeriados } from './feriados.js';
@@ -290,6 +290,43 @@ export async function decidirPrevistas(ids, situacao, quem) {
     data: { situacao, decididoPorId: pendente ? null : quem.id, decididoEm: pendente ? null : new Date() },
   });
   return { ok: true, atualizados: alvos.length };
+}
+
+const horaLocal = (data) => {
+  const p = partesLocais(data);
+  return `${String(p.hora).padStart(2, '0')}:${String(p.minuto).padStart(2, '0')}`;
+};
+
+// Esquecimentos da própria pessoa, para a lista "Pendentes" das justificativas:
+// os ainda sem decisão e os que o ENG marcou como falta (dá para contestar).
+export async function listarMeusEsquecimentos(quem) {
+  const previstas = await prisma.pontoBatida.findMany({
+    where: { userId: quem.id, origem: 'PREVISTA', removidoEm: null, situacao: { in: ['PENDENTE', 'FALTA'] } },
+    orderBy: { batidoEm: 'asc' },
+  });
+  return previstas.map((b) => ({
+    id: b.id, dia: chaveDiaLocal(b.batidoEm), hora: horaLocal(b.batidoEm), tipo: b.tipo, situacao: b.situacao,
+  }));
+}
+
+// ENG aceitou a justificativa: os horários previstos ainda pendentes dentro do
+// período dela ficam abonados (contam as horas) — sem precisar decidir de novo
+// na revisão. Recusada não mexe: o previsto continua para o ENG marcar falta.
+export async function abonarPrevistasDaJustificativa({ funcionarioId, dia, horaInicio, horaFim }, quem) {
+  if (!funcionarioId || !dia || !horaInicio || !horaFim) return 0;
+  const previstas = await prisma.pontoBatida.findMany({
+    where: {
+      userId: funcionarioId, origem: 'PREVISTA', situacao: 'PENDENTE', removidoEm: null,
+      batidoEm: { gte: dataLocalParaUtc(dia, '00:00'), lte: dataLocalParaUtc(dia, '23:59') },
+    },
+  });
+  const cobertas = previstas.filter((b) => { const h = horaLocal(b.batidoEm); return h >= horaInicio && h <= horaFim; });
+  if (!cobertas.length) return 0;
+  await prisma.pontoBatida.updateMany({
+    where: { id: { in: cobertas.map((b) => b.id) } },
+    data: { situacao: 'ABONADA', decididoPorId: quem.id, decididoEm: new Date() },
+  });
+  return cobertas.length;
 }
 
 // Toda correção do ENG (incluir ou excluir batida) precisa de motivo escrito.

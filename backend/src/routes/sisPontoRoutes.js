@@ -2,7 +2,7 @@ import express from 'express';
 import { exigirSetor } from '../middlewares/autenticar.js';
 import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario, obterConfigFeriados, atualizarConfigFeriados } from '../services/sisPontoService.js';
 import { feriadosDoAno } from '../services/ponto/feriados.js';
-import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes, exportarCsv, gerarPrevistas } from '../services/ponto/batidaService.js';
+import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes, exportarCsv, gerarPrevistas, listarMeusEsquecimentos, abonarPrevistasDaJustificativa } from '../services/ponto/batidaService.js';
 import { interpretarPeriodo } from '../services/ponto/exportCsv.js';
 
 const router = express.Router();
@@ -89,6 +89,16 @@ router.get('/folha.csv', exigirSetor('ENG', 'DEV'), async (req, res) => {
   }
 });
 
+// Esquecimentos da própria pessoa (horários previstos pendentes ou marcados
+// como falta), para a lista "Pendentes" da aba Justificativas.
+router.get('/meus-esquecimentos', async (req, res) => {
+  try {
+    res.json(await listarMeusEsquecimentos(req.usuario));
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao listar esquecimentos.' });
+  }
+});
+
 // Batidas incluídas pelo ENG (com motivo), para as telas marcarem.
 router.get('/batidas/ajustes', async (req, res) => {
   try {
@@ -150,6 +160,8 @@ router.put('/justificativas/:id', async (req, res) => {
   try {
     const justificativa = await atualizarJustificativa(req.params.id, req.body, req.usuario);
     if (!justificativa) return res.status(404).json({ error: 'Justificativa não encontrada.' });
+    // Aceitar a justificativa de um esquecimento já abona o horário previsto.
+    if (req.body?.status === 'Aceita') await abonarPrevistasDaJustificativa(justificativa, req.usuario);
     res.json(justificativa);
   } catch (error) {
     res.status(400).json({ error: error.message || 'Erro ao atualizar justificativa.' });
