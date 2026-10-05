@@ -32,6 +32,26 @@ test('saída tarde (hora extra) ainda cobre a saída prevista', () => {
   assert.equal(horariosSemBatida(previstos, reais, '2026-10-01', TZ).length, 0);
 });
 
+test('saída antecipada não vira esquecimento (fica para o funcionário justificar)', () => {
+  const previstos = horariosPrevistos(integral, '2026-10-01');
+  const reais = [b('ENTRADA', '2026-10-01T08:00:00'), b('SAIDA', '2026-10-01T12:00:00'), b('ENTRADA', '2026-10-01T13:00:00'), b('SAIDA', '2026-10-01T14:30:00')];
+  assert.equal(horariosSemBatida(previstos, reais, '2026-10-01', TZ).length, 0);
+});
+
+test('saiu no almoço e não voltou: tarde inteira sem registro', () => {
+  const previstos = horariosPrevistos(integral, '2026-10-01');
+  const reais = [b('ENTRADA', '2026-10-01T08:00:00'), b('SAIDA', '2026-10-01T11:30:00')];
+  const faltando = horariosSemBatida(previstos, reais, '2026-10-01', TZ);
+  assert.deepEqual(faltando.map((p) => `${p.tipo} ${p.hora}`), ['ENTRADA 13:00', 'SAIDA 18:00']);
+});
+
+test('esqueceu a entrada da manhã: só ela fica sem registro', () => {
+  const previstos = horariosPrevistos(integral, '2026-10-01');
+  const reais = [b('SAIDA', '2026-10-01T12:00:00'), b('ENTRADA', '2026-10-01T13:00:00'), b('SAIDA', '2026-10-01T18:00:00')];
+  const faltando = horariosSemBatida(previstos, reais, '2026-10-01', TZ);
+  assert.deepEqual(faltando.map((p) => `${p.tipo} ${p.hora}`), ['ENTRADA 08:00']);
+});
+
 test('dia sem nenhuma batida: os 4 horários ficam sem batida', () => {
   assert.equal(horariosSemBatida(horariosPrevistos(integral, '2026-10-01'), [], '2026-10-01', TZ).length, 4);
 });

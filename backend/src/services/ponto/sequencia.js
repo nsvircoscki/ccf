@@ -144,20 +144,37 @@ export function horariosPrevistos(padrao, dia) {
   ]);
 }
 
-// Quais horários previstos do dia ficaram sem batida. Cada batida real
-// "cobre" o horário previsto mais próximo do mesmo tipo; os que ninguém cobriu
-// são esquecimento (ou falta, se o dia inteiro ficou vazio).
+// Quais horários previstos do dia ficaram sem registro (esquecimento, ou
+// falta se o dia inteiro ficou vazio). Por tipo, cada registro real cobre UM
+// horário previsto, na mesma ordem do dia, escolhendo a combinação mais
+// próxima no total. Antes cada registro cobria o previsto mais perto mesmo
+// que já coberto: uma saída às 14:30 "cobria" a das 12:00 e a das 17:30
+// virava esquecimento — e o ENG abonava uma saída antecipada como se fosse
+// esquecimento. Agora a saída das 14:30 cobre a das 17:30 e fica como saída
+// antecipada, que o funcionário precisa justificar.
 export function horariosSemBatida(previstos, batidasReais, dia, tz = PONTO_TZ) {
-  const comData = previstos.map((p) => ({ ...p, em: dataLocalParaUtc(dia, p.hora, tz) }));
-  const cobertos = new Set();
-  for (const batida of batidasReais) {
-    const t = new Date(batida.batidoEm).getTime();
-    let melhor = null;
-    for (const p of comData) {
-      if (p.tipo !== batida.tipo) continue;
-      if (!melhor || Math.abs(p.em.getTime() - t) < Math.abs(melhor.em.getTime() - t)) melhor = p;
+  const comData = previstos.map((p) => ({ ...p, em: dataLocalParaUtc(dia, p.hora, tz).getTime() }));
+  const faltantes = [];
+  for (const tipo of ['ENTRADA', 'SAIDA']) {
+    const prev = comData.filter((p) => p.tipo === tipo).sort((a, b) => a.em - b.em);
+    const reais = batidasReais.filter((b) => b.tipo === tipo).map((b) => new Date(b.batidoEm).getTime()).sort((a, b) => a - b);
+    if (reais.length >= prev.length) continue; // todos cobertos
+    // custo[i][j]: menor distância casando os j primeiros registros com i dos primeiros previstos.
+    const n = prev.length;
+    const m = reais.length;
+    const custo = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(Infinity));
+    custo[0][0] = 0;
+    for (let i = 1; i <= n; i += 1) {
+      for (let j = 0; j <= Math.min(i, m); j += 1) {
+        const pulando = custo[i - 1][j];
+        const casando = j > 0 ? custo[i - 1][j - 1] + Math.abs(prev[i - 1].em - reais[j - 1]) : Infinity;
+        custo[i][j] = Math.min(pulando, casando);
+      }
     }
-    if (melhor) cobertos.add(melhor.indice);
+    for (let i = n, j = m; i > 0; i -= 1) {
+      if (custo[i][j] === custo[i - 1][j]) faltantes.push(prev[i - 1]);
+      else j -= 1;
+    }
   }
-  return comData.filter((p) => !cobertos.has(p.indice));
+  return faltantes.sort((a, b) => a.indice - b.indice).map((p) => ({ ...p, em: new Date(p.em) }));
 }

@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { prisma } from '../../prisma.js';
 import { classificarSequencia, chaveDiaLocal, chaveMesLocal, montarPares, JANELA_PAR_MS, horariosPrevistos, horariosSemBatida, dataLocalParaUtc, partesLocais } from './sequencia.js';
 import { COLUNAS_EXPORT, formatarCsv, montarLinhasExport, interpretarPeriodo } from './exportCsv.js';
-import { listarPadroesHorario, obterConfigFeriados } from '../sisPontoService.js';
+import { listarPadroesHorario, obterConfigFeriados, listarJustificativas, obterRegrasPonto, prazoJustificativaEncerrado } from '../sisPontoService.js';
 import { mapaFeriados } from './feriados.js';
 
 export const PADRAO_HORARIO_IDS = ['integral', 'manha', 'tarde'];
@@ -236,15 +236,46 @@ export async function listarMapaRegistros() {
 // inconsistentes) e os horários previstos em que a pessoa não bateu.
 const OBS_DE_PREVISTA = ['PREVISTA_PENDENTE', 'PREVISTA_ABONADA', 'FALTA'];
 
-export async function listarParaRevisao(periodo) {
+// Esquecimento (horário previsto sem registro), em três etapas:
+//  AGUARDANDO_FUNCIONARIO: ainda dentro do prazo — é o funcionário quem justifica;
+//  JUSTIFICATIVA_ENVIADA: ele justificou — o ENG decide na aba Justificativas
+//    (aceitar abona o horário);
+//  PARA_DECIDIR: o prazo passou sem justificativa — vira uma "justificativa
+//    automática" de esquecimento, que o ENG aceita (ABONADA) ou não (FALTA).
+// O prazo conta do fim do turno do horário, igual à tela do funcionário.
+async function contextoEtapas() {
+  const [padroes, justificativas, regras] = await Promise.all([listarPadroesHorario(), listarJustificativas(), obterRegrasPonto()]);
+  return { padroes, justificativas, prazoHoras: regras.prazoJustificativaHoras };
+}
+
+function etapaDaPrevista(prevista, padraoHorarioId, { padroes, justificativas, prazoHoras }, agora = new Date()) {
+  if (prevista.situacao && prevista.situacao !== 'PENDENTE') return { etapa: 'DECIDIDA', prazoAte: null };
+  const dia = chaveDiaLocal(prevista.batidoEm);
+  const hora = horaLocal(prevista.batidoEm);
+  const previstos = horariosPrevistos(padroes[padraoHorarioId], dia);
+  const indice = Number(String(prevista.clientId || '').split(':').pop());
+  const proprio = previstos.find((p) => p.indice === indice);
+  const fimTurno = proprio?.tipo === 'ENTRADA' ? (previstos.find((p) => p.indice === indice + 1)?.hora ?? hora) : hora;
+  const prazoAte = new Date(dataLocalParaUtc(dia, fimTurno).getTime() + prazoHoras * 3600 * 1000);
+  const enviada = justificativas.some((j) => j.funcionarioId === prevista.userId && j.dia === dia
+    && ['Em análise', 'Inválida'].includes(j.status) && j.horaInicio <= hora && hora <= j.horaFim);
+  if (enviada) return { etapa: 'JUSTIFICATIVA_ENVIADA', prazoAte };
+  if (!prazoJustificativaEncerrado(dia, fimTurno, prazoHoras, agora)) return { etapa: 'AGUARDANDO_FUNCIONARIO', prazoAte };
+  return { etapa: 'PARA_DECIDIR', prazoAte };
+}
+
+export async function listarParaRevisao(periodo, agora = new Date()) {
   await gerarPrevistas();
   const { batidas, porUsuario, usuarios } = await carregarPeriodo(periodo);
+  const contexto = await contextoEtapas();
+  const hoje = chaveDiaLocal(agora);
   const pares = [];
   for (const usuario of usuarios) {
     for (const par of montarPares(porUsuario.get(usuario.id) || [])) {
       const ref = par.entrada || par.saida;
       const observacoes = par.observacoes.filter((o) => !OBS_DE_PREVISTA.includes(o));
-      if (!observacoes.length || !periodo.periodos.has(chaveMesLocal(ref.batidoEm))) continue;
+      // Hoje ainda está em andamento: entrada sem saída é normal.
+      if (!observacoes.length || !periodo.periodos.has(chaveMesLocal(ref.batidoEm)) || chaveDiaLocal(ref.batidoEm) >= hoje) continue;
       pares.push({
         funcionarioId: usuario.id, nome: usuario.name, setor: usuario.role.name,
         entrada: par.entrada?.batidoEm ?? null, saida: par.saida?.batidoEm ?? null,
@@ -258,17 +289,23 @@ export async function listarParaRevisao(periodo) {
       id: b.id, funcionarioId: b.userId, nome: b.user.name, setor: b.user.role.name,
       dia: chaveDiaLocal(b.batidoEm), tipo: b.tipo, batidoEm: b.batidoEm,
       situacao: b.situacao || 'PENDENTE', decididoEm: b.decididoEm,
+      ...etapaDaPrevista(b, b.user.padraoHorarioId, contexto, agora),
     }));
   return { pares, previstas };
 }
 
 // Contador da aba "Pontos a revisar" (o aviso do ponto não vai pro sininho):
-// horários previstos ainda sem decisão + registros com problema (sem saída,
-// sem entrada, inconsistentes) do mês atual e do anterior.
+// esquecimentos com prazo vencido e sem justificativa (PARA_DECIDIR) +
+// registros com problema (sem saída, sem entrada, inconsistentes) de dias já
+// encerrados do mês atual e do anterior.
 export async function contarParaRevisao(agora = new Date()) {
-  const previstas = await prisma.pontoBatida.count({
+  const contexto = await contextoEtapas();
+  const pendentes = await prisma.pontoBatida.findMany({
     where: { origem: 'PREVISTA', removidoEm: null, OR: [{ situacao: 'PENDENTE' }, { situacao: null }] },
+    include: { user: { select: { padraoHorarioId: true } } },
   });
+  const previstas = pendentes.filter((b) => etapaDaPrevista(b, b.user.padraoHorarioId, contexto, agora).etapa === 'PARA_DECIDIR').length;
+  const hoje = chaveDiaLocal(agora);
   const mesAtual = chaveMesLocal(agora);
   const [ano, mes] = mesAtual.split('-').map(Number);
   const mesAnterior = mes === 1 ? `${ano - 1}-12` : `${ano}-${String(mes - 1).padStart(2, '0')}`;
@@ -279,7 +316,7 @@ export async function contarParaRevisao(agora = new Date()) {
     for (const usuario of usuarios) {
       for (const par of montarPares(porUsuario.get(usuario.id) || [])) {
         const ref = par.entrada || par.saida;
-        if (!periodo.periodos.has(chaveMesLocal(ref.batidoEm))) continue;
+        if (!periodo.periodos.has(chaveMesLocal(ref.batidoEm)) || chaveDiaLocal(ref.batidoEm) >= hoje) continue;
         if (par.observacoes.some((o) => !OBS_DE_PREVISTA.includes(o))) registros += 1;
       }
     }
