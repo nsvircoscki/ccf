@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, CloudOff, CloudUpload, FileText, Hourglass, Image as ImageIcon, LogIn, Pencil, TimerReset, Trash2 } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, CloudOff, CloudUpload, FileText, LogOut, Hourglass, Image as ImageIcon, LogIn, Pencil, TimerReset, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
+import { useEhCelular } from '../../hooks/useEhCelular';
 import { registrarBatida, pendentesDoFuncionario, inscrever, obterEstado, sincronizarPendentes } from '../../services/pontoOffline.js';
 import { meses, diasSemana, JUSTIFICATIVA_CORES, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_TIPOS, rotuloTipoJustificativa } from './sisPontoData.js';
 import { chaveData, hora, calcularBancoHoras, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, pendenciasDeJustificativa, ehHorista } from './sisPontoUtils.js';
@@ -10,8 +11,10 @@ import './sisPonto.css';
 
 // `usuario` = a pessoa logada ({ id, nome, setor }). Cada pessoa vê e bate só
 // o próprio ponto — o servidor também recusa batida para outra pessoa.
-export default function SisPontoFuncionarioScreen({ usuario, destino }) {
+// onSair: só no celular, onde esta tela ocupa o app inteiro (ver App.jsx).
+export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) {
   const usuarioLogado = usuario?.setor;
+  const ehCelular = useEhCelular();
   const [agora, setAgora] = useState(new Date());
   const [mes, setMes] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [aba, setAba] = useState('calendario');
@@ -219,6 +222,65 @@ export default function SisPontoFuncionarioScreen({ usuario, destino }) {
   // um ajuste solicitado pelo admin, não uma rejeição definitiva.
   const pendenciasRefazerNoContador = pendenciasRefazer.filter((item) => item.status === 'Recusada').length;
 
+  const cartaoRegistrar = (
+    <Card style={{ padding: 22, textAlign: 'center' }}>
+      <h2 style={{ margin: 0, textAlign: 'left', fontSize: 16 }}>Registrar Ponto</h2><p style={{ margin: '4px 0 22px', textAlign: 'left', fontSize: 12, color: '#7183a3', fontWeight: 600 }}>Faça seu registro de ponto</p>
+      <div style={{ fontSize: 38, fontWeight: 800, letterSpacing: '-.04em', color: '#14264b' }}>{hora(agora)}</div>
+      <p style={{ margin: '7px 0 22px', textTransform: 'capitalize', color: '#7183a3', fontSize: 12, fontWeight: 700 }}>{tituloData}</p>
+      <div style={{ textAlign: 'left', padding: 14, border: '1px solid #d8e6fc', borderRadius: 10, background: '#f6faff', marginBottom: 16 }}>
+        <div style={{ color: '#7183a3', fontSize: 11, fontWeight: 800 }}>{expectativasHoje.length ? 'PRÓXIMO REGISTRO ESPERADO' : 'PRÓXIMO REGISTRO'}</div>
+        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#243755' }}><LogIn size={17} color={proximoEsperado[0] === 'Entrada' ? '#38bc7b' : '#ef5350'} style={proximoEsperado[0] === 'Entrada' ? undefined : { transform: 'rotate(180deg)' }} />{proximoEsperado[0]} <span style={{ marginLeft: 'auto', color: '#1767e8' }}>{expectativasHoje.length ? proximoEsperado[1] : (funcionarioEhHorista ? 'Horista' : 'Sem horário')}</span></div>
+      </div>
+      {naoRegistraPonto
+        ? <p style={{ margin: 0, padding: 12, borderRadius: 9, background: '#fff8ee', color: '#b9770e', fontSize: 12, fontWeight: 700 }}>Seu usuário não está marcado para registrar ponto. Peça à administração para ligar "Registra ponto" em Configurações → Usuários.</p>
+        : <button type="button" onClick={registrarPonto} style={{ width: '100%', border: 0, borderRadius: 9, background: '#1767e8', color: '#fff', padding: '13px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer', boxShadow: '0 6px 14px #1767e833' }}>Confirmar {proximoEhEntrada ? 'entrada' : 'saída'}</button>}
+      {registrosHoje.length > 0 && <button type="button" onClick={() => { setDiaModal(hoje); setModalRegistros(true); }} style={{ margin: '14px 0 0', color: '#1767e8', background: 'none', border: 0, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Ver registros de hoje ({registrosHoje.length})</button>}
+    </Card>
+  );
+  const badgeJustificativas = pendenciasNaoEnviadas.length + pendenciasRefazerNoContador;
+  const modais = <>
+    {modalRegistros && <ModalRegistros registros={registrosDoModal} statusRegistro={statusRegistroDoModal} horarioEsperado={horarioEsperado} ajustes={ajustes} onClose={() => { setModalRegistros(false); setDiaModal(null); }} />}
+    {confirmacao && <ConfirmacaoPonto {...confirmacao} onClose={() => setConfirmacao(null)} />}
+    {erroPonto && <div style={{ position: 'fixed', bottom: ehCelular ? 84 : 22, left: '50%', transform: 'translateX(-50%)', zIndex: 120, width: ehCelular ? 'calc(100% - 32px)' : undefined, padding: '12px 18px', borderRadius: 10, background: '#c23b34', color: '#fff', fontSize: 13, fontWeight: 700, boxShadow: '0 14px 30px rgba(15,35,70,.25)' }}>{erroPonto}</div>}
+  </>;
+
+  // Celular: só registrar ponto e justificativas, com uma barra de dois
+  // botões no rodapé. Calendário e banco de horas ficam para a tela grande.
+  if (ehCelular) {
+    const abaCelular = aba === 'justificativas' ? 'justificativas' : 'ponto';
+    const botaoAba = (ativo) => ({ flex: 1, display: 'grid', placeItems: 'center', gap: 3, padding: '8px 0 6px', border: 0, background: 'transparent', color: ativo ? '#1767e8' : '#7183a3', fontSize: 10.5, fontWeight: 800, cursor: 'pointer', position: 'relative' });
+    return (
+      <main style={{ height: '100%', overflowY: 'auto', background: '#f8fafc', color: '#13254a', paddingBottom: 76, boxSizing: 'border-box' }}>
+        <div style={{ padding: '14px 14px 8px', display: 'grid', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <span style={{ display: 'grid', placeItems: 'center', width: 30, height: 30, borderRadius: 9, background: '#eaf2ff', color: '#1767e8' }}><Clock3 size={16} /></span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 900, letterSpacing: '-.02em' }}>SIS Ponto</div>
+              <div style={{ color: '#7183a3', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{usuario.nome}</div>
+            </div>
+            {onSair && <button type="button" onClick={onSair} aria-label="Sair" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, border: '1px solid #e2ebf8', borderRadius: 8, padding: '6px 9px', background: '#fff', color: '#52637f', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}><LogOut size={14} />Sair</button>}
+          </div>
+          <IndicadorSincronizacao sync={sync} />
+        </div>
+        <div style={{ padding: '4px 14px 14px' }}>
+          {abaCelular === 'ponto'
+            ? cartaoRegistrar
+            : <SisPontoJustificativaForm funcionarioId={funcionarioAtual?.id || usuarioLogado} nome={funcionarioAtual?.nome || usuarioLogado} setor={usuarioLogado} justificativas={justificativas} onAtualizado={carregarJustificativas} pendenciaSugerida={pendenciaSugerida} pendenciaRefazerSugerida={pendenciasRefazer[0] || null} />}
+        </div>
+        <nav aria-label="Seções do ponto" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 90, display: 'flex', background: '#fff', borderTop: '1px solid #e2ebf8', boxShadow: '0 -6px 18px rgba(15,35,70,.06)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <button type="button" onClick={() => setAba('calendario')} aria-current={abaCelular === 'ponto' ? 'page' : undefined} style={botaoAba(abaCelular === 'ponto')}>
+            <Clock3 size={18} />Ponto
+          </button>
+          <button type="button" onClick={() => setAba('justificativas')} aria-current={abaCelular === 'justificativas' ? 'page' : undefined} style={botaoAba(abaCelular === 'justificativas')}>
+            <FileText size={18} />Justificativas
+            {badgeJustificativas > 0 && <span style={{ position: 'absolute', top: 4, left: 'calc(50% + 6px)', minWidth: 16, height: 16, padding: '0 4px', borderRadius: 99, background: '#e5484d', color: '#fff', fontSize: 9.5, fontWeight: 900, display: 'grid', placeItems: 'center' }}>{badgeJustificativas > 9 ? '9+' : badgeJustificativas}</span>}
+          </button>
+        </nav>
+        {modais}
+      </main>
+    );
+  }
+
   return (
     <main style={{ height: '100%', overflow: 'auto', background: '#f8fafc', color: '#13254a' }}>
       <div className="ponto-page" style={{ padding: '28px 30px 36px', maxWidth: 1600, margin: '0 auto' }}>
@@ -238,7 +300,7 @@ export default function SisPontoFuncionarioScreen({ usuario, destino }) {
               <IndicadorSincronizacao sync={sync} />
             </div>
             <MenuPonto ativo={aba === 'calendario'} onClick={() => setAba('calendario')} icon={<CalendarDays size={17} />} texto="Calendário" />
-            <MenuPonto ativo={aba === 'justificativas'} onClick={() => setAba('justificativas')} icon={<FileText size={17} />} texto="Justificativas" badge={pendenciasNaoEnviadas.length + pendenciasRefazerNoContador} />
+            <MenuPonto ativo={aba === 'justificativas'} onClick={() => setAba('justificativas')} icon={<FileText size={17} />} texto="Justificativas" badge={badgeJustificativas} />
             <MenuPonto ativo={aba === 'banco'} onClick={() => setAba('banco')} icon={<Hourglass size={17} />} texto="Banco de horas" />
             
           </aside>
@@ -286,19 +348,7 @@ export default function SisPontoFuncionarioScreen({ usuario, destino }) {
           </div>
 
           <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
-            <Card style={{ padding: 22, textAlign: 'center' }}>
-              <h2 style={{ margin: 0, textAlign: 'left', fontSize: 16 }}>Registrar Ponto</h2><p style={{ margin: '4px 0 22px', textAlign: 'left', fontSize: 12, color: '#7183a3', fontWeight: 600 }}>Faça seu registro de ponto</p>
-              <div style={{ fontSize: 38, fontWeight: 800, letterSpacing: '-.04em', color: '#14264b' }}>{hora(agora)}</div>
-              <p style={{ margin: '7px 0 22px', textTransform: 'capitalize', color: '#7183a3', fontSize: 12, fontWeight: 700 }}>{tituloData}</p>
-              <div style={{ textAlign: 'left', padding: 14, border: '1px solid #d8e6fc', borderRadius: 10, background: '#f6faff', marginBottom: 16 }}>
-                <div style={{ color: '#7183a3', fontSize: 11, fontWeight: 800 }}>{expectativasHoje.length ? 'PRÓXIMO REGISTRO ESPERADO' : 'PRÓXIMO REGISTRO'}</div>
-                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#243755' }}><LogIn size={17} color={proximoEsperado[0] === 'Entrada' ? '#38bc7b' : '#ef5350'} style={proximoEsperado[0] === 'Entrada' ? undefined : { transform: 'rotate(180deg)' }} />{proximoEsperado[0]} <span style={{ marginLeft: 'auto', color: '#1767e8' }}>{expectativasHoje.length ? proximoEsperado[1] : (funcionarioEhHorista ? 'Horista' : 'Sem horário')}</span></div>
-              </div>
-              {naoRegistraPonto
-                ? <p style={{ margin: 0, padding: 12, borderRadius: 9, background: '#fff8ee', color: '#b9770e', fontSize: 12, fontWeight: 700 }}>Seu usuário não está marcado para registrar ponto. Peça à administração para ligar "Registra ponto" em Configurações → Usuários.</p>
-                : <button type="button" onClick={registrarPonto} style={{ width: '100%', border: 0, borderRadius: 9, background: '#1767e8', color: '#fff', padding: '13px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer', boxShadow: '0 6px 14px #1767e833' }}>Confirmar {proximoEhEntrada ? 'entrada' : 'saída'}</button>}
-              {registrosHoje.length > 0 && <button type="button" onClick={() => { setDiaModal(hoje); setModalRegistros(true); }} style={{ margin: '14px 0 0', color: '#1767e8', background: 'none', border: 0, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Ver registros de hoje ({registrosHoje.length})</button>}
-            </Card>
+            {cartaoRegistrar}
             <Card style={{ padding: 22 }}>
               <h2 style={{ margin: 0, fontSize: 16 }}>Resumo do mês</h2><p style={{ margin: '4px 0 18px', fontSize: 12, color: '#7183a3', fontWeight: 600 }}>Seus registros em {meses[mes.getMonth()].toLowerCase()}</p>
               <Resumo icon={<CalendarDays size={16} />} cor="#38bc7b" label="Dias trabalhados" valor={diasTrabalhados} />
@@ -312,9 +362,7 @@ export default function SisPontoFuncionarioScreen({ usuario, destino }) {
           </div> : aba === 'justificativas' ? <SisPontoJustificativaForm funcionarioId={funcionarioAtual?.id || usuarioLogado} nome={funcionarioAtual?.nome || usuarioLogado} setor={usuarioLogado} justificativas={justificativas} onAtualizado={carregarJustificativas} pendenciaSugerida={pendenciaSugerida} pendenciaRefazerSugerida={pendenciasRefazer[0] || null} /> : <BancoHoras itens={[{ id: idFuncionarioAtual, nome: funcionarioAtual?.nome, setor: usuarioLogado, banco: bancoDoMes }]} rotulo={`${meses[mes.getMonth()]} ${mes.getFullYear()}`} />}
         </div>
       </div>
-      {modalRegistros && <ModalRegistros registros={registrosDoModal} statusRegistro={statusRegistroDoModal} horarioEsperado={horarioEsperado} ajustes={ajustes} onClose={() => { setModalRegistros(false); setDiaModal(null); }} />}
-      {confirmacao && <ConfirmacaoPonto {...confirmacao} onClose={() => setConfirmacao(null)} />}
-      {erroPonto && <div style={{ position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 120, padding: '12px 18px', borderRadius: 10, background: '#c23b34', color: '#fff', fontSize: 13, fontWeight: 700, boxShadow: '0 14px 30px rgba(15,35,70,.25)' }}>{erroPonto}</div>}
+      {modais}
     </main>
   );
 }

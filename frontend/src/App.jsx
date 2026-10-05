@@ -20,6 +20,8 @@ import TabelaServicosView from './page/TabelaServicosView';
 import FaturamentoView from './page/FaturamentoView';
 import TarefasView from './page/TarefasView';
 import SisPontoView from './page/SisPontoView';
+import SisPontoFuncionarioScreen from './page/sisPonto/SisPontoFuncionario.jsx';
+import { useEhCelular } from './hooks/useEhCelular';
 import { authService } from './services/authService';
 import { sincronizarPendentes } from './services/pontoOffline';
 
@@ -58,6 +60,7 @@ export default function App() {
   // "concluída" ela não volta a aparecer mesmo se o usuário sair e entrar de
   // novo (senão o "Sair" no Navbar viraria um replay da splash toda vez).
   const [introConcluida, setIntroConcluida] = useState(false);
+  const ehCelular = useEhCelular();
   // O seletor de módulos aparece a cada entrada no site — diferente da intro,
   // ele reaparece sempre que o usuário faz login de novo (não fica "visto"
   // para sempre na sessão).
@@ -200,6 +203,19 @@ export default function App() {
 
   if (!usuarioLogado) {
     return <LoginView onLogin={handleLogin} globalCss={globalCss} />;
+  }
+
+  // Celular: o app é só o registro de ponto e as justificativas da própria
+  // pessoa (inclusive do ENG). Painel, Kanban e cadastros ficam no computador.
+  if (ehCelular) {
+    return (
+      <>
+        {globalCss}
+        <div style={{ height: '100dvh', overflow: 'hidden', background: '#f8fafc' }}>
+          <SisPontoFuncionarioScreen usuario={usuarioAtual} destino={sisPontoDestino} onSair={handleLogout} />
+        </div>
+      </>
+    );
   }
 
   if (!moduloEscolhido) {
