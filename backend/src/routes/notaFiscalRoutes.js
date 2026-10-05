@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { notaFiscalController } from '../controllers/notaFiscalController.js';
+import { exigirModulo } from '../config/permissoes.js';
 
 const router = Router();
+router.use(exigirModulo('faturamento'));
 
 router.get('/', notaFiscalController.listar);
 router.post('/', notaFiscalController.criar);

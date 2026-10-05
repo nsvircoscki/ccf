@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { cobrancaController } from '../controllers/cobrancaController.js';
+import { exigirModulo } from '../config/permissoes.js';
 
 const router = Router();
+router.use(exigirModulo('faturamento'));
 
 router.get('/', cobrancaController.listar);
 router.post('/', cobrancaController.criar);

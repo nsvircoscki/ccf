@@ -42,19 +42,19 @@ export const ticketController = {
   async mover(req, res) {
     try {
       // Quem moveu = quem está logado (req.usuario), não o userId do corpo.
-      const updatedTicket = await ticketService.moverTicket(req.body.ticketId, req.body.toStepId, req.usuario.id);
+      const updatedTicket = await ticketService.moverTicket(req.body.ticketId, req.body.toStepId, req.usuario);
       res.status(200).json({ message: "Movido", updatedTicket });
     } catch (error) { 
-      res.status(500).json({ error: "Erro ao mover tarefa." }); 
+      res.status(error.status || 500).json({ error: error.status ? error.message : "Erro ao mover tarefa." }); 
     }
   },
 
   async excluir(req, res) {
     try {
-      await ticketService.excluirTicket(req.params.id);
+      await ticketService.excluirTicket(req.params.id, req.usuario);
       res.status(200).json({ message: 'Excluído!' });
     } catch (error) { 
-      res.status(500).json({ error: 'Erro ao excluir tarefa.' }); 
+      res.status(error.status || 500).json({ error: error.status ? error.message : 'Erro ao excluir tarefa.' }); 
     }
   }
 };
