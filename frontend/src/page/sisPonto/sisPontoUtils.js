@@ -402,3 +402,49 @@ export function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Dat
     return [];
   }
 }
+
+// Banco de horas acumulado do mês, dia a dia, só com dias já encerrados (hoje
+// ainda está em andamento). Por dia:
+//   saldo = horas trabalhadas + horas justificadas (aceitas) - jornada prevista
+// A justificativa aceita só completa a jornada (não gera hora extra) — assim
+// um período abonado duas vezes (justificativa + horário previsto abonado
+// pelo ENG) não conta em dobro. Dia sem jornada (fim de semana) que teve
+// trabalho vira crédito. Horista e quem não tem jornada não têm banco (null).
+// Só conta a partir de `funcionario.pontoDesde` (quando passou a registrar ponto).
+export function calcularBancoHoras(funcionario, registrosBlob = {}, padroes = {}, justificativas = [], mesRef = new Date(), hoje = chaveData(new Date())) {
+  const resultado = { trabalhado: 0, creditos: 0, debitos: 0, saldo: 0, dias: [] };
+  const semBanco = !funcionario || ehHorista(funcionario) || !funcionario.padraoHorarioId || !padroes[funcionario.padraoHorarioId];
+  const desde = funcionario?.pontoDesde ? chaveData(new Date(funcionario.pontoDesde)) : null;
+  const ultimoDia = new Date(mesRef.getFullYear(), mesRef.getMonth() + 1, 0).getDate();
+
+  for (let numero = 1; numero <= ultimoDia; numero += 1) {
+    const data = new Date(mesRef.getFullYear(), mesRef.getMonth(), numero, 12);
+    const dia = chaveData(data);
+    if (dia >= hoje || (desde && dia < desde)) continue;
+
+    const batidas = [...(registrosBlob[dia] || [])].sort();
+    const trabalhado = getTotalMinutosDePontos(batidas);
+    resultado.trabalhado += trabalhado;
+    if (semBanco) continue;
+
+    const previsto = minutosPrevistos(expectativasDoFuncionario(funcionario, padroes, data) || []);
+    const justificado = justificativas
+      .filter((j) => j.status === 'Aceita' && j.funcionarioId === funcionario.id && j.dia === dia)
+      .reduce((soma, j) => soma + Math.max(0, minutoDoHorario(j.horaFim) - minutoDoHorario(j.horaInicio)), 0);
+    const considerado = Math.max(trabalhado, Math.min(trabalhado + justificado, previsto));
+    const saldo = considerado - previsto;
+    if (!previsto && !trabalhado) continue;
+
+    resultado.dias.push({ dia, previsto, trabalhado, justificado: considerado - trabalhado, saldo });
+    if (saldo > 0) resultado.creditos += saldo;
+    else resultado.debitos += -saldo;
+    resultado.saldo += saldo;
+  }
+
+  return semBanco ? { ...resultado, semBanco: true } : resultado;
+}
+
+export function formatSaldoMinutos(minutos = 0) {
+  const sinal = minutos < 0 ? '-' : '+';
+  return `${sinal}${formatMinutos(Math.abs(Math.round(minutos)))}`;
+}

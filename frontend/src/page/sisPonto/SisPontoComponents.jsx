@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Clock3, Trash2, X } from 'lucide-react';
-import { hora } from './sisPontoUtils.js';
+import { hora, formatMinutos, formatSaldoMinutos } from './sisPontoUtils.js';
 
 export const navButton = { width: 38, height: 38, border: '1px solid #dfe7f2', borderRadius: 8, background: '#fff', color: '#405371', display: 'grid', placeItems: 'center', cursor: 'pointer' };
 
@@ -87,13 +87,40 @@ export function Justificativas() {
 
 export function Saldo({ titulo, valor, cor }) { return <div style={{ padding: 18, borderRadius: 11, background: '#f8faff', border: '1px solid #e5edf8' }}><div style={{ color: '#7183a3', fontSize: 12, fontWeight: 800 }}>{titulo}</div><strong style={{ display: 'block', marginTop: 8, fontSize: 24, color: cor }}>{valor}</strong></div>; }
 
-export function BancoHoras(funcionarios = []) {
-  const saldoTotal = funcionarios.reduce((acc, funcionario) => acc + (parseInt(funcionario.total?.replace(/h/g, ''), 10) || 0), 0);
-  return <Card style={{ padding: 26, minHeight: 410 }}><h2 style={{ margin: 0, fontSize: 20 }}>Banco de horas</h2><p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Acompanhe o saldo de horas e as compensações do período.</p><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}><Saldo titulo="Horas registradas" valor={`${String(Math.round(saldoTotal)).padStart(2, '0')}h00`} cor="#1767e8" /><Saldo titulo="Créditos" valor="00:00" cor="#38bc7b" /><Saldo titulo="Débitos" valor="00:00" cor="#ff5d66" /></div>
+// Banco de horas acumulado no mês (ver calcularBancoHoras em sisPontoUtils.js).
+// itens: [{ id, nome, setor, banco }] — banco = resultado de calcularBancoHoras.
+export function BancoHoras({ itens = [], rotulo = '' }) {
+  const comBanco = itens.filter((item) => !item.banco?.semBanco);
+  const soma = (campo) => comBanco.reduce((acc, item) => acc + (item.banco?.[campo] || 0), 0);
+  const trabalhado = itens.reduce((acc, item) => acc + (item.banco?.trabalhado || 0), 0);
+  const saldo = soma('saldo');
+  return <Card style={{ padding: 26, minHeight: 410 }}>
+    <h2 style={{ margin: 0, fontSize: 20 }}>Banco de horas</h2>
+    <p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Saldo acumulado {rotulo ? `de ${rotulo}` : 'do mês'}, só com dias já encerrados: horas trabalhadas + justificativas aceitas − jornada prevista.</p>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+      <Saldo titulo="Horas registradas" valor={formatMinutos(trabalhado)} cor="#1767e8" />
+      <Saldo titulo="Créditos" valor={formatSaldoMinutos(soma('creditos'))} cor="#38bc7b" />
+      <Saldo titulo="Débitos" valor={formatSaldoMinutos(-soma('debitos'))} cor="#ff5d66" />
+      <Saldo titulo="Saldo" valor={formatSaldoMinutos(saldo)} cor={saldo < 0 ? '#ff5d66' : '#38bc7b'} />
+    </div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, marginTop: 20 }}>
-      {funcionarios.length ? funcionarios.map((funcionario) => <div key={`${funcionario.nome}-${funcionario.setor}`} style={{ padding: 14, borderRadius: 10, border: '1px solid #e5edf8', background: '#f8fbff' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 12, fontWeight: 900, color: '#1d3156' }}>{funcionario.nome}</span><span style={{ fontSize: 11, fontWeight: 800, color: '#7183a3' }}>{funcionario.setor}</span></div><div style={{ display: 'grid', gap: 7, marginTop: 12, color: '#405371', fontSize: 11, fontWeight: 700 }}><span>Horas: <b style={{ color: '#1767e8' }}>{funcionario.total}</b></span><span>Banco: <b style={{ color: '#38bc7b' }}>{funcionario.banco || '+00h00'}</b></span><span>Status: <b>{funcionario.status}</b></span></div></div>) : <div style={{ color: '#7183a3', fontSize: 13 }}>Sem funcionários registrados.</div>}
+      {itens.length ? itens.map((item) => {
+        const banco = item.banco || {};
+        return <div key={item.id} style={{ padding: 14, borderRadius: 10, border: '1px solid #e5edf8', background: '#f8fbff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 12, fontWeight: 900, color: '#1d3156' }}>{item.nome}</span><span style={{ fontSize: 11, fontWeight: 800, color: '#7183a3' }}>{item.setor}</span></div>
+          <div style={{ display: 'grid', gap: 7, marginTop: 12, color: '#405371', fontSize: 11, fontWeight: 700 }}>
+            <span>Horas: <b style={{ color: '#1767e8' }}>{formatMinutos(banco.trabalhado || 0)}</b></span>
+            {banco.semBanco
+              ? <span style={{ color: '#7183a3' }}>Sem banco (horista ou sem jornada)</span>
+              : <>
+                <span>Créditos: <b style={{ color: '#38bc7b' }}>{formatSaldoMinutos(banco.creditos || 0)}</b> · Débitos: <b style={{ color: '#ff5d66' }}>{formatSaldoMinutos(-(banco.debitos || 0))}</b></span>
+                <span>Saldo: <b style={{ color: (banco.saldo || 0) < 0 ? '#ff5d66' : '#38bc7b' }}>{formatSaldoMinutos(banco.saldo || 0)}</b></span>
+              </>}
+          </div>
+        </div>;
+      }) : <div style={{ color: '#7183a3', fontSize: 13 }}>Sem funcionários registrados.</div>}
     </div>
   </Card>;
 }
 
-export function ModalRegistros({ registros, statusRegistro, horarioEsperado, onExcluir, onClose }) { return <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 20, background: 'rgba(15,30,55,.42)', zIndex: 80 }}><motion.section initial={{ opacity: 0, scale: .96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} role="dialog" aria-modal="true" aria-label="Registros de hoje" onMouseDown={(event) => event.stopPropagation()} style={{ width: 'min(440px, 100%)', background: '#fff', borderRadius: 16, padding: 22, boxShadow: '0 22px 60px rgba(0,0,0,.25)' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}><div><h2 style={{ margin: 0, fontSize: 18 }}>Registros de hoje</h2><p style={{ margin: '4px 0 16px', color: '#7183a3', fontSize: 12 }}>Lapso temporal da sua jornada</p></div><button type="button" onClick={onClose} aria-label="Fechar" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button></div>{registros.map((registro, indice) => { const status = statusRegistro(registro, indice, registros); const previsto = horarioEsperado(indice, registros)[1]; return <div key={registro} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid #edf1f6' }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: status === 'Normal' ? (indice % 2 ? '#ef5350' : '#38bc7b') : '#ffb24a' }} /><div style={{ flex: 1 }}><strong>{indice % 2 ? 'Saída' : 'Entrada'}</strong><div style={{ marginTop: 2, color: status === 'Normal' ? '#7183a3' : '#d97706', fontSize: 11, fontWeight: 700 }}>{status}{previsto ? ` · previsto ${previsto}` : ''}</div></div><span style={{ color: '#4e607e', fontWeight: 700 }}>{hora(new Date(registro))}</span><button type="button" onClick={() => onExcluir(indice)} aria-label={`Excluir registro de ${indice % 2 ? 'saída' : 'entrada'}`} title="Excluir registro" style={{ border: 0, borderRadius: 7, background: '#fff0f1', color: '#e5484d', padding: 7, cursor: 'pointer', display: 'grid', placeItems: 'center' }}><Trash2 size={15} /></button></div>; })}<p style={{ margin: '16px 0 0', padding: 12, background: '#f4f8ff', borderRadius: 9, color: '#42618d', fontSize: 12, fontWeight: 700 }}>Os intervalos e o total trabalhado são calculados a partir da entrada, intervalo, retorno e saída do dia.</p></motion.section></motion.div>; }
+export function ModalRegistros({ registros, statusRegistro, horarioEsperado, onExcluir, onClose, titulo = 'Registros de hoje' }) { return <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 20, background: 'rgba(15,30,55,.42)', zIndex: 80 }}><motion.section initial={{ opacity: 0, scale: .96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} role="dialog" aria-modal="true" aria-label={titulo} onMouseDown={(event) => event.stopPropagation()} style={{ width: 'min(440px, 100%)', background: '#fff', borderRadius: 16, padding: 22, boxShadow: '0 22px 60px rgba(0,0,0,.25)' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}><div><h2 style={{ margin: 0, fontSize: 18 }}>{titulo}</h2><p style={{ margin: '4px 0 16px', color: '#7183a3', fontSize: 12 }}>Lapso temporal da sua jornada</p></div><button type="button" onClick={onClose} aria-label="Fechar" style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button></div>{registros.map((registro, indice) => { const status = statusRegistro(registro, indice, registros); const previsto = horarioEsperado(indice, registros)[1]; return <div key={registro} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid #edf1f6' }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: status === 'Normal' ? (indice % 2 ? '#ef5350' : '#38bc7b') : '#ffb24a' }} /><div style={{ flex: 1 }}><strong>{indice % 2 ? 'Saída' : 'Entrada'}</strong><div style={{ marginTop: 2, color: status === 'Normal' ? '#7183a3' : '#d97706', fontSize: 11, fontWeight: 700 }}>{status}{previsto ? ` · previsto ${previsto}` : ''}</div></div><span style={{ color: '#4e607e', fontWeight: 700 }}>{hora(new Date(registro))}</span>{onExcluir && <button type="button" onClick={() => onExcluir(indice)} aria-label={`Excluir registro de ${indice % 2 ? 'saída' : 'entrada'}`} title="Excluir registro" style={{ border: 0, borderRadius: 7, background: '#fff0f1', color: '#e5484d', padding: 7, cursor: 'pointer', display: 'grid', placeItems: 'center' }}><Trash2 size={15} /></button>}</div>; })}<p style={{ margin: '16px 0 0', padding: 12, background: '#f4f8ff', borderRadius: 9, color: '#42618d', fontSize: 12, fontWeight: 700 }}>Os intervalos e o total trabalhado são calculados a partir da entrada, intervalo, retorno e saída do dia.</p></motion.section></motion.div>; }

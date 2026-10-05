@@ -10,7 +10,6 @@ import { COLUNAS_EXPORT, formatarCsv, montarLinhasExport } from './exportCsv.js'
 import { listarPadroesHorario } from '../sisPontoService.js';
 
 export const PADRAO_HORARIO_IDS = ['integral', 'manha', 'tarde'];
-const SETORES_ADMIN = ['ENG', 'DEV'];
 export const MAX_ITENS_SYNC = 500;
 const UM_DIA = 24 * 3600 * 1000;
 
@@ -23,6 +22,8 @@ function paraFuncionario(user) {
     setor: user.role.name,
     horista: user.horista,
     padraoHorarioId: user.padraoHorarioId,
+    // O banco de horas só conta a jornada a partir daqui.
+    pontoDesde: user.pontoDesde,
   };
 }
 
@@ -80,10 +81,10 @@ function validarItem(item) {
   };
 }
 
-// Bater ponto: só o próprio. Corrigir (excluir uma batida): a própria pessoa
-// ou a administração (ENG/DEV).
-function podeCorrigirPontoDe(quem, alvoId) {
-  return quem.id === alvoId || SETORES_ADMIN.includes(quem.setor);
+// Bater ponto: só o próprio. Corrigir (excluir uma batida): só o ENG — a
+// pessoa não altera as próprias marcações; se errou, envia justificativa.
+function podeCorrigirPonto(quem) {
+  return quem.setor === 'ENG';
 }
 
 // Reaplica a regra de sequência em volta das batidas que mudaram. A batida
@@ -297,7 +298,7 @@ export async function remover({ funcionarioId, tempo }, quem) {
     where: { userId: funcionarioId, batidoEm, removidoEm: null },
   });
   if (!batida) return null;
-  if (!podeCorrigirPontoDe(quem, batida.userId)) throw new Error('Sem permissão para alterar o ponto desta pessoa.');
+  if (!podeCorrigirPonto(quem)) throw new Error('Só o ENG pode corrigir batidas. Envie uma justificativa.');
   if (batida.origem === 'PREVISTA') throw new Error('Horário previsto não se exclui: o ENG decide se abona ou se é falta.');
 
   await prisma.$transaction(async (tx) => {

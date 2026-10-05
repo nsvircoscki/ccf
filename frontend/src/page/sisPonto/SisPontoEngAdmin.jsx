@@ -3,8 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChartNoAxesColumn, CircleAlert, Clock3, Files, FileText, LogIn, TimerReset, User, X } from 'lucide-react';
 import { api } from '../../services/api';
 import { meses, diasSemana, PADROES_HORARIO_INFO, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_CORES, rotuloTipoJustificativa } from './sisPontoData.js';
-import { chaveData, hora, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, calcularHistoricoSemanal, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, ehHorista } from './sisPontoUtils.js';
-import { BancoHoras, Card, ConfirmacaoPonto } from './SisPontoComponents.jsx';
+import { chaveData, hora, calcularBancoHoras, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, calcularHistoricoSemanal, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, ehHorista } from './sisPontoUtils.js';
+import { BancoHoras, Card, ConfirmacaoPonto, ModalRegistros } from './SisPontoComponents.jsx';
 import SisPontoJustificativasAdmin from './SisPontoJustificativasAdmin.jsx';
 import SisPontoJornadaAdmin from './SisPontoJornadaAdmin.jsx';
 import SisPontoRevisaoAdmin from './SisPontoRevisaoAdmin.jsx';
@@ -76,6 +76,31 @@ export default function SisPontoEngAdminScreen({ destino }) {
   }, [cadastroFuncionarios, calendarioFuncionarioId, registrosBackend]);
 
   const funcionarioCalendario = cadastroFuncionarios.find((funcionario) => funcionario.id === calendarioFuncionarioId);
+
+  // Correção de batidas: só o ENG exclui marcações (o funcionário, se errou,
+  // envia justificativa). Abre pelo botão "Corrigir" de cada dia do calendário.
+  const [diaCorrecao, setDiaCorrecao] = useState(null);
+  const registrosCorrecao = diaCorrecao ? [...(calendarioRegistros[diaCorrecao] || [])].sort() : [];
+  const horarioEsperadoCorrecao = (indice) => {
+    const expectativas = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, new Date(`${diaCorrecao}T12:00:00`)) || [];
+    if (!expectativas.length) return [indice % 2 === 0 ? 'Entrada' : 'Saída', null];
+    return expectativas[indice % expectativas.length];
+  };
+  const excluirBatidaEng = (indice) => {
+    const tempo = registrosCorrecao[indice];
+    if (!tempo) return;
+    setConfirmacaoModal({
+      titulo: 'Excluir batida',
+      mensagem: `Excluir a batida de ${hora(new Date(tempo)).slice(0, 5)} de ${funcionarioCalendario?.nome || 'funcionário'}? A exclusão fica registrada.`,
+      destrutivo: true,
+      confirmar: () => {
+        setConfirmacaoModal(null);
+        api.deleteSispontoRegistro({ funcionarioId: calendarioFuncionarioId, data: diaCorrecao, tempo })
+          .then(() => carregarRegistros())
+          .catch((erro) => window.alert(erro?.message || 'Não foi possível excluir a batida.'));
+      },
+    });
+  };
 
   const statusRegistroEng = (registro, indice, _registrosDoDia, chaveDia = date) => {
     const expectativas = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, new Date(`${chaveDia}T12:00:00`)) || [];
@@ -456,7 +481,15 @@ export default function SisPontoEngAdminScreen({ destino }) {
 
           {activePage === 'banco' && (
             <section className="sis-banco-view">
-              {BancoHoras(funcionarios)}
+              <BancoHoras
+                rotulo={`${meses[mes.getMonth()]} ${mes.getFullYear()}`}
+                itens={cadastroFuncionarios.map((funcionario) => ({
+                  id: funcionario.id,
+                  nome: funcionario.nome,
+                  setor: funcionario.setor,
+                  banco: calcularBancoHoras(funcionario, extrairRegistrosFuncionario(registrosBackend, funcionario.id), padroesHorario, justificativas, mes),
+                }))}
+              />
             </section>
           )}
 
@@ -570,6 +603,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
                                 {itens.slice(0, 4).map((registro, registroIndex) => <span key={registro.toISOString()} className={`sis-eng-calendar-entry ${statusItens[registroIndex] === 'Atrasado/Saída Antecipada' ? 'late' : statusItens[registroIndex] === 'Justificado' ? 'justified' : ''}`}><LogIn size={11} style={registroIndex % 2 ? { transform: 'rotate(180deg)' } : undefined} />{hora(registro).slice(0, 5)}</span>)}
                                 {horariosPreenchidos.map((horarioJustificado, indexHorario) => { if (!horarioJustificado || indexHorario < itens.length) return null; const entradaTipo = horariosDia[indexHorario][0] === 'Entrada'; return <span key={`justificado-${chave}-${indexHorario}`} className="sis-eng-calendar-entry justified" style={{ fontStyle: 'italic' }} title="Preenchido pela justificativa aprovada"><LogIn size={11} style={entradaTipo ? undefined : { transform: 'rotate(180deg)' }} />{horarioJustificado}</span>; })}
                               </div>}
+                              {itens.length > 0 && <button type="button" onClick={(evento) => { evento.stopPropagation(); setDiaCorrecao(chave); }} style={{ marginTop: 4, padding: '2px 6px', border: '1px solid #d8e6fc', borderRadius: 6, background: '#fff', color: '#1767e8', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>Corrigir</button>}
                               {temAtraso && <div className="sis-eng-calendar-status">Atrasado/Saída Antecipada</div>}
                               {!temAtraso && temJustificado && <div className="sis-eng-calendar-status" style={{ color: temJustificadoPendente ? '#b9770e' : '#3177dd' }}>Justificado</div>}
                             </motion.div>;
@@ -618,6 +652,14 @@ export default function SisPontoEngAdminScreen({ destino }) {
           )}
         </section>
       </div>
+      {diaCorrecao && <ModalRegistros
+        titulo={`Batidas de ${funcionarioCalendario?.nome || ''} · ${new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(`${diaCorrecao}T12:00:00`))}`}
+        registros={registrosCorrecao}
+        statusRegistro={(registro, indice, lista) => statusRegistroEng(new Date(registro), indice, lista, diaCorrecao)}
+        horarioEsperado={horarioEsperadoCorrecao}
+        onExcluir={excluirBatidaEng}
+        onClose={() => setDiaCorrecao(null)}
+      />}
       {confirmacaoModal && <ConfirmacaoPonto {...confirmacaoModal} onClose={() => setConfirmacaoModal(null)} />}
       {popupDiaJustificativa && (
         <PopupJustificativasDia

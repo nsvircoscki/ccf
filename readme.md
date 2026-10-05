@@ -185,7 +185,33 @@ Quem não casar pelo nome (mesmo setor) precisa ser criado em Usuários ou mapea
 ```bash
 npm test                                          # regras de sequência/pares, formato do CSV, token do export
 node scripts/verificarSyncPonto.js <userId>      # idempotência do sync no banco de dev (apaga o que cria)
+node scripts/seedPontoFalso.js                   # 6 usuários falsos (@exemplo.test, senha teste123) com ~5 semanas de ponto
+node scripts/seedPontoFalso.js --remover         # apaga os usuários falsos, as batidas e as justificativas deles
 ```
+
+O seed cria um perfil de cada tipo:
+- pontual;
+- atrasa;
+- esquece a saída;
+- falta;
+- faz hora extra;
+- horista.
+
+Isso gera horários previstos para a revisão do ENG, saldo positivo e negativo no banco de horas e algumas batidas que chegaram "offline".
+
+### Banco de horas
+
+O banco de horas é acumulado no mês e só conta dias já encerrados. Para cada dia:
+
+`saldo = trabalhado + justificativas aceitas − jornada prevista`
+
+- **Justificativa aceita** só completa a jornada, não gera hora extra.
+- **Horário previsto** abonado pelo ENG conta como trabalhado. Pendente ou falta não conta.
+- **Dia sem jornada** (fim de semana) com trabalho vira crédito.
+- **Horista** não tem banco.
+- O banco só conta a partir de `User.pontoDesde`.
+
+**Só o ENG corrige (exclui) batidas**, pelo botão "Corrigir" no calendário do painel. O funcionário que errou envia uma justificativa.
 
 ## Deploy com HTTPS (necessário para o ponto offline)
 

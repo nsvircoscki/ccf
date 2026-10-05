@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, CloudOff, CloudUpload, FileText, Hourglass, Image as ImageIcon, LogIn, Pencil, TimerReset, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
-import { registrarBatida, pendentesDoFuncionario, descartarPendente, inscrever, obterEstado, sincronizarPendentes } from '../../services/pontoOffline.js';
+import { registrarBatida, pendentesDoFuncionario, inscrever, obterEstado, sincronizarPendentes } from '../../services/pontoOffline.js';
 import { meses, diasSemana, JUSTIFICATIVA_CORES, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_TIPOS, rotuloTipoJustificativa } from './sisPontoData.js';
-import { chaveData, hora, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, pendenciasDeJustificativa, ehHorista } from './sisPontoUtils.js';
+import { chaveData, hora, calcularBancoHoras, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, pendenciasDeJustificativa, ehHorista } from './sisPontoUtils.js';
 import { Card, ConfirmacaoPonto, BancoHoras, Legenda, MenuPonto, ModalRegistros, Resumo, navButton } from './SisPontoComponents.jsx';
 import './sisPonto.css';
 
@@ -55,7 +55,6 @@ export default function SisPontoFuncionarioScreen({ usuario, destino }) {
     Object.values(junto).forEach((lista) => lista.sort());
     return junto;
   }, [registrosServidor, pendentesLocais]);
-  const pendentesSet = useMemo(() => new Set(pendentesLocais.map((batida) => batida.batidoEm)), [pendentesLocais]);
   // Mesma fonte que o admin (SisPontoEngAdmin) usa pra alocar cada funcionário
   // num padrão de horário, agora vinda do backend — sem isso, este painel
   // sempre usava o horário padrão de fábrica e ignorava a alocação feita lá.
@@ -184,25 +183,6 @@ export default function SisPontoFuncionarioScreen({ usuario, destino }) {
     const expectativas = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dataRegistro) || [];
     return statusRegistroComExpectativa(registro, indice, expectativas, justificativas, funcionarioAtual?.id, chaveDia);
   };
-  const excluirRegistro = (indice) => {
-    setConfirmacao({ titulo: 'Excluir registro', mensagem: 'Deseja realmente excluir este registro de ponto?', destrutivo: true, confirmar: () => {
-      const idAtual = funcionarioAtual?.id || usuarioLogado;
-      const tempo = (registros[diaModal] || [])[indice];
-      setConfirmacao(null);
-      if (!tempo) return;
-      // Ainda não subiu: basta tirar da fila do aparelho.
-      if (pendentesSet.has(tempo)) {
-        descartarPendente(idAtual, tempo).finally(carregarPendentes);
-        return;
-      }
-      setRegistrosServidor((atuais) => ({ ...atuais, [diaModal]: (atuais[diaModal] || []).filter((item) => item !== tempo) }));
-      api.deleteSispontoRegistro({ funcionarioId: idAtual, data: diaModal, tempo }).catch((erro) => {
-        setErroPonto(erro?.message || 'Não foi possível excluir o registro. Tente novamente.');
-        window.setTimeout(() => setErroPonto(null), 4500);
-        carregarRegistros();
-      });
-    } });
-  };
   const atrasosNoMes = registrosNoMes.reduce((total, [data, itens]) => total + itens.filter((registro, indice) => statusRegistro(registro, indice, itens, data) === 'Atrasado/Saída Antecipada').length, 0);
   const diasDoMesSemRegistroJustificados = Array.from({ length: new Date(mes.getFullYear(), mes.getMonth() + 1, 0).getDate() }, (_, indice) => new Date(mes.getFullYear(), mes.getMonth(), indice + 1))
     .filter((dia) => { const chaveDia = chaveData(dia); const itensDia = registros[chaveDia] || []; const expectativasDia = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dia) || []; return statusJustificativaSlotsFaltantes(justificativas, funcionarioAtual?.id, chaveDia, expectativasDia, itensDia.length) === 'Aceita'; }).length;
@@ -210,12 +190,9 @@ export default function SisPontoFuncionarioScreen({ usuario, destino }) {
   const registrosDoModal = diaModal ? registros[diaModal] || [] : [];
   const statusRegistroDoModal = (registro, indice, registrosDoDia) => statusRegistro(registro, indice, registrosDoDia, diaModal);
   const idFuncionarioAtual = funcionarioAtual?.id || usuarioLogado;
-  const registrosBackendFuncionario = useMemo(() => {
-    const porData = {};
-    Object.entries(registros).forEach(([chave, lista]) => { porData[chave] = { [idFuncionarioAtual]: lista }; });
-    return porData;
-  }, [registros, idFuncionarioAtual]);
-  const bancoHorasFuncionario = useMemo(() => buildEngFuncionariosFromStorage(hoje, padroesHorario, [{ id: idFuncionarioAtual, nome: funcionarioAtual?.nome || usuarioLogado, setor: usuarioLogado, horista: funcionarioEhHorista, padraoHorarioId: funcionarioAtual?.padraoHorarioId || null }], justificativas, registrosBackendFuncionario), [hoje, idFuncionarioAtual, funcionarioAtual, usuarioLogado, justificativas, registrosBackendFuncionario, padroesHorario, funcionarioEhHorista]);
+  // Banco de horas acumulado do mês exibido no calendário (no máximo 31 dias:
+  // barato o bastante para recalcular a cada render).
+  const bancoDoMes = calcularBancoHoras(funcionarioAtual, registros, padroesHorario, justificativas, mes, hoje);
   // Todo atraso/saída antecipada (em qualquer mês, não só o exibido no
   // calendário), do mais antigo pro mais recente. O badge da aba
   // "Justificativas" conta só quem ainda não teve NENHUMA justificativa
@@ -257,6 +234,7 @@ export default function SisPontoFuncionarioScreen({ usuario, destino }) {
             </div>
             <MenuPonto ativo={aba === 'calendario'} onClick={() => setAba('calendario')} icon={<CalendarDays size={17} />} texto="Calendário" />
             <MenuPonto ativo={aba === 'justificativas'} onClick={() => setAba('justificativas')} icon={<FileText size={17} />} texto="Justificativas" badge={pendenciasNaoEnviadas.length + pendenciasRefazerNoContador} />
+            <MenuPonto ativo={aba === 'banco'} onClick={() => setAba('banco')} icon={<Hourglass size={17} />} texto="Banco de horas" />
             
           </aside>
           {aba === 'calendario' ? <div className="ponto-grid">
@@ -326,10 +304,10 @@ export default function SisPontoFuncionarioScreen({ usuario, destino }) {
               <Resumo icon={<TimerReset size={16} />} cor="#1767e8" label="Registros realizados" valor={totalRegistros} />
             </Card>
           </div>
-          </div> : aba === 'justificativas' ? <SisPontoJustificativaForm funcionarioId={funcionarioAtual?.id || usuarioLogado} nome={funcionarioAtual?.nome || usuarioLogado} setor={usuarioLogado} justificativas={justificativas} onAtualizado={carregarJustificativas} pendenciaSugerida={pendenciaSugerida} pendenciaRefazerSugerida={pendenciasRefazer[0] || null} /> : BancoHoras(bancoHorasFuncionario)}
+          </div> : aba === 'justificativas' ? <SisPontoJustificativaForm funcionarioId={funcionarioAtual?.id || usuarioLogado} nome={funcionarioAtual?.nome || usuarioLogado} setor={usuarioLogado} justificativas={justificativas} onAtualizado={carregarJustificativas} pendenciaSugerida={pendenciaSugerida} pendenciaRefazerSugerida={pendenciasRefazer[0] || null} /> : <BancoHoras itens={[{ id: idFuncionarioAtual, nome: funcionarioAtual?.nome, setor: usuarioLogado, banco: bancoDoMes }]} rotulo={`${meses[mes.getMonth()]} ${mes.getFullYear()}`} />}
         </div>
       </div>
-      {modalRegistros && <ModalRegistros registros={registrosDoModal} statusRegistro={statusRegistroDoModal} horarioEsperado={horarioEsperado} onExcluir={excluirRegistro} onClose={() => { setModalRegistros(false); setDiaModal(null); }} />}
+      {modalRegistros && <ModalRegistros registros={registrosDoModal} statusRegistro={statusRegistroDoModal} horarioEsperado={horarioEsperado} onClose={() => { setModalRegistros(false); setDiaModal(null); }} />}
       {confirmacao && <ConfirmacaoPonto {...confirmacao} onClose={() => setConfirmacao(null)} />}
       {erroPonto && <div style={{ position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 120, padding: '12px 18px', borderRadius: 10, background: '#c23b34', color: '#fff', fontSize: 13, fontWeight: 700, boxShadow: '0 14px 30px rgba(15,35,70,.25)' }}>{erroPonto}</div>}
     </main>
