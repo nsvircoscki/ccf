@@ -1,7 +1,8 @@
 import express from 'express';
 import { exigirSetor } from '../middlewares/autenticar.js';
 import { SETORES_GESTAO_PONTO } from '../config/permissoes.js';
-import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario, obterConfigFeriados, atualizarConfigFeriados, obterRegrasPonto, atualizarRegrasPonto } from '../services/sisPontoService.js';
+import { prisma } from '../prisma.js';
+import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario, obterConfigFeriados, atualizarConfigFeriados, obterRegrasPonto, atualizarRegrasPonto, listarLancamentosBanco, criarLancamentoBanco, excluirLancamentoBanco } from '../services/sisPontoService.js';
 import { feriadosDoAno } from '../services/ponto/feriados.js';
 import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes, exportarCsv, gerarPrevistas, listarMeusEsquecimentos, abonarPrevistasDaJustificativa, contarParaRevisao } from '../services/ponto/batidaService.js';
 import { interpretarPeriodo, nomePeriodo } from '../services/ponto/exportCsv.js';
@@ -226,6 +227,36 @@ router.put('/feriados', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) =
     res.json(config);
   } catch (error) {
     res.status(400).json({ error: error.message || 'Erro ao salvar feriados.' });
+  }
+});
+
+// Lançamentos manuais no banco de horas: cada um vê os seus; a gestão vê,
+// lança e exclui de todos. { funcionarioId, dia: 'YYYY-MM-DD', minutos (+/-), motivo }
+router.get('/banco/lancamentos', async (req, res) => {
+  try {
+    res.json(await listarLancamentosBanco(req.usuario));
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao listar lançamentos.' });
+  }
+});
+
+router.post('/banco/lancamentos', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) => {
+  try {
+    const funcionario = await prisma.user.findUnique({ where: { id: String(req.body?.funcionarioId || '') } });
+    if (!funcionario || !funcionario.ativo || !funcionario.registraPonto) return res.status(400).json({ error: 'Escolha um funcionário que registra ponto.' });
+    res.status(201).json(await criarLancamentoBanco(req.body || {}, req.usuario, funcionario));
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao lançar horas.' });
+  }
+});
+
+router.delete('/banco/lancamentos/:id', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) => {
+  try {
+    const existia = await excluirLancamentoBanco(req.params.id);
+    if (!existia) return res.status(404).json({ error: 'Lançamento não encontrado.' });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao excluir lançamento.' });
   }
 });
 

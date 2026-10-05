@@ -429,7 +429,9 @@ export function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Dat
 // trabalho vira crédito. Horista e quem não tem jornada não têm banco (null).
 // Só conta a partir de `funcionario.pontoDesde` (quando passou a registrar ponto).
 // Feriado (feriados: Map 'YYYY-MM-DD' -> nome) não tem jornada: trabalho no dia vira crédito.
-export function calcularBancoHoras(funcionario, registrosBlob = {}, padroes = {}, justificativas = [], mesRef = new Date(), hoje = chaveData(new Date()), feriados = new Map(), agora = new Date()) {
+// Lançamentos manuais da gestão (lancamentos: [{ funcionarioId, dia, minutos, motivo }])
+// entram no saldo do mês do dia lançado, mesmo antes do início do ponto.
+export function calcularBancoHoras(funcionario, registrosBlob = {}, padroes = {}, justificativas = [], mesRef = new Date(), hoje = chaveData(new Date()), feriados = new Map(), agora = new Date(), lancamentos = []) {
   const resultado = { trabalhado: 0, creditos: 0, debitos: 0, saldo: 0, dias: [] };
   const semBanco = !funcionario || ehHorista(funcionario) || !funcionario.padraoHorarioId || !padroes[funcionario.padraoHorarioId];
   const desde = funcionario?.pontoDesde ? chaveData(new Date(funcionario.pontoDesde)) : null;
@@ -472,6 +474,18 @@ export function calcularBancoHoras(funcionario, registrosBlob = {}, padroes = {}
       previsto: semBanco || feriados.has(hoje) ? 0 : minutosPrevistos(expectativasDoFuncionario(funcionario, padroes, dataHoje) || []),
       feriado: feriados.get(hoje) || null,
     };
+  }
+
+  if (!semBanco) {
+    const prefixoMes = chaveData(new Date(mesRef.getFullYear(), mesRef.getMonth(), 1)).slice(0, 7);
+    resultado.lancamentos = lancamentos
+      .filter((l) => l.funcionarioId === funcionario.id && String(l.dia).startsWith(prefixoMes))
+      .sort((a, b) => a.dia.localeCompare(b.dia));
+    for (const l of resultado.lancamentos) {
+      if (l.minutos > 0) resultado.creditos += l.minutos;
+      else resultado.debitos += -l.minutos;
+      resultado.saldo += l.minutos;
+    }
   }
 
   return semBanco ? { ...resultado, semBanco: true } : resultado;

@@ -89,7 +89,7 @@ export function Saldo({ titulo, valor, cor }) { return <div style={{ padding: 18
 
 // Banco de horas acumulado no mês (ver calcularBancoHoras em sisPontoUtils.js).
 // itens: [{ id, nome, setor, banco }] — banco = resultado de calcularBancoHoras.
-export function BancoHoras({ itens = [], rotulo = '' }) {
+export function BancoHoras({ itens = [], rotulo = '', onExcluirLancamento, children }) {
   const comBanco = itens.filter((item) => !item.banco?.semBanco);
   const soma = (campo) => comBanco.reduce((acc, item) => acc + (item.banco?.[campo] || 0), 0);
   const trabalhado = itens.reduce((acc, item) => acc + (item.banco?.trabalhado || 0), 0);
@@ -114,6 +114,7 @@ export function BancoHoras({ itens = [], rotulo = '' }) {
       {comHoje.length > 0 && <Saldo titulo={comHoje.length === 1 ? `Hoje até agora${previstoUnico ? ` (de ${formatMinutos(previstoUnico)})` : ''}` : 'Hoje até agora (todos)'} valor={formatMinutos(hojeTrabalhado)} cor="#7c3aed" />}
     </div>
     {comHoje.length > 0 && <p style={{ margin: '10px 0 0', color: '#7183a3', fontSize: 11, fontWeight: 600 }}>As horas de hoje entram no saldo amanhã, quando o dia fecha.</p>}
+    {children}
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, marginTop: 20 }}>
       {itens.length ? itens.map((item) => {
         const banco = item.banco || {};
@@ -127,12 +128,80 @@ export function BancoHoras({ itens = [], rotulo = '' }) {
               : <>
                 <span>Créditos: <b style={{ color: '#38bc7b' }}>{formatSaldoMinutos(banco.creditos || 0)}</b> · Débitos: <b style={{ color: '#ff5d66' }}>{formatSaldoMinutos(-(banco.debitos || 0))}</b></span>
                 <span>Saldo: <b style={{ color: (banco.saldo || 0) < 0 ? '#ff5d66' : '#38bc7b' }}>{formatSaldoMinutos(banco.saldo || 0)}</b></span>
+                {banco.lancamentos?.length > 0 && <div style={{ display: 'grid', gap: 4, paddingTop: 6, borderTop: '1px dashed #d8e6fc' }}>
+                  {banco.lancamentos.map((l) => <span key={l.id} title={`Lançado por ${l.por || '—'}`} style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+                    <b style={{ color: l.minutos < 0 ? '#ff5d66' : '#38bc7b', whiteSpace: 'nowrap' }}>{formatSaldoMinutos(l.minutos)}</b>
+                    <span style={{ color: '#7183a3', minWidth: 0 }}>{l.dia.split('-').reverse().slice(0, 2).join('/')} · {l.motivo}</span>
+                    {onExcluirLancamento && <button type="button" onClick={() => onExcluirLancamento(l)} aria-label="Excluir lançamento" title="Excluir lançamento" style={{ marginLeft: 'auto', border: 0, background: 'none', color: '#be3747', cursor: 'pointer', fontWeight: 900, padding: 0 }}>×</button>}
+                  </span>)}
+                </div>}
               </>}
           </div>
         </div>;
       }) : <div style={{ color: '#7183a3', fontSize: 13 }}>Sem funcionários registrados.</div>}
     </div>
   </Card>;
+}
+
+// Lançamento manual no banco de horas (só a gestão do ponto): saldo trazido de
+// antes do sistema, crédito ou débito combinado. Motivo obrigatório.
+export function FormLancamentoBanco({ funcionarios = [], onLancar }) {
+  const hoje = new Date();
+  const vazio = { funcionarioId: '', dia: `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`, sinal: 1, horas: '', minutos: '', motivo: '' };
+  const [form, setForm] = useState(vazio);
+  const [estado, setEstado] = useState({ enviando: false, erro: null, ok: null });
+  const mudar = (campo) => (e) => setForm((atual) => ({ ...atual, [campo]: e.target.value }));
+  const enviar = async () => {
+    const total = (Number(form.horas) || 0) * 60 + (Number(form.minutos) || 0);
+    if (!form.funcionarioId) { setEstado({ enviando: false, erro: 'Escolha o funcionário.', ok: null }); return; }
+    if (!total) { setEstado({ enviando: false, erro: 'Informe as horas.', ok: null }); return; }
+    if (form.motivo.trim().length < 3) { setEstado({ enviando: false, erro: 'Informe o motivo.', ok: null }); return; }
+    setEstado({ enviando: true, erro: null, ok: null });
+    try {
+      await onLancar({ funcionarioId: form.funcionarioId, dia: form.dia, minutos: Number(form.sinal) * total, motivo: form.motivo.trim() });
+      setForm({ ...vazio, funcionarioId: form.funcionarioId, dia: form.dia });
+      setEstado({ enviando: false, erro: null, ok: 'Lançado. Entra no saldo do mês do dia escolhido.' });
+    } catch (e) {
+      setEstado({ enviando: false, erro: e?.message || 'Não foi possível lançar.', ok: null });
+    }
+  };
+  const rotulo = { display: 'grid', gap: 5, fontSize: 11, fontWeight: 800, color: '#7183a3', minWidth: 0 };
+  return <div style={{ marginTop: 20, padding: 16, borderRadius: 12, border: '1px solid #e5edf8', background: '#fbfdff' }}>
+    <h3 style={{ margin: 0, fontSize: 14, color: '#1d3156' }}>Lançar horas no banco</h3>
+    <p style={{ margin: '4px 0 12px', color: '#7183a3', fontSize: 12, fontWeight: 600 }}>Saldo de antes do sistema, crédito ou débito combinado. Aparece para o funcionário com o motivo.</p>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap: 10 }}>
+      <label style={rotulo}>Funcionário
+        <select value={form.funcionarioId} onChange={mudar('funcionarioId')} style={{ ...campoCorrecao, width: '100%' }}>
+          <option value="">Selecione...</option>
+          {funcionarios.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+        </select>
+      </label>
+      <label style={rotulo}>Dia
+        <input type="date" value={form.dia} onChange={mudar('dia')} style={{ ...campoCorrecao, width: '100%', boxSizing: 'border-box' }} />
+      </label>
+      <label style={rotulo}>Tipo
+        <select value={form.sinal} onChange={mudar('sinal')} style={{ ...campoCorrecao, width: '100%' }}>
+          <option value={1}>Crédito (+)</option>
+          <option value={-1}>Débito (−)</option>
+        </select>
+      </label>
+      <div style={rotulo}>Horas
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input type="number" min={0} max={999} placeholder="h" value={form.horas} onChange={mudar('horas')} aria-label="Horas" style={{ ...campoCorrecao, width: 70 }} />
+          <span>:</span>
+          <input type="number" min={0} max={59} placeholder="min" value={form.minutos} onChange={mudar('minutos')} aria-label="Minutos" style={{ ...campoCorrecao, width: 70 }} />
+        </div>
+      </div>
+    </div>
+    <label style={{ ...rotulo, marginTop: 10 }}>Motivo
+      <input type="text" maxLength={500} value={form.motivo} onChange={mudar('motivo')} placeholder="Ex.: saldo do banco antes do sistema" style={{ ...campoCorrecao, width: '100%', boxSizing: 'border-box' }} />
+    </label>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+      <button type="button" disabled={estado.enviando} onClick={enviar} style={{ border: 0, borderRadius: 8, padding: '9px 16px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: 'pointer', opacity: estado.enviando ? .7 : 1 }}>{estado.enviando ? 'Lançando...' : 'Lançar'}</button>
+      {estado.ok && <span style={{ color: '#1f9d63', fontSize: 12, fontWeight: 700 }}>{estado.ok}</span>}
+      {estado.erro && <span style={{ color: '#c23b34', fontSize: 12, fontWeight: 700 }}>{estado.erro}</span>}
+    </div>
+  </div>;
 }
 
 const campoCorrecao = { height: 36, borderRadius: 8, border: '1px solid #d8e6fc', padding: '0 8px', fontSize: 13, fontWeight: 700, color: '#405371', background: '#fff' };

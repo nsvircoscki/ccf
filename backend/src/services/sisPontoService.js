@@ -370,3 +370,53 @@ export async function atualizarRegrasPonto(dados = {}) {
     return { prazoJustificativaHoras: prazo };
   });
 }
+
+// Lançamentos manuais no banco de horas (saldo trazido de antes do sistema,
+// crédito/débito combinado...). Só a gestão do ponto lança e exclui; cada
+// pessoa vê os próprios. Entram no saldo do mês do dia lançado.
+const LANCAMENTO_MAX_MINUTOS = 1000 * 60;
+
+export async function listarLancamentosBanco(quem) {
+  const store = await comFila(readStore);
+  const todos = store.lancamentosBanco || [];
+  return ehAdmin(quem) ? todos : todos.filter((l) => l.funcionarioId === quem?.id);
+}
+
+export async function criarLancamentoBanco(dados, quem, funcionario) {
+  const dia = String(dados.dia || '').trim();
+  const minutos = Number(dados.minutos);
+  const motivo = String(dados.motivo || '').trim().slice(0, 500);
+  if (!DIA_REGEX.test(dia)) throw new Error('Informe o dia do lançamento.');
+  if (!Number.isInteger(minutos) || minutos === 0 || Math.abs(minutos) > LANCAMENTO_MAX_MINUTOS) {
+    throw new Error('Informe as horas do lançamento (diferente de zero).');
+  }
+  if (motivo.length < 3) throw new Error('Informe o motivo do lançamento.');
+  const novo = {
+    id: `banco-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    funcionarioId: funcionario.id,
+    nome: funcionario.name,
+    dia,
+    minutos,
+    motivo,
+    por: quem.nome,
+    porId: quem.id,
+    criadoEm: new Date().toISOString(),
+  };
+  return comFila(async () => {
+    const store = await readStore();
+    store.lancamentosBanco = [...(store.lancamentosBanco || []), novo];
+    await writeStore(store);
+    return novo;
+  });
+}
+
+export async function excluirLancamentoBanco(id) {
+  return comFila(async () => {
+    const store = await readStore();
+    const atual = store.lancamentosBanco || [];
+    if (!atual.some((l) => l.id === id)) return false;
+    store.lancamentosBanco = atual.filter((l) => l.id !== id);
+    await writeStore(store);
+    return true;
+  });
+}

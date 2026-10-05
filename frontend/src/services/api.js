@@ -252,6 +252,38 @@ export const api = {
         return res.json();
     },
 
+    // Lançamentos manuais no banco de horas: [{ id, funcionarioId, nome, dia, minutos, motivo, por, criadoEm }].
+    getSispontoLancamentosBanco: async () => {
+        const res = await req(`${BASE_URL}/sis-ponto/banco/lancamentos`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao carregar lançamentos do banco de horas.');
+        }
+        return res.json();
+    },
+
+    criarSispontoLancamentoBanco: async (dados) => {
+        const res = await req(`${BASE_URL}/sis-ponto/banco/lancamentos`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao lançar horas.');
+        }
+        return res.json();
+    },
+
+    excluirSispontoLancamentoBanco: async (id) => {
+        const res = await req(`${BASE_URL}/sis-ponto/banco/lancamentos/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao excluir lançamento.');
+        }
+        return res.json();
+    },
+
     // Regras do ponto: { prazoJustificativaHoras }. Todos leem; só o ENG salva.
     getSispontoRegras: async () => {
         const res = await req(`${BASE_URL}/sis-ponto/regras`);

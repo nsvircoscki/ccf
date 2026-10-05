@@ -436,6 +436,13 @@ export async function inserirAjuste({ funcionarioId, tipo, batidoEm, motivo }, q
       },
     });
     await reclassificar(alvo.id, [quando], tx);
+    // Registro lançado num dia anterior ao início do ponto da pessoa (ex.:
+    // horários de antes de ela começar a usar o sistema): o banco de horas
+    // passa a contar desde esse dia.
+    const dia = chaveDiaLocal(quando);
+    if (dia < chaveDiaLocal(alvo.pontoDesde)) {
+      await tx.user.update({ where: { id: alvo.id }, data: { pontoDesde: dataLocalParaUtc(dia, '00:00') } });
+    }
     return nova;
   });
   // Se cobriu um horário previsto ainda pendente, ele sai sozinho.

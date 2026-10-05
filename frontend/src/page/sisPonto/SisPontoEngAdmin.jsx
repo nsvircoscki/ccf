@@ -4,7 +4,7 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChartNoAxesColumn
 import { api } from '../../services/api';
 import { meses, diasSemana, PADROES_HORARIO_INFO, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_CORES, rotuloTipoJustificativa } from './sisPontoData.js';
 import { chaveData, hora, calcularBancoHoras, carregarFeriados, esquecerFeriadosCarregados, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, calcularHistoricoSemanal, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, ehHorista, ehDiaDeTrabalho, diaSemRegistro } from './sisPontoUtils.js';
-import { BancoHoras, Card, ConfirmacaoPonto, ModalRegistros } from './SisPontoComponents.jsx';
+import { BancoHoras, Card, ConfirmacaoPonto, ModalRegistros, FormLancamentoBanco } from './SisPontoComponents.jsx';
 import SisPontoJustificativasAdmin from './SisPontoJustificativasAdmin.jsx';
 import SisPontoJornadaAdmin from './SisPontoJornadaAdmin.jsx';
 import SisPontoRevisaoAdmin from './SisPontoRevisaoAdmin.jsx';
@@ -51,6 +51,13 @@ export default function SisPontoEngAdminScreen({ destino }) {
       .catch(() => setJustificativas([]))
       .finally(() => setCarregandoJustificativas(false));
   };
+
+  // Lançamentos manuais no banco de horas (saldo anterior, crédito/débito combinado).
+  const [lancamentosBanco, setLancamentosBanco] = useState([]);
+  const carregarLancamentosBanco = () => api.getSispontoLancamentosBanco()
+    .then((lista) => setLancamentosBanco(Array.isArray(lista) ? lista : []))
+    .catch(() => setLancamentosBanco([]));
+  const [lancamentoExcluir, setLancamentoExcluir] = useState(null);
 
   // Batidas incluídas pelo ENG, por "funcionarioId|iso" — marcadas no calendário.
   const [ajustes, setAjustes] = useState(new Map());
@@ -138,6 +145,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
     });
 
   useEffect(() => { carregarJustificativas(); }, [activePage]);
+  useEffect(() => { carregarLancamentosBanco(); }, [activePage]);
   // Os avisos do ponto não vão pro sininho: ficam nos contadores das abas
   // Justificativas e Pontos a revisar, atualizados a cada minuto.
   const [revisaoPendente, setRevisaoPendente] = useState(0);
@@ -522,13 +530,23 @@ export default function SisPontoEngAdminScreen({ destino }) {
             <section className="sis-banco-view">
               <BancoHoras
                 rotulo={`${meses[mes.getMonth()]} ${mes.getFullYear()}`}
+                onExcluirLancamento={setLancamentoExcluir}
                 itens={cadastroFuncionarios.map((funcionario) => ({
                   id: funcionario.id,
                   nome: funcionario.nome,
                   setor: funcionario.setor,
-                  banco: calcularBancoHoras(funcionario, extrairRegistrosFuncionario(registrosBackend, funcionario.id), padroesHorario, justificativas, mes, undefined, feriados),
+                  banco: calcularBancoHoras(funcionario, extrairRegistrosFuncionario(registrosBackend, funcionario.id), padroesHorario, justificativas, mes, undefined, feriados, undefined, lancamentosBanco),
                 }))}
-              />
+              >
+                <FormLancamentoBanco funcionarios={cadastroFuncionarios} onLancar={async (dados) => { await api.criarSispontoLancamentoBanco(dados); await carregarLancamentosBanco(); }} />
+              </BancoHoras>
+              {lancamentoExcluir && <ConfirmacaoPonto
+                titulo="Excluir lançamento"
+                mensagem={`Excluir o lançamento de ${lancamentoExcluir.nome} (${lancamentoExcluir.dia.split('-').reverse().join('/')}: ${lancamentoExcluir.motivo})?`}
+                destrutivo
+                confirmar={async () => { const alvo = lancamentoExcluir; setLancamentoExcluir(null); await api.excluirSispontoLancamentoBanco(alvo.id).catch(() => {}); await carregarLancamentosBanco(); }}
+                onClose={() => setLancamentoExcluir(null)}
+              />}
             </section>
           )}
 
