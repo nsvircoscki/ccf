@@ -1,5 +1,6 @@
 import express from 'express';
 import { exigirSetor } from '../middlewares/autenticar.js';
+import { SETORES_GESTAO_PONTO } from '../config/permissoes.js';
 import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario, obterConfigFeriados, atualizarConfigFeriados, obterRegrasPonto, atualizarRegrasPonto } from '../services/sisPontoService.js';
 import { feriadosDoAno } from '../services/ponto/feriados.js';
 import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes, exportarCsv, gerarPrevistas, listarMeusEsquecimentos, abonarPrevistasDaJustificativa, contarParaRevisao } from '../services/ponto/batidaService.js';
@@ -23,7 +24,7 @@ router.post('/funcionarios', (_req, res) => res.status(410).json({ error: CADAST
 router.delete('/funcionarios/:id', (_req, res) => res.status(410).json({ error: CADASTRO_EM_USUARIOS }));
 
 // Só jornada e horista/mensalista (aba Jornada do admin).
-router.put('/funcionarios/:id', exigirSetor('ENG', 'DEV'), async (req, res) => {
+router.put('/funcionarios/:id', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (req, res) => {
   try {
     const funcionario = await atualizarFuncionario(req.params.id, req.body);
     if (!funcionario) return res.status(404).json({ error: 'Funcionário não encontrado.' });
@@ -75,7 +76,7 @@ router.delete('/registros', async (req, res) => {
 // Mesmo CSV do export do PC da folha (/sis-ponto/export.csv), mas baixado
 // pela tela, com a sessão do ENG — para importar no Sistema Ponto
 // (FONTE_PONTOS=arquivo, botão "Importar CSV").
-router.get('/folha.csv', exigirSetor('ENG', 'DEV'), async (req, res) => {
+router.get('/folha.csv', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (req, res) => {
   try {
     const periodo = interpretarPeriodo(req.query);
     if (!periodo) return res.status(400).json({ error: 'Informe ?mes=YYYY-MM.' });
@@ -109,7 +110,7 @@ router.get('/batidas/ajustes', async (req, res) => {
 });
 
 // Correção pelo ENG: inclui uma batida { funcionarioId, tipo, batidoEm, motivo }.
-router.post('/batidas/ajuste', exigirSetor('ENG'), async (req, res) => {
+router.post('/batidas/ajuste', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) => {
   try {
     res.status(201).json(await inserirAjuste(req.body || {}, req.usuario));
   } catch (error) {
@@ -120,7 +121,7 @@ router.post('/batidas/ajuste', exigirSetor('ENG'), async (req, res) => {
 // Revisão do admin: { pares (sem saída/sem entrada/inconsistentes), previstas
 // (horários em que a pessoa não bateu, para abonar ou marcar falta) }.
 // Contador da aba "Pontos a revisar": { previstas, registros, total }.
-router.get('/revisao/contagem', exigirSetor('ENG', 'DEV'), async (_req, res) => {
+router.get('/revisao/contagem', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (_req, res) => {
   try {
     res.json(await contarParaRevisao());
   } catch (error) {
@@ -128,7 +129,7 @@ router.get('/revisao/contagem', exigirSetor('ENG', 'DEV'), async (_req, res) => 
   }
 });
 
-router.get('/revisao', exigirSetor('ENG', 'DEV'), async (req, res) => {
+router.get('/revisao', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (req, res) => {
   try {
     const periodo = interpretarPeriodo(req.query);
     if (!periodo) return res.status(400).json({ error: 'Informe ?mes=YYYY-MM.' });
@@ -139,7 +140,7 @@ router.get('/revisao', exigirSetor('ENG', 'DEV'), async (req, res) => {
 });
 
 // { ids: [...], situacao: 'ABONADA' | 'FALTA' | 'PENDENTE' (desfaz) }
-router.post('/previstas/decisao', exigirSetor('ENG', 'DEV'), async (req, res) => {
+router.post('/previstas/decisao', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (req, res) => {
   try {
     res.json(await decidirPrevistas(req.body?.ids, req.body?.situacao, req.usuario));
   } catch (error) {
@@ -216,8 +217,8 @@ router.get('/feriados', async (req, res) => {
   }
 });
 
-// Só o ENG muda: Carnaval/Corpus Christi e os feriados municipais/estaduais/da empresa.
-router.put('/feriados', exigirSetor('ENG'), async (req, res) => {
+// Só a gestão do ponto (ENG/Coordenação) muda: Carnaval/Corpus Christi e os feriados municipais/estaduais/da empresa.
+router.put('/feriados', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) => {
   try {
     const config = await atualizarConfigFeriados(req.body || {});
     // Feriado novo apaga os "esquecimentos" pendentes daquele dia.
@@ -228,7 +229,7 @@ router.put('/feriados', exigirSetor('ENG'), async (req, res) => {
   }
 });
 
-// Regras do ponto (prazo para justificar): todos leem, só o ENG muda.
+// Regras do ponto (prazo para justificar): todos leem, só a gestão do ponto muda.
 router.get('/regras', async (_req, res) => {
   try {
     res.json(await obterRegrasPonto());
@@ -237,7 +238,7 @@ router.get('/regras', async (_req, res) => {
   }
 });
 
-router.put('/regras', exigirSetor('ENG'), async (req, res) => {
+router.put('/regras', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) => {
   try {
     res.json(await atualizarRegrasPonto(req.body || {}));
   } catch (error) {

@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import SisPontoFuncionarioScreen from './sisPonto/SisPontoFuncionario.jsx';
 import SisPontoEngAdminScreen from './sisPonto/SisPontoEngAdmin.jsx';
+import { podeGerirPonto } from '../utils/permissoes';
 
 // `usuario` = a pessoa logada ({ id, nome, setor }). Todo mundo bate só o
-// próprio ponto; quem é do ENG também administra, então alterna entre o
-// painel e o próprio ponto.
+// próprio ponto; quem administra o ponto (ENG e Coordenação) alterna entre o
+// painel e o próprio ponto. No celular o App abre direto a tela de bater o
+// ponto, então o painel é só no computador.
 export default function SisPontoView({ usuario, destino }) {
   // Guarda em qual notificação (destino.ts) a pessoa escolheu "Meu ponto":
   // uma notificação nova (ex.: justificativa) volta para o painel sozinha.
   const [meuPontoEm, setMeuPontoEm] = useState(null);
 
-  if (usuario?.setor !== 'ENG') {
+  if (!podeGerirPonto(usuario?.setor)) {
     return <SisPontoFuncionarioScreen usuario={usuario} destino={destino} />;
   }
 
@@ -24,7 +26,7 @@ export default function SisPontoView({ usuario, destino }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', gap: 4, padding: '8px 16px', borderBottom: '1px solid #e7edf6', background: '#fff' }}>
-        <button type="button" onClick={() => setMeuPontoEm(null)} style={botao(!meuPonto)}>Painel do ENG</button>
+        <button type="button" onClick={() => setMeuPontoEm(null)} style={botao(!meuPonto)}>Painel de gestão</button>
         <button type="button" onClick={() => setMeuPontoEm(tsAtual)} style={botao(meuPonto)}>Meu ponto</button>
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>

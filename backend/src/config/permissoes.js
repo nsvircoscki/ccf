@@ -13,6 +13,11 @@ const PERMISSOES = {
   ADM: ['sis-ponto'],
 };
 
+// Quem administra o ponto (painel no computador: justificativas, pontos a
+// revisar, correções, feriados/prazo, folha): ENG e Coordenação.
+export const SETORES_GESTAO_PONTO = ['ENG', 'CRD'];
+export const podeGerirPonto = (setor) => SETORES_GESTAO_PONTO.includes(setor);
+
 export function temAcessoAoModulo(setor, moduloId) {
   const permissao = PERMISSOES[setor];
   if (permissao === 'todos') return true;

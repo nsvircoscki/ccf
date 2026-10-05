@@ -40,6 +40,8 @@ export const PADROES_HORARIO_PADRAO = {
 export const JUSTIFICATIVA_TIPOS = [
   { id: 'esquecimento', nome: 'Esquecimento de marcação' },
   { id: 'falha_registro', nome: 'Falha no sistema ou no aparelho de ponto' },
+  { id: 'atraso', nome: 'Atraso' },
+  { id: 'levantamento', nome: 'Levantamento' },
   { id: 'atestado', nome: 'Atestado médico' },
   { id: 'consulta', nome: 'Consulta ou exame médico (declaração de comparecimento)' },
   { id: 'falta_justificada', nome: 'Falta justificada (luto, casamento, doação de sangue...)' },

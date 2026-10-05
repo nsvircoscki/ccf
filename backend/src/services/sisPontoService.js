@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { CONFIG_FERIADOS_PADRAO, validarConfigFeriados } from './ponto/feriados.js';
 import { dataLocalParaUtc } from './ponto/sequencia.js';
+import { SETORES_GESTAO_PONTO } from '../config/permissoes.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DATA_FILE = path.resolve(DATA_DIR, 'sis-ponto.json');
@@ -47,7 +48,7 @@ const STATUS_VALIDOS = ['Em análise', 'Aceita', 'Recusada', 'Inválida'];
 // frontend/src/page/sisPonto/sisPontoData.js — manter as duas iguais).
 // Em "outro", a descrição por escrito é obrigatória.
 export const TIPOS_JUSTIFICATIVA = [
-  'esquecimento', 'falha_registro', 'atestado', 'consulta',
+  'esquecimento', 'falha_registro', 'atraso', 'levantamento', 'atestado', 'consulta',
   'falta_justificada', 'saida_autorizada', 'compensacao', 'outro',
 ];
 // Motivos que saíram da lista: justificativas antigas continuam válidas
@@ -63,7 +64,7 @@ export function prazoJustificativaEncerrado(dia, horaFim, prazoHoras, agora = ne
   return agora.getTime() > fim.getTime() + prazoHoras * 3600 * 1000;
 }
 
-const SETORES_ADMIN = ['ENG', 'DEV'];
+const SETORES_ADMIN = [...SETORES_GESTAO_PONTO, 'DEV'];
 const ehAdmin = (quem) => SETORES_ADMIN.includes(quem?.setor);
 
 function validarTipoEMotivo(tipo, motivo, tipoAnterior = null) {

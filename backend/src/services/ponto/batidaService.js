@@ -8,6 +8,7 @@ import { classificarSequencia, chaveDiaLocal, chaveMesLocal, montarPares, JANELA
 import { COLUNAS_EXPORT, formatarCsv, montarLinhasExport, interpretarPeriodo } from './exportCsv.js';
 import { listarPadroesHorario, obterConfigFeriados, listarJustificativas, obterRegrasPonto, prazoJustificativaEncerrado } from '../sisPontoService.js';
 import { mapaFeriados } from './feriados.js';
+import { podeGerirPonto } from '../../config/permissoes.js';
 
 export const PADRAO_HORARIO_IDS = ['integral', 'manha', 'tarde'];
 export const MAX_ITENS_SYNC = 500;
@@ -84,7 +85,7 @@ function validarItem(item) {
 // Bater ponto: só o próprio. Corrigir (excluir uma batida): só o ENG — a
 // pessoa não altera as próprias marcações; se errou, envia justificativa.
 function podeCorrigirPonto(quem) {
-  return quem.setor === 'ENG';
+  return podeGerirPonto(quem.setor);
 }
 
 // Reaplica a regra de sequência em volta das batidas que mudaram. A batida
@@ -386,7 +387,7 @@ function validarMotivo(motivo) {
 export async function remover({ funcionarioId, tempo, motivo }, quem) {
   const batidoEm = new Date(tempo);
   if (!funcionarioId || Number.isNaN(batidoEm.getTime())) throw new Error('Informe funcionário e horário.');
-  if (!podeCorrigirPonto(quem)) throw new Error('Só o ENG pode corrigir registros de ponto. Envie uma justificativa.');
+  if (!podeCorrigirPonto(quem)) throw new Error('Só o ENG ou a Coordenação podem corrigir registros de ponto. Envie uma justificativa.');
   const motivoRemocao = validarMotivo(motivo);
   // Se houver um previsto abonado no mesmo instante, a batida real/ajuste vem primeiro.
   const batida = await prisma.pontoBatida.findFirst({
@@ -411,7 +412,7 @@ export async function remover({ funcionarioId, tempo, motivo }, quem) {
 // com quem incluiu (registradoPorId) e quando (recebidoEm), para nunca se
 // confundir com uma marcação feita pela própria pessoa no aparelho.
 export async function inserirAjuste({ funcionarioId, tipo, batidoEm, motivo }, quem) {
-  if (!podeCorrigirPonto(quem)) throw new Error('Só o ENG pode corrigir registros de ponto.');
+  if (!podeCorrigirPonto(quem)) throw new Error('Só o ENG ou a Coordenação podem corrigir registros de ponto.');
   const motivoAjuste = validarMotivo(motivo);
   const tipoNormalizado = normalizarTipo(tipo);
   if (!tipoNormalizado) throw new Error('Tipo deve ser ENTRADA ou SAIDA.');
