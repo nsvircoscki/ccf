@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { FiSearch, FiList, FiTrello, FiX, FiBriefcase, FiPower } from 'react-icons/fi';
 import { AnimatedDropdown } from './AnimatedDropdown';
 import { servicoService } from '../services/servicoService';
+import { useEstadoNavegavel } from '../hooks/useNavegacao';
 
 const TIPOS_PROCESSO = ["Retificação", "Desmembramento", "Unificação", "Usucapião", "Alteração de Divisas", "CAR", "Certificação INCRA", "Escritura", "Conferência", "Cadastral", "Locação", "Movimentação de Terra", "Extremação", "Altimetria", "DANC", "Relatório de Usucapião", "CCIR/ITR"];
 
@@ -108,7 +109,7 @@ export function PesquisaView({
   const [selectedId, setSelectedId] = useState(() => localStorage.getItem('pesquisa:selectedId') || null);
   // Projeto 100% Concluído sai da busca principal e vai pra aba de inativos —
   // fica fora do fluxo de trabalho do dia a dia sem sumir do sistema.
-  const [abaProjetos, setAbaProjetos] = useState(() => localStorage.getItem('pesquisa:abaProjetos') || 'ativos');
+  const [abaProjetos, setAbaProjetos] = useEstadoNavegavel(() => localStorage.getItem('pesquisa:abaProjetos') || 'ativos');
   // Por padrão todo mundo já vê tudo; esse toggle deixa restringir pra só as
   // etapas do próprio setor de quem estiver logado, sem perder a visão geral
   // (fica só um clique de distância).

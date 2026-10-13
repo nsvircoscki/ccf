@@ -5,7 +5,9 @@ import { servicoService } from '../services/servicoService';
 import { formatarCEP, formatarTelefone, formatarMoeda, desformatarMoeda, numeroParaMoeda } from '../utils/mascaras';
 import {
   Actions, ConfirmModal, Field, Icon, SearchableSelect, SelectField, Section, Switch, Shell, Toast, useToast, C,
+  VoltarTipo,
 } from '../components/cadastros/CadastroKit.jsx';
+import { useEstadoNavegavel } from '../hooks/useNavegacao';
 
 const cobrancaVazia = {
   clienteId: null,
@@ -152,9 +154,9 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
   const accent = C.accent;
   const { toast, show } = useToast();
 
-  const [tipo, setTipo] = useState(null); // null | 'boleto' | 'nota'
-  const [historicoAberto, setHistoricoAberto] = useState(false);
-  const [abaHistorico, setAbaHistorico] = useState('emitir');
+  const [tipo, setTipo] = useEstadoNavegavel(null); // null | 'boleto' | 'nota'
+  const [historicoAberto, setHistoricoAberto] = useEstadoNavegavel(false);
+  const [abaHistorico, setAbaHistorico, definirAbaHistoricoSemHistorico] = useEstadoNavegavel('emitir');
   const [clientes, setClientes] = useState([]);
   const [servicos, setServicos] = useState([]);
 
@@ -452,6 +454,7 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
         <div style={{ animation: 'fadeUp 0.3s ease both' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <VoltarTipo onClick={() => setTipo(null)} />
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 20,
                 background: `${accent}14`, color: accent, fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 11.5,
@@ -459,12 +462,8 @@ export default function FaturamentoView({ onBack, usuarioLogado }) {
                 <Icon name={tipo === 'boleto' ? 'scale' : 'doc'} size={14} />
                 {tipo === 'boleto' ? 'Boleto' : 'Nota Fiscal'}
               </span>
-              <button type="button" onClick={() => setTipo(null)} style={{
-                background: 'none', border: 'none', cursor: 'pointer', fontFamily: '"Montserrat", sans-serif', fontWeight: 600,
-                fontSize: 12, color: C.muted, textDecoration: 'underline',
-              }}>trocar tipo</button>
             </div>
-            <button type="button" onClick={() => { setAbaHistorico('emitir'); setHistoricoAberto(true); }} style={{
+            <button type="button" onClick={() => { definirAbaHistoricoSemHistorico('emitir'); setHistoricoAberto(true); }} style={{
               display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 10,
               border: `1.5px solid ${C.border}`, background: '#fff', color: C.label, cursor: 'pointer',
               fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 12.5,

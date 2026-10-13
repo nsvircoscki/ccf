@@ -6,6 +6,7 @@ import { servicoService } from '../services/servicoService';
 import {
   Actions, ConfirmModal, Field, Icon, MONT, SANS, SearchableSelect, SelectField, Section, Shell, Toast, useToast, C,
 } from '../components/cadastros/CadastroKit.jsx';
+import { useEstadoNavegavel } from '../hooks/useNavegacao';
 
 async function copiarParaAreaDeTransferencia(texto) {
   if (!texto) return false;
@@ -536,9 +537,9 @@ export default function TarefasView({ onBack, usuarioLogado }) {
   const [salvando, setSalvando] = useState(false);
   const [processando, setProcessando] = useState(null);
 
-  const [secao, setSecao] = useState('cadastro'); // 'cadastro' | 'tabelas'
-  const [setorFiltro, setSetorFiltro] = useState('DES_1'); // 'DES_1' | 'DES_2' | 'TODOS'
-  const [aba, setAba] = useState('pendentes'); // 'pendentes' | 'aguardo' | 'concluidas'
+  const [secao, setSecao] = useEstadoNavegavel('cadastro'); // 'cadastro' | 'tabelas'
+  const [setorFiltro, setSetorFiltro] = useEstadoNavegavel('DES_1'); // 'DES_1' | 'DES_2' | 'TODOS'
+  const [aba, setAba] = useEstadoNavegavel('pendentes'); // 'pendentes' | 'aguardo' | 'concluidas'
   const [tarefas, setTarefas] = useState([]);
   const [tarefaParaExcluir, setTarefaParaExcluir] = useState(null);
   const [tarefaParaAguardar, setTarefaParaAguardar] = useState(null);

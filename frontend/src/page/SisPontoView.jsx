@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import SisPontoFuncionarioScreen from './sisPonto/SisPontoFuncionario.jsx';
 import SisPontoEngAdminScreen from './sisPonto/SisPontoEngAdmin.jsx';
 import { podeGerirPonto } from '../utils/permissoes';
+import { useEstadoNavegavel } from '../hooks/useNavegacao';
 
 // `usuario` = a pessoa logada ({ id, nome, setor }). Todo mundo bate só o
 // próprio ponto; quem administra o ponto (ENG e Coordenação) alterna entre o
@@ -10,7 +10,7 @@ import { podeGerirPonto } from '../utils/permissoes';
 export default function SisPontoView({ usuario, destino }) {
   // Guarda em qual notificação (destino.ts) a pessoa escolheu "Meu ponto":
   // uma notificação nova (ex.: justificativa) volta para o painel sozinha.
-  const [meuPontoEm, setMeuPontoEm] = useState(null);
+  const [meuPontoEm, setMeuPontoEm] = useEstadoNavegavel(null);
 
   if (!podeGerirPonto(usuario?.setor)) {
     return <SisPontoFuncionarioScreen usuario={usuario} destino={destino} />;
