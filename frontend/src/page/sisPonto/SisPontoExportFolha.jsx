@@ -40,7 +40,7 @@ export default function SisPontoExportFolha({ onExportarDia }) {
         <p style={{ margin: '6px 0 18px', color: '#7183a3', fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>
           Baixa todos os registros do mês no formato que o Sistema Ponto importa (botão "Importar CSV", com FONTE_PONTOS=arquivo).
           Faltas marcadas pelo ENG saem com 0 h e código 6; esquecimentos ainda sem decisão saem com 0 h e aparecem na conferência da folha.
-          Confira a aba "Pontos a revisar" antes de exportar.
+          Confira as abas "Justificativas" (esquecimentos) e "Pontos a revisar" antes de exportar.
         </p>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} style={{ padding: '9px 10px', border: '1px solid #d8e6fc', borderRadius: 8, color: '#405371', fontWeight: 700 }} />

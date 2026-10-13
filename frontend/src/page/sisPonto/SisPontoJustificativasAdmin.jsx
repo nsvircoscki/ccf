@@ -4,11 +4,12 @@ import { CalendarDays, ChartNoAxesColumn, Clock3, FileText, Trash2, User } from 
 import { api } from '../../services/api';
 import { JUSTIFICATIVA_CORES, rotuloTipoJustificativa } from './sisPontoData.js';
 import { Card, ConfirmacaoPonto } from './SisPontoComponents.jsx';
+import SisPontoEsquecimentosAdmin from './SisPontoEsquecimentosAdmin.jsx';
 
 const ORDEM_STATUS_JUSTIFICATIVA = { 'Em análise': 0, Aceita: 1, Inválida: 2, Recusada: 3 };
 const OPCOES_STATUS = ['Todos os status', 'Em análise', 'Aceita', 'Inválida', 'Recusada'];
 
-export default function SisPontoJustificativasAdmin({ justificativas, carregando, onAtualizado }) {
+export default function SisPontoJustificativasAdmin({ justificativas, carregando, onAtualizado, onEsquecimentoDecidido }) {
   const [processandoId, setProcessandoId] = useState(null);
   const [imagemAmpliada, setImagemAmpliada] = useState(null);
   const [confirmacaoExclusao, setConfirmacaoExclusao] = useState(null);
@@ -101,20 +102,35 @@ export default function SisPontoJustificativasAdmin({ justificativas, carregando
     </section>
   );
 
+  // Aceitar uma justificativa abona os horários previstos que ela cobre:
+  // os esquecimentos recarregam quando alguma justificativa muda.
+  const versaoJustificativas = justificativas.map((j) => `${j.id}:${j.status}`).join('|');
+  const esquecimentos = (
+    <SisPontoEsquecimentosAdmin
+      filtros={{ funcionario: funcionarioFiltro, setor: setorFiltro, status: statusFiltro, mes: mesFiltro }}
+      atualizacao={versaoJustificativas}
+      onDecidido={onEsquecimentoDecidido}
+    />
+  );
+
   if (carregando) {
     return <Card style={{ padding: 26, minHeight: 200 }}><p style={{ color: '#7183a3', fontSize: 13 }}>Carregando justificativas...</p></Card>;
   }
 
   if (!justificativas.length) {
-    return <Card style={{ padding: 26, minHeight: 200 }}>
-      <h2 style={{ margin: 0, fontSize: 20 }}>Justificativas</h2>
-      <p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Nenhuma solicitação enviada pelos funcionários até o momento.</p>
-    </Card>;
+    return <>
+      {esquecimentos}
+      <Card style={{ padding: 26, minHeight: 200 }}>
+        <h2 style={{ margin: 0, fontSize: 20 }}>Justificativas</h2>
+        <p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Nenhuma solicitação enviada pelos funcionários até o momento.</p>
+      </Card>
+    </>;
   }
 
   return (
     <>
     {filtros}
+    {esquecimentos}
     {!ordenadas.length && (
       <Card style={{ padding: 26, minHeight: 160, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
         <p style={{ margin: 0, color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Nenhuma justificativa encontrada com esses filtros.</p>
