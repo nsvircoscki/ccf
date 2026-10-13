@@ -402,7 +402,7 @@ function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabri
                 {tarefas.map((t, index) => {
                   const pastaDestino = t.linkPasta || t.servico?.caminhoPasta;
                   return (
-                    <Draggable key={t.id} draggableId={String(t.id)} index={index}>
+                    <Draggable key={t.id} draggableId={String(t.id)} index={index} isDragDisabled={aba === 'concluidas'}>
                       {(provided, snapshot) => {
                         const row = (
                           <tr
@@ -411,7 +411,7 @@ function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabri
                             {...provided.dragHandleProps}
                             style={{
                               borderTop: `1px solid ${C.borderSoft}`,
-                              cursor: 'grab',
+                              cursor: aba === 'concluidas' ? 'default' : 'grab',
                               display: snapshot.isDragging ? 'table' : undefined,
                               background: snapshot.isDragging ? '#fff' : undefined,
                               boxShadow: snapshot.isDragging ? '0 6px 24px rgba(0,0,0,0.13)' : undefined,
@@ -420,10 +420,10 @@ function TabelaTarefas({ tarefas, aba, accent, processando, onConcluir, onReabri
                             }}
                           >
                             <td
-                              title="Arraste para reordenar"
+                              title={aba === 'concluidas' ? undefined : 'Arraste para reordenar'}
                               style={{ padding: '12px 6px', textAlign: 'center', color: C.muted, fontSize: 14, userSelect: 'none', width: 32 }}
                             >
-                              {'||'}
+                              {aba === 'concluidas' ? '' : '||'}
                             </td>
                             <td style={{ padding: '12px 6px 12px 12px', textAlign: 'center', width: colWidths.pasta }}>
                               {pastaDestino ? (
@@ -561,7 +561,11 @@ export default function TarefasView({ onBack, usuarioLogado }) {
       }
       const lista = await tarefaService.listar(filtros);
       if (Array.isArray(lista)) {
-        const ordenadas = [...lista].sort((a, b) => a.ordem - b.ordem);
+        // Concluídas: pela data de conclusão, a mais recente primeiro. As
+        // outras abas seguem a ordem arrastada à mão.
+        const ordenadas = aba === 'concluidas'
+          ? [...lista].sort((a, b) => new Date(b.concluido_em || 0) - new Date(a.concluido_em || 0))
+          : [...lista].sort((a, b) => a.ordem - b.ordem);
         setTarefas(ordenadas);
       }
     } catch (erro) {
