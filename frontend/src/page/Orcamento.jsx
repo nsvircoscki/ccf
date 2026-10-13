@@ -5,6 +5,7 @@ import {
   Building2,
   Check,
   CreditCard,
+  Download,
   FileText,
   MapPin,
   MessageSquare,
@@ -21,6 +22,8 @@ import { servicoService } from '../services/servicoService.js';
 import { formatarTelefone, formatarMatricula, formatarMoeda, desformatarMoeda, numeroParaMoeda, formatarIndice, desformatarIndice } from '../utils/mascaras.js';
 import VisualizadorImagem from './VisualizadorImagem.jsx';
 import VisualizadorFicha from './VisualizadorFicha.jsx';
+import { useEstadoNavegavel } from '../hooks/useNavegacao';
+import { abrirPropostaPdf } from './orcamento/propostaPdf.js';
 
 
 const initialServices = [
@@ -397,7 +400,7 @@ function Orcamento({ onBack, onOrcamentoDecidido }) {
   const [pagamento, setPagamento] = useState(null);
   // null enquanto ninguém decidiu ainda (statusOrcamento = PENDENTE).
   const [decisaoOrcamento, setDecisaoOrcamento] = useState(null);
-  const [filtroStatus, setFiltroStatus] = useState('PENDENTE'); // 'PENDENTE' | 'APROVADO'
+  const [filtroStatus, setFiltroStatus] = useEstadoNavegavel('PENDENTE'); // 'PENDENTE' | 'APROVADO'
   const [imagemSalvaUrl, setImagemSalvaUrl] = useState(null);
   const [fichaAberta, setFichaAberta] = useState(false);
   const [fichaUrl, setFichaUrl] = useState(null);
@@ -611,6 +614,21 @@ function Orcamento({ onBack, onOrcamentoDecidido }) {
       setImagemSalvaUrl(null);
       setDecisaoOrcamento(null);
     }
+  };
+
+  // Proposta de valores formalizada (antes ficava em OS/Contrato): usa os
+  // serviços e valores que estão na tela agora; o total respeita as condições
+  // de pagamento, se definidas.
+  const gerarProposta = () => {
+    abrirPropostaPdf({
+      numero: numero || '',
+      cliente: cliente || '',
+      matricula: matricula || '',
+      area: area ? `${area} m²` : '',
+      municipio: municipio || '',
+      itens: selectedServices.map((service) => ({ nome: service.nome, valor: service.indice * salarioMinimo })),
+      total: pagamento?.valorFinal ?? totalValor,
+    });
   };
 
   const abrirFicha = () => {
@@ -1360,6 +1378,22 @@ function Orcamento({ onBack, onOrcamentoDecidido }) {
                 <Save size={16} /> {confirmando ? 'Confirmando...' : 'Confirmar'}
               </motion.button>
             </div>
+            <motion.button
+              type="button"
+              onClick={gerarProposta}
+              disabled={!orcamentoId || selectedCount === 0}
+              title={orcamentoId ? 'Proposta de valores para o cliente — abre a impressão para salvar em PDF' : 'Selecione um orçamento'}
+              whileHover={orcamentoId && selectedCount ? { scale: 1.01, y: -1 } : undefined}
+              whileTap={orcamentoId && selectedCount ? { scale: 0.99 } : undefined}
+              style={{
+                marginTop: '10px', width: '100%', height: '42px', borderRadius: '12px',
+                border: '1px solid rgba(45, 122, 253, 0.35)', background: '#F2F6FF', color: '#2D7AFD',
+                cursor: orcamentoId && selectedCount ? 'pointer' : 'not-allowed', opacity: orcamentoId && selectedCount ? 1 : 0.5,
+                fontSize: '13px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              }}
+            >
+              <Download size={16} /> Gerar proposta (PDF)
+            </motion.button>
           </div>
         </aside>
       </div>

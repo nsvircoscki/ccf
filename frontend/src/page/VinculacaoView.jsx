@@ -7,6 +7,8 @@ import {
 } from '../components/cadastros/CadastroKit.jsx';
 import CadastroClienteView from './CadastroClienteView.jsx';
 import CadastroImovelView from './CadastroImovelView.jsx';
+import { useEstadoNavegavel } from '../hooks/useNavegacao';
+import { formatarArea, desformatarArea } from '../utils/mascaras';
 
 const vinculacaoVazia = {
   proprietarioIds: [],
@@ -23,6 +25,32 @@ const vinculacaoVazia = {
   listaProtocoloEntrega: '',
 };
 
+// Áreas do desmembramento: guardadas como JSON { areas: [m², ...], remanescente: m² }
+// no mesmo campo de texto (o gerador de documentos monta a frase). Texto
+// antigo, digitado à mão, fica visível até ser refeito com os campos.
+const MAX_AREAS = 50;
+const numeroParaArea = (n) => (n == null || n === '' ? '' : formatarArea(Number(n).toFixed(2).replace('.', ',')));
+const areaParaNumero = (texto) => {
+  const n = parseFloat(desformatarArea(texto));
+  return Number.isFinite(n) ? n : null;
+};
+const desmembramentoVazio = { areas: [], remanescente: '', textoAntigo: null };
+function lerDesmembramento(texto) {
+  if (!texto) return desmembramentoVazio;
+  try {
+    const dados = JSON.parse(texto);
+    if (dados && Array.isArray(dados.areas)) {
+      return { areas: dados.areas.map(numeroParaArea), remanescente: numeroParaArea(dados.remanescente), textoAntigo: null };
+    }
+  } catch { /* texto livre de antes */ }
+  return { ...desmembramentoVazio, textoAntigo: texto };
+}
+function gravarDesmembramento(desm) {
+  if (!desm.areas.length && !desm.remanescente) return desm.textoAntigo || '';
+  return JSON.stringify({ areas: desm.areas.map(areaParaNumero), remanescente: areaParaNumero(desm.remanescente) });
+}
+const doisDigitos = (n) => String(n).padStart(2, '0');
+
 const paraOpcaoPessoa = (cliente) => ({ value: cliente.id, label: cliente.nome, sub: cliente.documento });
 const nomesProprietarios = (imovel) => (imovel.proprietarios || []).map((p) => p.nome).join(', ') || 'Sem proprietário';
 const paraOpcaoImovel = (imovel) => ({
@@ -31,11 +59,6 @@ const paraOpcaoImovel = (imovel) => ({
   sub: nomesProprietarios(imovel),
 });
 const paraOpcaoServico = (servico) => ({ value: servico.id, label: servico.numeroServico, sub: servico.nomeCliente });
-
-function nomeArquivoDoHeader(contentDisposition, fallback) {
-  const match = contentDisposition?.match(/filename="([^"]+)"/);
-  return match ? decodeURIComponent(match[1]) : fallback;
-}
 
 const TABS = [
   { id: 'vinc', label: 'Vínculos', icon: 'link', desc: 'Proprietários, imóvel e confrontantes' },
@@ -51,13 +74,11 @@ export default function VinculacaoView({ onBack }) {
   const [clientes, setClientes] = useState([]);
   const [imoveis, setImoveis] = useState([]);
   const [templates, setTemplates] = useState([]);
-  const [tiposDoServico, setTiposDoServico] = useState([]);
-  const [tipoFoco, setTipoFoco] = useState('');
-  const [docsSelecionados, setDocsSelecionados] = useState([]);
   const [form, setForm] = useState(vinculacaoVazia);
-  const [tab, setTab] = useState('vinc');
+  const [tab, setTab, definirTabSemHistorico] = useEstadoNavegavel('vinc');
   const [salvando, setSalvando] = useState(false);
-  const [baixando, setBaixando] = useState(false);
+  const [desmembramento, setDesmembramento] = useState(desmembramentoVazio);
+  const [areaMedida, setAreaMedida] = useState(null);
   // null | 'proprietario' | 'procurador' — qual seletor de pessoa disparou o
   // cadastro rápido, pra saber em qual campo entrar a pessoa criada.
   const [alvoModalPessoa, setAlvoModalPessoa] = useState(null);
@@ -88,19 +109,17 @@ export default function VinculacaoView({ onBack }) {
     if (!id) {
       setServicoId(null);
       setForm(vinculacaoVazia);
-      setTiposDoServico([]);
-      setTipoFoco('');
-      setDocsSelecionados([]);
+      setDesmembramento(desmembramentoVazio);
+      setAreaMedida(null);
       return;
     }
 
     try {
       const servico = await servicoService.buscarPorId(id);
       setServicoId(servico.id);
-      setTab('vinc');
-      setTiposDoServico(servico.tiposSolicitados || []);
-      setTipoFoco((servico.tiposSolicitados || [])[0] || '');
-      setDocsSelecionados([]);
+      definirTabSemHistorico('vinc');
+      setDesmembramento(lerDesmembramento(servico.areasDesmembramento));
+      setAreaMedida(servico.area ?? null);
       setForm({
         proprietarioIds: (servico.proprietarios || []).map((p) => p.id),
         imovelId: servico.imovelId || '',
@@ -129,7 +148,7 @@ export default function VinculacaoView({ onBack }) {
 
     setSalvando(true);
     try {
-      const res = await servicoService.salvarVinculacao(servicoId, form);
+      const res = await servicoService.salvarVinculacao(servicoId, { ...form, areasDesmembramento: gravarDesmembramento(desmembramento) });
       if (!res.ok) {
         show(res.data?.error || 'Erro ao salvar vinculação.', 'err');
         return;
@@ -143,51 +162,6 @@ export default function VinculacaoView({ onBack }) {
     }
   };
 
-  // Baixa um documento por vez, esperando cada download terminar antes do
-  // próximo — disparar vários cliques de download de uma vez (como era antes)
-  // faz o navegador bloquear ou perder os downloads depois do primeiro.
-  // Cada arquivo continua saindo em .docx normal, nada de zip.
-  const baixarSelecionados = async () => {
-    if (docsSelecionados.length === 0) return;
-
-    setBaixando(true);
-    let falhas = 0;
-    for (const chave of docsSelecionados) {
-      const nomeTemplate = templates.find((t) => t.chave === chave)?.nome || chave;
-      try {
-        const res = await fetch(servicoService.urlGerarDocumento(servicoId, chave));
-        if (!res.ok) throw new Error('Falha ao gerar documento.');
-        const blob = await res.blob();
-        const nomeArquivo = nomeArquivoDoHeader(res.headers.get('Content-Disposition'), `${nomeTemplate}.docx`);
-
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = nomeArquivo;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      } catch (erro) {
-        console.error(`Erro ao gerar "${nomeTemplate}":`, erro);
-        falhas += 1;
-      }
-    }
-
-    // Registra no protocolo de entrega os documentos que deram certo — soma
-    // com o que já estava marcado ali, e reflete no formulário aberto.
-    try {
-      const res = await servicoService.registrarDocumentosNoProtocolo(servicoId, docsSelecionados);
-      if (res.ok) set('listaProtocoloEntrega')(res.data.listaProtocoloEntrega || '');
-    } catch (erro) {
-      console.error('Erro ao registrar documentos no protocolo de entrega:', erro);
-    }
-
-    setBaixando(false);
-    if (falhas > 0) show(`${falhas} de ${docsSelecionados.length} documento(s) falharam ao gerar.`, 'err');
-    else show(`${docsSelecionados.length} documento(s) baixado(s) e registrado(s) no protocolo.`);
-  };
-
   // O protocolo de entrega é guardado como texto (um nome de documento por
   // linha) — aqui a gente só traduz isso pra um checklist nos dois sentidos.
   const protocoloSelecionado = templates
@@ -198,25 +172,20 @@ export default function VinculacaoView({ onBack }) {
     set('listaProtocoloEntrega')(nomes.join('\n'));
   };
 
-  const svcSelecionado = servicos.find((s) => s.id === servicoId);
-  const podeGerarDocumento = Boolean(servicoId && form.proprietarioIds.length > 0 && form.imovelId);
-
-  // Templates sem tiposServico são "gerais" (protocolo, dossiê, declarações
-  // padrão) e aparecem sempre; os demais só aparecem se baterem com o tipo
-  // de serviço em foco.
-  const templatesDoTipo = templates.filter(
-    (t) => !t.tiposServico?.length || !tipoFoco || t.tiposServico.includes(tipoFoco),
-  );
-
-  const handleTipoFocoChange = (novoTipo) => {
-    setTipoFoco(novoTipo);
-    const chavesVisiveis = new Set(
-      templates
-        .filter((t) => !t.tiposServico?.length || t.tiposServico.includes(novoTipo))
-        .map((t) => t.chave),
-    );
-    setDocsSelecionados((atuais) => atuais.filter((chave) => chavesVisiveis.has(chave)));
+  const alterarQuantidadeAreas = (valor) => {
+    const quantidade = Math.min(MAX_AREAS, Number(String(valor).replace(/\D/g, '')) || 0);
+    setDesmembramento((d) => ({
+      ...d,
+      areas: Array.from({ length: quantidade }, (_, i) => d.areas[i] || ''),
+    }));
   };
+  // Sugestão da remanescente: área medida do serviço menos as áreas desmembradas.
+  const somaAreas = desmembramento.areas.reduce((total, a) => total + (areaParaNumero(a) || 0), 0);
+  const sobraCalculada = areaMedida && desmembramento.areas.length
+    ? `Área medida ${numeroParaArea(areaMedida)} − áreas ${numeroParaArea(somaAreas)} = ${numeroParaArea(areaMedida - somaAreas)}`
+    : undefined;
+
+  const svcSelecionado = servicos.find((s) => s.id === servicoId);
 
   return (
     <Shell
@@ -332,7 +301,23 @@ export default function VinculacaoView({ onBack }) {
                 <Field label="Número de lotes" icon="hash" value={form.totalLotes} onChange={(v) => set('totalLotes')(v.replace(/\D/g, ''))} placeholder="Para Consulta Prévia (PMSBS)" />
                 <div />
                 <Field label="Averbações" icon="doc" span={2} textarea rows={3} value={form.averbacoes} onChange={set('averbacoes')} placeholder="Averbações a registrar…" />
-                <Field label="Áreas do desmembramento" icon="ruler" span={2} textarea rows={3} value={form.areasDesmembramento} onChange={set('areasDesmembramento')} placeholder="Descrição das áreas resultantes…" />
+                <Field label="Quantidade de áreas do desmembramento" icon="hash"
+                  value={desmembramento.areas.length ? String(desmembramento.areas.length) : ''}
+                  onChange={alterarQuantidadeAreas} placeholder="Ex.: 2 (sem contar a remanescente)" />
+                <Field label="Área remanescente" icon="ruler" value={desmembramento.remanescente}
+                  onChange={(v) => setDesmembramento((d) => ({ ...d, remanescente: formatarArea(v) }))}
+                  placeholder="0,00 m²" hint={sobraCalculada} />
+                {desmembramento.areas.map((area, i) => (
+                  <Field key={i} label={`Área ${doisDigitos(i + 1)}`} icon="ruler" value={area}
+                    onChange={(v) => setDesmembramento((d) => ({ ...d, areas: d.areas.map((a, j) => (j === i ? formatarArea(v) : a)) }))}
+                    placeholder="0,00 m²" />
+                ))}
+                {desmembramento.areas.length % 2 === 1 && <div />}
+                {desmembramento.textoAntigo && (
+                  <p style={{ gridColumn: '1 / -1', margin: 0, fontFamily: '"Open Sans", sans-serif', fontSize: 12, color: C.muted }}>
+                    Texto digitado antes (vai para o documento até você preencher as áreas acima): <em>{desmembramento.textoAntigo}</em>
+                  </p>
+                )}
 
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label style={{ display: 'block', fontFamily: '"Montserrat", sans-serif', fontWeight: 600, fontSize: 10.5, color: C.label, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
@@ -348,35 +333,10 @@ export default function VinculacaoView({ onBack }) {
 
           <Actions editing accent={accent} saving={salvando} onSave={handleSalvar} saveLabel={salvando ? 'Salvando…' : 'Salvar vinculação'} />
 
-          <Section icon="download" title="Gerar documento" accent={accent}
-            desc={podeGerarDocumento ? 'Marque os documentos e baixe de uma vez' : 'Selecione e salve os proprietários e o imóvel deste serviço para liberar a geração dos documentos.'}>
-            {podeGerarDocumento && (
-              <>
-                {tiposDoServico.length > 1 && (
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <SelectField label="Tipo de serviço para este documento" icon="brief" value={tipoFoco} onChange={handleTipoFocoChange} options={tiposDoServico} />
-                  </div>
-                )}
-                <CheckboxList accent={accent} span={2}
-                  options={templatesDoTipo.map((t) => ({ value: t.chave, label: t.nome }))}
-                  values={docsSelecionados} onChange={setDocsSelecionados} />
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <button type="button" onClick={baixarSelecionados} disabled={docsSelecionados.length === 0 || baixando} style={{
-                    marginTop: 14, padding: '12px 28px', borderRadius: 11, border: 'none',
-                    background: docsSelecionados.length && !baixando ? `linear-gradient(135deg, ${accent} 0%, ${C.green} 100%)` : C.border,
-                    color: '#fff', fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 13, letterSpacing: '0.05em',
-                    cursor: docsSelecionados.length && !baixando ? 'pointer' : 'not-allowed',
-                    display: 'inline-flex', alignItems: 'center', gap: 8,
-                  }}>
-                    <Icon name="download" size={16} />
-                    {baixando
-                      ? 'Gerando documentos…'
-                      : `Baixar ${docsSelecionados.length > 0 ? `${docsSelecionados.length} documento(s)` : 'documentos selecionados'}`}
-                  </button>
-                </div>
-              </>
-            )}
-          </Section>
+          <p style={{ margin: '14px 0 0', fontFamily: '"Open Sans", sans-serif', fontSize: 12.5, color: C.muted }}>
+            Para gerar os documentos deste serviço, salve a vinculação e use SIS DOC › Gerar documentos.
+          </p>
+
         </div>
       )}
 

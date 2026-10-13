@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Search, LayoutGrid, Calculator, FileText, Link2, ArrowLeft,
+  Search, LayoutGrid, Calculator, FileText, ArrowLeft,
   BookOpen, Wallet, Receipt, ClipboardCheck, Clock3,
 } from 'lucide-react';
 import { temAcessoAoModulo } from '../utils/permissoes';
@@ -23,9 +23,9 @@ const MODULOS = [
   { id: 'dashboard', label: 'Pesquisa', desc: 'Buscar serviços por cliente, matrícula ou etapa', icon: Search, color: '#2e8b2e' },
   { id: 'kanban', label: 'Kanban', desc: 'Acompanhar o andamento dos projetos por etapa', icon: LayoutGrid, color: '#0e7490' },
   { id: 'orcamento', label: 'Orçamento', desc: 'Montar e aprovar orçamentos de serviço', icon: Calculator, color: '#b45309' },
-  { id: 'emissao-documentos', label: 'OS/Contrato', desc: 'Gerar requerimentos e declarações a partir de modelos', icon: FileText, color: '#0f766e' },
+  { id: 'emissao-documentos', label: 'OS/Contrato', desc: 'Ordem de serviço e contrato do serviço', icon: FileText, color: '#0f766e', wip: true },
   { id: 'sis-caixa', label: 'SIS CAIXA', desc: 'Controle de caixa do sistema', icon: Wallet, color: '#065f46', wip: true },
-  { id: 'vinculacao', label: 'SIS DOC', desc: 'Vincular proprietários, imóvel e confrontantes ao serviço', icon: Link2, color: '#1a3a8a' },
+  tileDeGrupo('sis-doc'),
   tileDeGrupo('config'),
   { id: 'sis-mon', label: 'SIS MON', desc: 'Sistema de monografia', icon: BookOpen, color: '#92400e', wip: true },
   tileDeGrupo('relatorios'),

@@ -9,6 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import { prisma } from '../prisma.js';
+import { normalizarPessoa } from './textoDocumento.js';
 import { docxTemplateEngine } from './docxTemplateEngine.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -275,11 +276,27 @@ function montarRetificacaoPmsbs(servico) {
   return valoresComuns(servico);
 }
 
+// Áreas do desmembramento (preenchidas na Vinculação como JSON
+// { areas: [m², ...], remanescente: m² }) viram a frase do requerimento:
+// "Área 01 com 450,00 m²; Área 02 com 500,00 m²; e área remanescente com 1.200,00 m²."
+// Texto livre de antes (não-JSON) vai como foi digitado.
+function textoAreasDesmembramento(valor) {
+  if (!valor) return '';
+  let dados;
+  try { dados = JSON.parse(valor); } catch { return valor; }
+  if (!dados || !Array.isArray(dados.areas)) return valor;
+  const partes = dados.areas
+    .map((area, i) => (area != null ? `Área ${String(i + 1).padStart(2, '0')} com ${numeroBr(area)} m²` : null))
+    .filter(Boolean);
+  if (dados.remanescente != null) partes.push(`${partes.length ? 'e ' : ''}área remanescente com ${numeroBr(dados.remanescente)} m²`);
+  return partes.length ? `${partes.join('; ')}.` : '';
+}
+
 function montarParcelamentoSoloPmsbs(servico) {
   exigirProprietarioEImovel(servico);
   return {
     ...valoresComuns(servico),
-    Req_PMSBS_DESM_Áreas: servico.areasDesmembramento || '',
+    Req_PMSBS_DESM_Áreas: textoAreasDesmembramento(servico.areasDesmembramento),
   };
 }
 
@@ -377,7 +394,21 @@ async function buscarServicoParaDocumento(servicoId) {
     },
   });
   if (!servico) throw new Error('Serviço não encontrado.');
-  return servico;
+  // Nomes com iniciais maiúsculas e o resto (nacionalidade, estado civil,
+  // profissão...) em minúsculas, como pede o meio da frase.
+  return {
+    ...servico,
+    proprietarios: (servico.proprietarios || []).map(normalizarPessoa),
+    imovel: servico.imovel && {
+      ...servico.imovel,
+      proprietarios: (servico.imovel.proprietarios || []).map(normalizarPessoa),
+      usufrutuarios: (servico.imovel.usufrutuarios || []).map(normalizarPessoa),
+    },
+    confrontantes: (servico.confrontantes || []).map((imovel) => ({
+      ...imovel,
+      proprietarios: (imovel.proprietarios || []).map(normalizarPessoa),
+    })),
+  };
 }
 
 // Gera um único documento a partir do serviço já carregado (evita buscar o

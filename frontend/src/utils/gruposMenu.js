@@ -2,7 +2,7 @@
 // ser clicado, abre as opções de dentro. Definidos aqui uma vez pra navbar e
 // seletor não divergirem sobre o que fica em cada grupo e quem vê o quê.
 import {
-  ClipboardList, Users, Home, FileText, ListChecks, FileSpreadsheet, Table, BarChart3, Settings2, UserCog,
+  ClipboardList, Users, Home, FileText, ListChecks, FileSpreadsheet, Table, BarChart3, Settings2, UserCog, Link2, FileDown,
 } from 'lucide-react';
 import { temAcessoAoModulo } from './permissoes';
 
@@ -17,6 +17,17 @@ export const GRUPOS = {
       { id: 'cadastro', label: 'Serviço', desc: 'Abrir um novo serviço e escolher os tipos de processo', icon: ClipboardList, color: '#1a3a8a' },
       { id: 'clientes', label: 'Pessoas', desc: 'Cadastro de clientes, pessoas físicas e jurídicas', icon: Users, color: '#be185d' },
       { id: 'imoveis', label: 'Imóveis', desc: 'Cadastro de imóveis, proprietários e usufrutuários', icon: Home, color: '#7c3aed' },
+    ],
+  },
+  'sis-doc': {
+    label: 'SIS DOC',
+    desc: 'Vincular dados ao serviço e gerar os documentos',
+    titulo: 'SIS DOC — escolha o que fazer',
+    icon: Link2,
+    color: '#1a3a8a',
+    itens: [
+      { id: 'vinculacao', label: 'Vinculação', desc: 'Proprietários, imóvel, confrontantes e dados do serviço', icon: Link2, color: '#1a3a8a' },
+      { id: 'gerar-documentos', label: 'Gerar documentos', desc: 'Requerimentos, declarações e protocolos do serviço', icon: FileDown, color: '#0f766e' },
     ],
   },
   relatorios: {

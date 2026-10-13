@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Search, LayoutGrid, Calculator, FileText, Link2, KeyRound, Bell, X,
+  Search, LayoutGrid, Calculator, FileText, KeyRound, Bell, X,
   Wallet, BookOpen, Receipt, ClipboardCheck, Clock3,
 } from 'lucide-react';
 import { AlterarSenhaModal } from '../modals/AlterarSenhaModal.jsx';
@@ -21,9 +21,9 @@ const ITENS = [
   { id: 'kanban', label: 'SIS SOS', icon: LayoutGrid, color: '#0e7490' },
   grupo('cadastros'),
   { id: 'orcamento', label: 'Orçamento', icon: Calculator, color: '#b45309' },
-  { id: 'emissao-documentos', label: 'OS/Contrato', icon: FileText, color: '#0f766e' },
+  { id: 'emissao-documentos', label: 'OS/Contrato', icon: FileText, color: '#0f766e', wip: true },
   { id: 'sis-caixa', label: 'SIS CAIXA', icon: Wallet, color: '#065f46', wip: true },
-  { id: 'vinculacao', label: 'SIS DOC', icon: Link2, color: '#1a3a8a' },
+  grupo('sis-doc'),
   { id: 'sis-mon', label: 'SIS MON', icon: BookOpen, color: '#92400e', wip: true },
   grupo('relatorios'),
   { id: 'faturamento', label: 'Faturamento', icon: Receipt, color: '#b91c1c' },
