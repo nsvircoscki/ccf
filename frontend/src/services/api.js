@@ -19,6 +19,32 @@ export function definirToken(token) {
 
 export const temToken = () => Boolean(tokenAtual);
 
+// Token "só ponto" deste aparelho (60 dias, renovado a cada envio): envia a
+// fila de pontos mesmo depois que a sessão normal de 12h venceu — o servidor
+// fica desligado à noite e nos fins de semana. Não abre nenhuma outra tela.
+const CHAVE_TOKEN_PONTO = 'ccf:tokenPonto';
+let tokenPonto = localStorage.getItem(CHAVE_TOKEN_PONTO);
+
+export function definirTokenPonto(token) {
+    tokenPonto = token || null;
+    if (tokenPonto) localStorage.setItem(CHAVE_TOKEN_PONTO, tokenPonto);
+    else localStorage.removeItem(CHAVE_TOKEN_PONTO);
+}
+
+export const temTokenPonto = () => Boolean(tokenPonto);
+
+// fetch com tempo-limite: com o servidor desligado o túnel pode demorar a
+// responder, e a fila não deve ficar presa esperando.
+async function fetchComLimite(url, opts = {}, ms = 10000) {
+    const controle = new AbortController();
+    const timer = setTimeout(() => controle.abort(), ms);
+    try {
+        return await fetch(url, { ...opts, signal: controle.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 // O App registra aqui o que fazer quando o backend recusa a sessão (token
 // expirado, usuário desativado): voltar pra tela de login.
 export function aoExpirarSessao(callback) {
@@ -185,13 +211,84 @@ export const api = {
 
     // Envio da fila offline (services/pontoOffline.js). Não lança em erro HTTP:
     // quem chama decide o que manter na fila pelo status. Sem rede, o fetch lança.
-    syncSispontoBatidas: async (payload) => {
-        const res = await req(`${BASE_URL}/sis-ponto/sync`, {
+    // Envia a fila de pontos. credencial: 'sessao' (login normal) ou 'ponto'
+    // (token do aparelho). Não passa por req(): uma sessão normal vencida
+    // aqui não deve derrubar o app para a tela de login.
+    syncSispontoBatidas: async (payload, credencial = 'sessao') => {
+        const token = credencial === 'ponto' ? tokenPonto : tokenAtual;
+        const res = await fetchComLimite(`${BASE_URL}/sis-ponto/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify(payload)
+        }, 20000);
+        return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) };
+    },
+
+    // O servidor está no ar? (a rede do celular pode estar ok com ele desligado)
+    servidorDisponivel: async () => {
+        try {
+            const res = await fetchComLimite(`${BASE_URL}/health`, { cache: 'no-store' }, 5000);
+            return res.ok;
+        } catch {
+            return false;
+        }
+    },
+
+    criarSessaoPonto: async (deviceId) => {
+        const res = await req(`${BASE_URL}/auth/sessao-ponto`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ deviceId })
         });
-        return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) };
+        if (!res.ok) throw new Error('Não foi possível criar a sessão do ponto.');
+        return res.json();
+    },
+
+    sairSessaoPonto: async (deviceId) => {
+        const res = await req(`${BASE_URL}/auth/sessao-ponto/sair`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId })
+        });
+        return res.ok;
+    },
+
+    getSispontoQuarentena: async () => {
+        const res = await req(`${BASE_URL}/sis-ponto/quarentena`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao carregar a quarentena.');
+        }
+        return res.json();
+    },
+
+    decidirSispontoQuarentena: async (ids, acao) => {
+        const res = await req(`${BASE_URL}/sis-ponto/quarentena/decisao`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids, acao })
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao decidir.');
+        }
+        return res.json();
+    },
+
+    getSessoesPonto: async (usuarioId) => {
+        const res = await req(`${BASE_URL}/usuarios/${encodeURIComponent(usuarioId)}/sessoes-ponto`);
+        if (!res.ok) throw new Error('Erro ao listar aparelhos.');
+        return res.json();
+    },
+
+    revogarSessoesPonto: async (usuarioId, sessaoId = null) => {
+        const res = await req(`${BASE_URL}/usuarios/${encodeURIComponent(usuarioId)}/sessoes-ponto/revogar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sessaoId ? { sessaoId } : {})
+        });
+        if (!res.ok) throw new Error('Erro ao revogar.');
+        return res.json();
     },
 
     // Pares sem saída/sem entrada/inconsistentes do mês (só ENG/DEV).

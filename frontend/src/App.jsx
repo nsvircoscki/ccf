@@ -8,10 +8,10 @@ import IntroScreen from './components/IntroScreen';
 import ModuleSelectorView from './components/ModuleSelectorView';
 import CadastroServicoView from './components/CadastroServicoView';
 import Orcamento from './page/Orcamento';
-import EmissaoDocumentos from './page/EmissaoDocumentos';
 import CadastroClienteView from './page/CadastroClienteView';
 import CadastroImovelView from './page/CadastroImovelView';
 import VinculacaoView from './page/VinculacaoView';
+import GerarDocumentosView from './page/GerarDocumentosView';
 import ConfigDocumentosView from './page/ConfigDocumentosView';
 import ConfigEtapasView from './page/ConfigEtapasView';
 import UsuariosView from './page/UsuariosView';
@@ -22,8 +22,9 @@ import TarefasView from './page/TarefasView';
 import SisPontoView from './page/SisPontoView';
 import SisPontoFuncionarioScreen from './page/sisPonto/SisPontoFuncionario.jsx';
 import { useEhCelular } from './hooks/useEhCelular';
+import { useEstadoNavegavel, limparHistorico, voltar, usePodeVoltar } from './hooks/useNavegacao';
 import { authService } from './services/authService';
-import { sincronizarPendentes } from './services/pontoOffline';
+import { sincronizarPendentes, garantirSessaoPonto, encerrarSessaoPonto } from './services/pontoOffline';
 
 import { EditarProjetoModal } from './modals/EditarProjetoModal';
 import { TicketDetailModal } from './modals/TicketDetailModal';
@@ -64,8 +65,21 @@ export default function App() {
   // O seletor de módulos aparece a cada entrada no site — diferente da intro,
   // ele reaparece sempre que o usuário faz login de novo (não fica "visto"
   // para sempre na sessão).
-  const [moduloEscolhido, setModuloEscolhido] = useState(false);
-  const [telaAtiva, setTelaAtiva] = useState('dashboard');
+  // Módulo aberto e tela ativa ficam juntos num estado só, pra que o
+  // "Voltar" desfaça a navegação inteira (inclusive voltar ao seletor).
+  const [navegacao, navegar, definirNavegacao] = useEstadoNavegavel({ modulo: false, tela: 'dashboard' });
+  const moduloEscolhido = navegacao.modulo;
+  const telaAtiva = navegacao.tela;
+  const podeVoltar = usePodeVoltar();
+  const setTelaAtiva = (tela) => { if (tela !== telaAtiva) navegar({ modulo: true, tela }); };
+  // Seletor de módulos, login e logout recomeçam o histórico.
+  const setModuloEscolhido = (modulo) => {
+    limparHistorico();
+    definirNavegacao((atual) => ({ ...atual, modulo }));
+  };
+  // "Voltar" das próprias telas: página anterior; sem histórico, o destino
+  // fixo de antes.
+  const voltarOu = (padrao) => () => (podeVoltar ? voltar() : padrao());
   const [workflowParaImpressao, setWorkflowParaImpressao] = useState(null);
   // Destino dentro do SIS Ponto quando a navbar redireciona pra lá a partir
   // de uma notificação (ex.: justificativa nova → abre direto a aba certa no
@@ -78,7 +92,8 @@ export default function App() {
     if (!authService.temToken()) return;
     authService.sessaoAtual()
       .then((res) => {
-        if (res.ok) { setUsuarioAtual(res.data); guardarUsuarioOffline(res.data); }
+        // Sessão válida: garante o token "só ponto" deste aparelho (se ainda não tem).
+        if (res.ok) { setUsuarioAtual(res.data); guardarUsuarioOffline(res.data); garantirSessaoPonto(); }
         else { authService.definirToken(null); guardarUsuarioOffline(null); }
       })
       // Sem rede (não é sessão recusada): abre com a pessoa da última sessão,
@@ -184,14 +199,17 @@ export default function App() {
     guardarUsuarioOffline(usuario);
     setModuloEscolhido(false);
     setUsuarioAtual(usuario);
-    // Pontos que ficaram na fila por sessão expirada sobem agora.
-    sincronizarPendentes();
+    // Token "só ponto" novo para este aparelho (60 dias) e envio do que
+    // ficou na fila por sessão expirada.
+    garantirSessaoPonto({ renovar: true }).finally(() => sincronizarPendentes({ forcar: true }));
     // O polling do Kanban não carrega nada sem token; com a sessão pronta,
     // busca já em vez de esperar o próximo ciclo.
     kanban.carregarDados();
   };
 
   const handleLogout = () => {
+    // Sair encerra a sessão do ponto deste aparelho (antes de esquecer o token normal).
+    encerrarSessaoPonto();
     authService.definirToken(null);
     guardarUsuarioOffline(null);
     setModuloEscolhido(false);
@@ -225,8 +243,8 @@ export default function App() {
           usuarioLogado={usuarioLogado}
           usuarioAtual={usuarioAtual}
           onAbrirModulo={(id) => {
-            setTelaAtiva(id);
-            setModuloEscolhido(true);
+            limparHistorico();
+            navegar({ modulo: true, tela: id });
           }}
         />
       </>
@@ -253,7 +271,7 @@ export default function App() {
         <div className="flex-1 flex flex-col min-h-0" style={{ minHeight: 0, overflow: 'hidden' }}>
           {telaAtiva === 'cadastro' && (
             <CadastroServicoView
-              onBack={() => setTelaAtiva('dashboard')}
+              onBack={voltarOu(() => setTelaAtiva('dashboard'))}
               onServicoCriado={kanban.carregarDados}
             />
           )}
@@ -284,51 +302,53 @@ export default function App() {
 
           {telaAtiva === 'orcamento' && (
             <Orcamento
-              onBack={() => setTelaAtiva('dashboard')}
+              onBack={voltarOu(() => setTelaAtiva('dashboard'))}
               onOrcamentoDecidido={kanban.carregarDados}
             />
           )}
 
-          {telaAtiva === 'emissao-documentos' && <EmissaoDocumentos />}
-
           {telaAtiva === 'clientes' && (
-            <CadastroClienteView onBack={() => setTelaAtiva('dashboard')} />
+            <CadastroClienteView onBack={voltarOu(() => setTelaAtiva('dashboard'))} />
           )}
 
           {telaAtiva === 'imoveis' && (
-            <CadastroImovelView onBack={() => setTelaAtiva('dashboard')} />
+            <CadastroImovelView onBack={voltarOu(() => setTelaAtiva('dashboard'))} />
           )}
 
           {telaAtiva === 'vinculacao' && (
-            <VinculacaoView onBack={() => setTelaAtiva('dashboard')} />
+            <VinculacaoView onBack={voltarOu(() => setTelaAtiva('dashboard'))} />
+          )}
+
+          {telaAtiva === 'gerar-documentos' && (
+            <GerarDocumentosView onBack={voltarOu(() => setTelaAtiva('dashboard'))} />
           )}
 
           {telaAtiva === 'config-documentos' && (
-            <ConfigDocumentosView onBack={() => setTelaAtiva('dashboard')} />
+            <ConfigDocumentosView onBack={voltarOu(() => setTelaAtiva('dashboard'))} />
           )}
 
           {telaAtiva === 'config-etapas' && (
-            <ConfigEtapasView onBack={() => setTelaAtiva('dashboard')} usuarioLogado={usuarioLogado} />
+            <ConfigEtapasView onBack={voltarOu(() => setTelaAtiva('dashboard'))} usuarioLogado={usuarioLogado} />
           )}
 
           {telaAtiva === 'config-usuarios' && (
-            <UsuariosView onBack={() => setTelaAtiva('dashboard')} usuarioAtual={usuarioAtual} />
+            <UsuariosView onBack={voltarOu(() => setTelaAtiva('dashboard'))} usuarioAtual={usuarioAtual} />
           )}
 
           {telaAtiva === 'importar-pontos' && (
-            <ImportarPontosView onBack={() => setModuloEscolhido(false)} />
+            <ImportarPontosView onBack={voltarOu(() => setModuloEscolhido(false))} />
           )}
 
           {telaAtiva === 'tabela-servicos' && (
-            <TabelaServicosView onBack={() => setModuloEscolhido(false)} kanban={kanban} />
+            <TabelaServicosView onBack={voltarOu(() => setModuloEscolhido(false))} kanban={kanban} />
           )}
 
           {telaAtiva === 'faturamento' && (
-            <FaturamentoView onBack={() => setModuloEscolhido(false)} usuarioLogado={usuarioLogado} />
+            <FaturamentoView onBack={voltarOu(() => setModuloEscolhido(false))} usuarioLogado={usuarioLogado} />
           )}
 
           {telaAtiva === 'tarefas' && (
-            <TarefasView onBack={() => setModuloEscolhido(false)} usuarioLogado={usuarioLogado} />
+            <TarefasView onBack={voltarOu(() => setModuloEscolhido(false))} usuarioLogado={usuarioLogado} />
           )}
 
           {telaAtiva === 'sis-ponto' && <SisPontoView usuario={usuarioAtual} />}

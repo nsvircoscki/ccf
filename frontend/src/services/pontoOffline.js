@@ -5,14 +5,19 @@
 //
 // Só dados de ponto passam por aqui — nada de salário no aparelho.
 import Dexie from 'dexie';
-import { api, temToken } from './api';
+import { api, temToken, temTokenPonto, definirTokenPonto } from './api';
 
 const db = new Dexie('ccf-ponto');
 // sincronizado fica fora do índice: IndexedDB não indexa boolean, e a fila é pequena.
 db.version(1).stores({ batidas: 'clientId, funcionarioId, batidoEm' });
 
 const LOTE = 200;
-const INTERVALO_RESERVA_MS = 60 * 1000;
+// O timer olha a fila a cada 30 s; depois de uma falha (servidor desligado,
+// sem rede) a próxima tentativa automática espera cada vez mais, até 10 min.
+const INTERVALO_TIMER_MS = 30 * 1000;
+const ESPERAS_MS = [30, 60, 120, 300, 600].map((seg) => seg * 1000);
+let falhasSeguidas = 0;
+let proximaTentativaEm = 0;
 // Batidas já enviadas ficam um tempo no aparelho (conferência local) e depois saem.
 const RETER_ENVIADAS_MS = 30 * 24 * 3600 * 1000;
 
@@ -81,7 +86,7 @@ export async function registrarBatida({ funcionarioId, tipo, batidoEm, atrasado 
   };
   await db.batidas.add(batida);
   await recontar();
-  sincronizarPendentes();
+  sincronizarPendentes({ forcar: true });
   return batida;
 }
 
@@ -97,63 +102,133 @@ export async function descartarPendente(funcionarioId, batidoEm) {
 
 let emAndamento = null;
 
-// Envia tudo que está pendente. Só marca como sincronizado o que o servidor
-// confirmou (criado ou duplicado); rejeitado continua na fila com o erro.
-export function sincronizarPendentes() {
+// Envia tudo que está pendente. Só marca como enviado o que o servidor
+// confirmou (criado, duplicado, ou entregue ao RH na quarentena); o resto
+// continua na fila. { forcar: true } ignora a espera entre tentativas
+// (bater ponto, botão "Enviar agora", login).
+export function sincronizarPendentes({ forcar = false } = {}) {
   if (emAndamento) return emAndamento;
+  if (!forcar && Date.now() < proximaTentativaEm) return Promise.resolve({ enviados: 0, aguardando: true });
   emAndamento = sincronizarImpl().finally(() => { emAndamento = null; });
   return emAndamento;
 }
 
+function registrarFalha(mensagem) {
+  proximaTentativaEm = Date.now() + ESPERAS_MS[Math.min(falhasSeguidas, ESPERAS_MS.length - 1)];
+  falhasSeguidas += 1;
+  atualizarEstado({ ultimoErro: mensagem, proximaTentativaEm });
+}
+
+// Depois de um login normal: pega o token "só ponto" deste aparelho (troca o
+// anterior). Sem rede, fica para o próximo login/abertura.
+export async function garantirSessaoPonto({ renovar = false } = {}) {
+  if (!temToken() || (temTokenPonto() && !renovar)) return;
+  try {
+    const { tokenPonto } = await api.criarSessaoPonto(deviceId());
+    if (tokenPonto) definirTokenPonto(tokenPonto);
+  } catch {
+    // tenta de novo na próxima vez
+  }
+}
+
+// "Sair": encerra a sessão do ponto deste aparelho no servidor (se der) e
+// esquece o token. Pontos que ainda estão na fila sobem no próximo login.
+export async function encerrarSessaoPonto() {
+  if (temToken()) await api.sairSessaoPonto(deviceId()).catch(() => {});
+  definirTokenPonto(null);
+}
+
 async function sincronizarImpl() {
-  if (!navigator.onLine || !temToken()) {
+  const pendentesAntes = await db.batidas.filter((b) => !b.sincronizado).count();
+  if (!pendentesAntes) {
+    falhasSeguidas = 0;
+    proximaTentativaEm = 0;
     await recontar();
+    return { enviados: 0 };
+  }
+  if (!navigator.onLine) {
+    await recontar();
+    registrarFalha('Sem internet. Os pontos ficam guardados neste aparelho.');
+    return { enviados: 0 };
+  }
+  if (!temToken() && !temTokenPonto()) {
+    await recontar();
+    atualizarEstado({ ultimoErro: 'Entre de novo para enviar os pontos guardados.' });
     return { enviados: 0 };
   }
   atualizarEstado({ sincronizando: true });
   let enviados = 0;
   try {
+    // A internet do celular pode estar ok com o servidor desligado (noite, fim de semana).
+    if (!(await api.servidorDisponivel())) {
+      registrarFalha('Servidor indisponível no momento. Os pontos ficam guardados neste aparelho e serão enviados quando ele voltar.');
+      return { enviados };
+    }
+
     await db.batidas.filter((b) => b.sincronizado && Date.now() - new Date(b.sincronizadoEm).getTime() > RETER_ENVIADAS_MS).delete();
 
     const pendentes = await pendentesTodos();
+    let sessaoInvalida = false;
+    const rejeicoes = [];
+    let emRevisao = 0;
     for (let i = 0; i < pendentes.length; i += LOTE) {
       const lote = pendentes.slice(i, i + LOTE);
+      const payload = {
+        batidas: lote.map(({ clientId, funcionarioId, tipo, batidoEm, deviceId: dev, atrasado, minutosAtraso }) => ({ clientId, funcionarioId, tipo, batidoEm, deviceId: dev, atrasado, minutosAtraso })),
+        dispositivo: { deviceId: deviceId(), pendentes: pendentes.length - i },
+      };
+      // Sessão normal primeiro; se ela já venceu, o token do aparelho.
+      const credenciais = [temToken() && 'sessao', temTokenPonto() && 'ponto'].filter(Boolean);
       let resposta;
       try {
-        resposta = await api.syncSispontoBatidas({
-          batidas: lote.map(({ clientId, funcionarioId, tipo, batidoEm, deviceId: dev, atrasado, minutosAtraso }) => ({ clientId, funcionarioId, tipo, batidoEm, deviceId: dev, atrasado, minutosAtraso })),
-          dispositivo: { deviceId: deviceId(), pendentes: pendentes.length - i },
-        });
+        for (const credencial of credenciais) {
+          resposta = await api.syncSispontoBatidas(payload, credencial);
+          if (!resposta.data?.sessaoInvalida) break;
+        }
       } catch {
-        atualizarEstado({ ultimoErro: 'Sem conexão com o servidor. Os pontos ficam guardados neste aparelho.' });
-        return { enviados };
-      }
-      if (resposta.status === 401) {
-        atualizarEstado({ ultimoErro: 'Sessão expirada: entre de novo para enviar os pontos guardados.' });
+        registrarFalha('Sem conexão com o servidor. Os pontos ficam guardados neste aparelho.');
         return { enviados };
       }
       if (!resposta.ok) {
-        atualizarEstado({ ultimoErro: resposta.data?.error || 'O servidor recusou o envio. Tentaremos de novo.' });
+        registrarFalha(resposta.data?.error || 'O servidor recusou o envio. Tentaremos de novo.');
         return { enviados };
       }
+      if (resposta.data?.tokenPonto) definirTokenPonto(resposta.data.tokenPonto);
+      if (resposta.data?.sessaoInvalida) sessaoInvalida = true;
 
       const agora = new Date().toISOString();
-      const rejeicoes = [];
       await db.transaction('rw', db.batidas, async () => {
         for (const r of resposta.data?.resultados || []) {
+          const atual = await db.batidas.get(r.clientId);
+          if (!atual) continue;
           if (r.status === 'criado' || r.status === 'duplicado') {
             await db.batidas.update(r.clientId, { sincronizado: true, sincronizadoEm: agora, ultimoErro: null });
             enviados += 1;
+          } else if ((r.status === 'quarentena' && r.definitivo) || r.status === 'descartado') {
+            // Está com o RH (ou ele já descartou): não adianta reenviar.
+            await db.batidas.update(r.clientId, { sincronizado: true, sincronizadoEm: agora, emRevisao: true, ultimoErro: r.erro || null });
+            emRevisao += 1;
           } else {
-            const atual = await db.batidas.get(r.clientId);
-            if (atual) await db.batidas.update(r.clientId, { tentativas: (atual.tentativas || 0) + 1, ultimoErro: r.erro || 'Rejeitado pelo servidor.' });
-            rejeicoes.push(r.erro);
+            // Rejeitado, ou na quarentena por sessão vencida: continua na fila.
+            await db.batidas.update(r.clientId, { tentativas: (atual.tentativas || 0) + 1, ultimoErro: r.erro || 'Rejeitado pelo servidor.' });
+            if (r.status !== 'quarentena') rejeicoes.push(r.erro);
           }
         }
       });
-      atualizarEstado({ ultimoErro: rejeicoes.length ? `${rejeicoes.length} ponto(s) recusado(s): ${rejeicoes[0]}` : null });
     }
-    atualizarEstado({ ultimaSincronizacao: new Date().toISOString() });
+
+    if (sessaoInvalida) {
+      // O RH já foi avisado (quarentena); depois de um login os pontos sobem.
+      registrarFalha('Sessão expirada: entre de novo para enviar os pontos guardados.');
+    } else {
+      falhasSeguidas = 0;
+      proximaTentativaEm = 0;
+      const avisos = [
+        rejeicoes.length ? `${rejeicoes.length} ponto(s) recusado(s): ${rejeicoes[0]}` : null,
+        emRevisao ? `${emRevisao} ponto(s) enviado(s) para revisão do RH.` : null,
+      ].filter(Boolean);
+      atualizarEstado({ ultimoErro: avisos.join(' ') || null, proximaTentativaEm: 0, ultimaSincronizacao: new Date().toISOString() });
+    }
     return { enviados };
   } finally {
     await recontar();
@@ -163,14 +238,19 @@ async function sincronizarImpl() {
 
 let iniciado = false;
 
-// Gatilhos de envio: ao abrir o app, quando a rede volta, quando a aba volta
-// a ficar visível e num timer de reserva (o evento "online" nem sempre dispara).
+// Gatilhos de envio: ao abrir o app, quando a rede volta, quando o app volta
+// ao primeiro plano e num timer (o "online" sozinho não basta: a rede pode
+// estar ok com o servidor desligado). Voltar à tela ou a rede voltar ignoram
+// a espera entre tentativas; o timer respeita.
 export function iniciarSincronizacao() {
   if (iniciado) return;
   iniciado = true;
-  window.addEventListener('online', () => { atualizarEstado({ online: true }); sincronizarPendentes(); });
+  // Pede ao navegador para não apagar a fila sozinho (Safari/iPhone apaga
+  // dados de sites pouco usados; instalado na tela inicial o risco já é menor).
+  navigator.storage?.persist?.().catch(() => {});
+  window.addEventListener('online', () => { atualizarEstado({ online: true }); sincronizarPendentes({ forcar: true }); });
   window.addEventListener('offline', () => atualizarEstado({ online: false }));
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizarPendentes(); });
-  setInterval(() => sincronizarPendentes(), INTERVALO_RESERVA_MS);
-  sincronizarPendentes();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizarPendentes({ forcar: true }); });
+  setInterval(() => sincronizarPendentes(), INTERVALO_TIMER_MS);
+  sincronizarPendentes({ forcar: true });
 }

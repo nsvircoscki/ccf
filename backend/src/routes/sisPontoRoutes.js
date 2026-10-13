@@ -4,7 +4,7 @@ import { SETORES_GESTAO_PONTO } from '../config/permissoes.js';
 import { prisma } from '../prisma.js';
 import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario, obterConfigFeriados, atualizarConfigFeriados, obterRegrasPonto, atualizarRegrasPonto, listarLancamentosBanco, criarLancamentoBanco, excluirLancamentoBanco } from '../services/sisPontoService.js';
 import { feriadosDoAno } from '../services/ponto/feriados.js';
-import { listarFuncionarios, atualizarFuncionario, sincronizar, registrarAvulso, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes, exportarCsv, gerarPrevistas, listarMeusEsquecimentos, abonarPrevistasDaJustificativa, contarParaRevisao } from '../services/ponto/batidaService.js';
+import { listarFuncionarios, atualizarFuncionario, registrarAvulso, listarQuarentena, decidirQuarentena, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes, exportarCsv, gerarPrevistas, listarMeusEsquecimentos, abonarPrevistasDaJustificativa, contarParaRevisao } from '../services/ponto/batidaService.js';
 import { interpretarPeriodo, nomePeriodo } from '../services/ponto/exportCsv.js';
 
 const router = express.Router();
@@ -43,15 +43,23 @@ router.get('/registros', async (_req, res) => {
   }
 });
 
-// Fila offline do aparelho: { batidas: [...], dispositivo: { deviceId, pendentes } }.
-// Responde item a item; "criado" e "duplicado" significam que o aparelho já
-// pode marcar a batida como enviada.
-router.post('/sync', async (req, res) => {
+// POST /sync (fila offline do aparelho) fica em routes/pontoSyncRoutes.js.
+
+// Quarentena: batidas que chegaram mas não puderam entrar no ponto.
+router.get('/quarentena', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (req, res) => {
   try {
-    const dispositivo = { ...(req.body?.dispositivo || {}), userAgent: req.headers['user-agent'] };
-    res.json(await sincronizar(req.body?.batidas, req.usuario, dispositivo));
+    res.json(await listarQuarentena(typeof req.query.situacao === 'string' ? req.query.situacao : 'PENDENTE'));
   } catch (error) {
-    res.status(400).json({ error: error.message || 'Erro ao sincronizar pontos.' });
+    res.status(500).json({ error: error.message || 'Erro ao listar a quarentena.' });
+  }
+});
+
+// { ids: [...], acao: 'ACEITAR' | 'DESCARTAR' }
+router.post('/quarentena/decisao', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) => {
+  try {
+    res.json(await decidirQuarentena(req.body?.ids, req.body?.acao, req.usuario));
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao decidir.' });
   }
 });
 
@@ -121,7 +129,7 @@ router.post('/batidas/ajuste', exigirSetor(...SETORES_GESTAO_PONTO), async (req,
 
 // Revisão do admin: { pares (sem saída/sem entrada/inconsistentes), previstas
 // (horários em que a pessoa não bateu, para abonar ou marcar falta) }.
-// Contador da aba "Pontos a revisar": { previstas, registros, total }.
+// Contadores: { previstas (aba Justificativas), registros (aba Pontos a revisar), total }.
 router.get('/revisao/contagem', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (_req, res) => {
   try {
     res.json(await contarParaRevisao());

@@ -2,7 +2,7 @@
 import { prisma } from '../prisma.js';
 import { verificarToken } from '../config/jwt.js';
 
-function extrairToken(req) {
+export function extrairToken(req) {
   const cabecalho = req.headers.authorization || '';
   if (cabecalho.startsWith('Bearer ')) return cabecalho.slice(7);
 
@@ -27,6 +27,8 @@ export async function autenticar(req, res, next) {
   } catch {
     return res.status(401).json({ error: 'Sessão expirada ou inválida. Faça login novamente.' });
   }
+  // Token "só ponto" (aparelho) não abre nenhuma outra rota.
+  if (payload.escopo) return res.status(401).json({ error: 'Esta sessão só envia pontos. Faça login.' });
 
   const usuario = await prisma.user.findUnique({ where: { id: payload.sub }, include: { role: true } });
   if (!usuario || !usuario.ativo) {

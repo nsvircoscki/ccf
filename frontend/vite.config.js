@@ -27,19 +27,31 @@ export default defineConfig({
     // cacheados — as batidas offline ficam no IndexedDB (services/pontoOffline.js).
     // Service worker só funciona em HTTPS (ou localhost): ver readme, "Deploy com HTTPS".
     VitePWA({
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
-      includeAssets: ['ccf_icon.png'],
+      // 'prompt': versão nova só entra quando a pessoa toca em "Atualizar"
+      // (components/AvisoNovaVersao.jsx, que também registra o service worker)
+      // — nunca recarrega no meio de uma batida nem prende ninguém numa versão
+      // quebrada sem aviso.
+      registerType: 'prompt',
+      injectRegister: false,
+      includeAssets: ['ccf_icon.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'SIS CCF',
         short_name: 'CCF Ponto',
         description: 'Sistema CCF — registro de ponto funciona mesmo sem internet.',
         lang: 'pt-BR',
+        id: '/',
         start_url: '/',
+        scope: '/',
         display: 'standalone',
+        orientation: 'portrait',
         background_color: '#f8fafc',
         theme_color: '#1767e8',
-        icons: [{ src: '/ccf_icon.png', sizes: '183x235', type: 'image/png', purpose: 'any' }],
+        // Quadrados, como o Android pede para oferecer "Instalar app".
+        icons: [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],

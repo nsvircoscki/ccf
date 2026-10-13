@@ -8,6 +8,7 @@ import { meses, diasSemana, JUSTIFICATIVA_CORES, PADROES_HORARIO_PADRAO, JUSTIFI
 import { chaveData, hora, calcularBancoHoras, carregarFeriados, montarItensParaJustificar, extrairRegistrosFuncionario, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, pendenciasDeJustificativa, ehHorista, toleranciaEntrada, fimDoPrazo, diaSemRegistro } from './sisPontoUtils.js';
 import { Card, ConfirmacaoPonto, BancoHoras, Legenda, MenuPonto, ModalRegistros, Resumo, navButton } from './SisPontoComponents.jsx';
 import './sisPonto.css';
+import { useEstadoNavegavel } from '../../hooks/useNavegacao';
 
 // `usuario` = a pessoa logada ({ id, nome, setor }). Cada pessoa vê e bate só
 // o próprio ponto — o servidor também recusa batida para outra pessoa.
@@ -17,7 +18,7 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
   const ehCelular = useEhCelular();
   const [agora, setAgora] = useState(new Date());
   const [mes, setMes] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [aba, setAba] = useState('calendario');
+  const [aba, setAba] = useEstadoNavegavel('calendario');
   // Leva direto pra aba "Justificativas" quando o funcionário chega por uma
   // notificação de atraso/saída antecipada (ver Navbar.jsx) — sem isso, ele
   // só abria o módulo na tela padrão (Calendário) e precisava achar a aba
@@ -31,6 +32,8 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
   const [mesesAberto, setMesesAberto] = useState(false);
   const [confirmacao, setConfirmacao] = useState(null);
   const [erroPonto, setErroPonto] = useState(null);
+  // Confirmação depois de bater: enviado ao servidor, ou guardado no aparelho.
+  const [avisoPonto, setAvisoPonto] = useState(null);
   const [justificativas, setJustificativas] = useState([]);
   // Cadastro de ponto da própria pessoa (jornada, horista), guardado no
   // aparelho pra tela funcionar offline. null = ainda não carregou;
@@ -174,8 +177,18 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
     // Grava primeiro no aparelho (vale mesmo sem internet); o envio ao
     // servidor acontece em seguida ou quando a conexão voltar.
     setPendentesLocais((atuais) => [...atuais, { batidoEm: tempoIso }]);
+    const horaBatida = `${String(momento.getHours()).padStart(2, '0')}:${String(momento.getMinutes()).padStart(2, '0')}`;
     registrarBatida({ funcionarioId: idAtual, tipo: tipo === 'Saída' ? 'SAIDA' : 'ENTRADA', batidoEm: tempoIso, atrasado, minutosAtraso })
-      .then(carregarPendentes)
+      // Espera a tentativa de envio que registrarBatida dispara.
+      .then(async (batida) => {
+        await sincronizarPendentes({ forcar: true });
+        const aindaNoAparelho = (await pendentesDoFuncionario(idAtual)).some((b) => b.clientId === batida.clientId);
+        setAvisoPonto(aindaNoAparelho
+          ? { texto: `${tipo} das ${horaBatida} registrada no aparelho. Será enviada quando o servidor estiver disponível.`, offline: true }
+          : { texto: `${tipo} das ${horaBatida} registrada.`, offline: false });
+        window.setTimeout(() => setAvisoPonto(null), 7000);
+        carregarPendentes();
+      })
       .catch(() => {
         carregarPendentes();
         setErroPonto('Não foi possível guardar o ponto neste aparelho. Tente de novo.');
@@ -265,6 +278,7 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
   const modais = <>
     {modalRegistros && <ModalRegistros registros={registrosDoModal} statusRegistro={statusRegistroDoModal} horarioEsperado={horarioEsperado} ajustes={ajustes} onClose={() => { setModalRegistros(false); setDiaModal(null); }} />}
     {confirmacao && <ConfirmacaoPonto {...confirmacao} onClose={() => setConfirmacao(null)} />}
+    {avisoPonto && !erroPonto && <div role="status" style={{ position: 'fixed', bottom: ehCelular ? 84 : 22, left: '50%', transform: 'translateX(-50%)', zIndex: 120, width: ehCelular ? 'calc(100% - 32px)' : undefined, padding: '12px 18px', borderRadius: 10, background: avisoPonto.offline ? '#b9770e' : '#1f9d63', color: '#fff', fontSize: 13, fontWeight: 700, boxShadow: '0 14px 30px rgba(15,35,70,.25)' }}>{avisoPonto.texto}</div>}
     {erroPonto && <div style={{ position: 'fixed', bottom: ehCelular ? 84 : 22, left: '50%', transform: 'translateX(-50%)', zIndex: 120, width: ehCelular ? 'calc(100% - 32px)' : undefined, padding: '12px 18px', borderRadius: 10, background: '#c23b34', color: '#fff', fontSize: 13, fontWeight: 700, boxShadow: '0 14px 30px rgba(15,35,70,.25)' }}>{erroPonto}</div>}
   </>;
 
@@ -410,7 +424,7 @@ function lerArquivoComoDataUrl(arquivo) {
 // Dá para justificar um item só ou marcar vários e enviar de uma vez com o
 // mesmo motivo — vira uma justificativa por item, e o ENG decide cada uma.
 function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas, onAtualizado, pendenciaSugerida, pendenciaRefazerSugerida, compacto = false, itensPendentes = [], pendenciasRefazer = [], prazoHoras = 48 }) {
-  const [secao, setSecao] = useState('pendentes');
+  const [secao, setSecao] = useEstadoNavegavel('pendentes');
   const [selecionados, setSelecionados] = useState(() => new Set());
   // lote = itens marcados sendo justificados juntos (null = formulário de um dia só).
   const [lote, setLote] = useState(null);
@@ -783,7 +797,7 @@ function IndicadorSincronizacao({ sync }) {
       </span>
       {ultimoErro && <span style={{ fontWeight: 600, fontSize: 10, lineHeight: 1.35 }}>{ultimoErro}</span>}
       {online && pendentes > 0 && !sincronizando && (
-        <button type="button" onClick={() => sincronizarPendentes()} style={{ border: 0, borderRadius: 6, background: '#fff', color: '#1767e8', padding: '5px 7px', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>Enviar agora</button>
+        <button type="button" onClick={() => sincronizarPendentes({ forcar: true })} style={{ border: 0, borderRadius: 6, background: '#fff', color: '#1767e8', padding: '5px 7px', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>Enviar agora</button>
       )}
     </div>
   );

@@ -184,6 +184,7 @@ model User {
   history       TicketHistory[]
   comments      Comment[]
   batidas       PontoBatida[]
+  sessoesPonto  PontoSessao[]
 }
 
 enum PontoTipo {
@@ -232,6 +233,46 @@ model PontoBatida {
 
 // Último contato de cada aparelho que bate ponto. É o melhor indício que o
 // servidor tem de batidas ainda presas num celular offline.
+// Sessão "só ponto" de um aparelho: o token dela só envia batidas
+// (POST /sis-ponto/sync), nada mais. Vale até expiraEm, que é renovado a cada
+// envio aceito; revogar (por aparelho ou todas da pessoa) corta na hora.
+model PontoSessao {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  deviceId      String
+  criadoEm      DateTime  @default(now())
+  expiraEm      DateTime
+  ultimoUso     DateTime?
+  userAgent     String?
+  revogadoEm    DateTime?
+  revogadoPorId String?
+
+  @@index([userId])
+}
+
+// Batida que chegou mas não pôde entrar no ponto (sessão expirada/revogada,
+// funcionário inativo, ponto de outra pessoa...). Não é descartada: fica aqui
+// para o RH aceitar (vira PontoBatida) ou descartar. Se a mesma batida
+// (clientId) entrar depois normalmente, sai sozinha daqui.
+model PontoBatidaQuarentena {
+  id            String    @id @default(uuid())
+  clientId      String    @unique
+  // Quem o aparelho diz que bateu (não confirmado pelo servidor).
+  funcionarioId String
+  tipo          PontoTipo
+  batidoEm      DateTime
+  deviceId      String?
+  recebidoEm    DateTime  @default(now())
+  motivo        String
+  // "PENDENTE" | "ACEITA" | "DESCARTADA" | "RESOLVIDA" (entrou depois pelo envio normal)
+  situacao      String    @default("PENDENTE")
+  decididoPorId String?
+  decididoEm    DateTime?
+
+  @@index([situacao])
+}
+
 model PontoDispositivo {
   deviceId      String   @id
   ultimoContato DateTime

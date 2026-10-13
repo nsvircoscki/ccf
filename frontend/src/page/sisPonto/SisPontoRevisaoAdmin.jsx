@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { Card } from './SisPontoComponents.jsx';
-import { JUSTIFICATIVA_CORES, rotuloTipoJustificativa } from './sisPontoData.js';
+import { chaveData } from './sisPontoUtils.js';
 
-// Conferência do ENG antes de fechar a folha:
-// 1) Esquecimentos: o servidor já registra o horário previsto (o ENG não
-//    corrige nada). Dentro do prazo quem age é o funcionário (justifica; a
-//    justificativa vai para a aba Justificativas). Passado o prazo sem
-//    justificativa, vira uma "justificativa automática" de esquecimento: o
-//    ENG aceita (conta as horas) ou não aceita (falta, desconta as horas).
-// 2) Registros com problema em dias já encerrados: entrada sem saída, saída
-//    sem entrada, sequência inconsistente. Saem sinalizados no CSV da folha.
+// Conferência antes de fechar a folha: registros com problema em dias já
+// encerrados (entrada sem saída, saída sem entrada, sequência inconsistente).
+// Saem sinalizados no CSV da folha; "Corrigir" abre o mesmo modal do
+// calendário para incluir ou excluir registros daquele dia.
+// Os esquecimentos (horário sem registro) ficam na aba Justificativas.
+// Também aqui: a quarentena — batidas que chegaram do aparelho mas não
+// puderam entrar no ponto (sessão expirada/revogada, funcionário inativo...).
+// Nada é descartado sozinho: a gestão aceita (vira registro) ou descarta.
 const ROTULOS = {
   SEM_SAIDA: 'Entrada sem saída',
   SEM_ENTRADA: 'Saída sem entrada',
@@ -18,66 +18,33 @@ const ROTULOS = {
   'INCONSISTENTE:SAIDA_SEM_ENTRADA': 'Saída fora de sequência',
 };
 
-const SITUACAO = {
-  PENDENTE: { texto: 'Justificativa automática — aguardando decisão', cor: '#b9770e', fundo: '#fff8ee' },
-  ABONADA: { texto: 'Aceita (conta as horas)', cor: '#2b8761', fundo: '#eefaf6' },
-  FALTA: { texto: 'Não aceita — falta', cor: '#be3747', fundo: '#ffecef' },
-};
-
 const mesAtual = () => {
   const hoje = new Date();
   return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
 };
 const dataHora = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—');
-const horaDe = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-const diaLongo = (dia) => new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(`${dia}T12:00:00`));
 
-const botao = (cor, fundo) => ({ border: 0, borderRadius: 8, padding: '7px 11px', background: fundo, color: cor, fontSize: 11, fontWeight: 800, cursor: 'pointer' });
-
-export default function SisPontoRevisaoAdmin() {
+// onCorrigir(funcionarioId, 'YYYY-MM-DD'): abre a correção do dia.
+// atualizacao: muda quando uma correção termina (recarrega a lista).
+export default function SisPontoRevisaoAdmin({ onCorrigir, atualizacao, onQuarentenaDecidida }) {
   const [mes, setMes] = useState(mesAtual);
-  const [dados, setDados] = useState({ pares: [], previstas: [] });
-  const [justificativas, setJustificativas] = useState([]);
+  const [pares, setPares] = useState([]);
   const [estado, setEstado] = useState({ carregando: true, erro: null });
+  const [quarentena, setQuarentena] = useState([]);
   const [processando, setProcessando] = useState(null);
 
-  const carregar = useCallback(() => Promise.all([api.getSispontoRevisao(mes), api.getSispontoJustificativas()])
-    .then(([revisao, lista]) => {
-      setDados({ pares: revisao?.pares || [], previstas: revisao?.previstas || [] });
-      setJustificativas(Array.isArray(lista) ? lista : []);
-      setEstado({ carregando: false, erro: null });
-    })
-    .catch((erro) => setEstado({ carregando: false, erro: erro.message })), [mes]);
+  const carregarQuarentena = useCallback(() => api.getSispontoQuarentena()
+    .then((lista) => setQuarentena(Array.isArray(lista) ? lista : []))
+    .catch(() => {}), []);
+  useEffect(() => { carregarQuarentena(); }, [carregarQuarentena, atualizacao]);
 
-  useEffect(() => { carregar(); }, [carregar]);
-
-  // Só chega aqui o que é do ENG: prazo vencido sem justificativa, ou já decidido.
-  const paraEng = useMemo(() => dados.previstas.filter((p) => p.etapa === 'PARA_DECIDIR' || p.etapa === 'DECIDIDA'), [dados.previstas]);
-  const aguardandoFuncionario = dados.previstas.filter((p) => p.etapa === 'AGUARDANDO_FUNCIONARIO').length;
-  const comJustificativa = dados.previstas.filter((p) => p.etapa === 'JUSTIFICATIVA_ENVIADA').length;
-
-  // Um cartão por pessoa e dia, com todos os horários que ficaram sem registro.
-  const grupos = useMemo(() => {
-    const mapa = new Map();
-    paraEng.forEach((p) => {
-      const chave = `${p.funcionarioId}|${p.dia}`;
-      if (!mapa.has(chave)) mapa.set(chave, { chave, funcionarioId: p.funcionarioId, nome: p.nome, setor: p.setor, dia: p.dia, itens: [] });
-      mapa.get(chave).itens.push(p);
-    });
-    return [...mapa.values()]
-      .map((g) => ({ ...g, itens: g.itens.sort((a, b) => new Date(a.batidoEm) - new Date(b.batidoEm)) }))
-      .sort((a, b) => {
-        const pa = a.itens.some((i) => i.situacao === 'PENDENTE') ? 0 : 1;
-        const pb = b.itens.some((i) => i.situacao === 'PENDENTE') ? 0 : 1;
-        return pa - pb || a.dia.localeCompare(b.dia) || a.nome.localeCompare(b.nome);
-      });
-  }, [paraEng]);
-
-  const decidir = async (grupo, situacao, ids = grupo.itens.map((i) => i.id)) => {
-    setProcessando(grupo.chave);
+  const decidirQuarentena = async (item, acao) => {
+    setProcessando(item.id);
     try {
-      await api.decidirSispontoPrevistas(ids, situacao);
-      await carregar();
+      await api.decidirSispontoQuarentena([item.id], acao);
+      await carregarQuarentena();
+      if (acao === 'ACEITAR') carregar();
+      onQuarentenaDecidida?.();
     } catch (erro) {
       setEstado((atual) => ({ ...atual, erro: erro.message }));
     } finally {
@@ -85,101 +52,81 @@ export default function SisPontoRevisaoAdmin() {
     }
   };
 
-  const pendentes = grupos.filter((g) => g.itens.some((i) => i.situacao === 'PENDENTE')).length;
+  const carregar = useCallback(() => api.getSispontoRevisao(mes)
+    .then((revisao) => {
+      setPares(revisao?.pares || []);
+      setEstado({ carregando: false, erro: null });
+    })
+    .catch((erro) => setEstado({ carregando: false, erro: erro.message })), [mes]);
+
+  useEffect(() => { carregar(); }, [carregar, atualizacao]);
 
   return (
     <section className="sis-empty-view" style={{ display: 'grid', gap: 16 }}>
+      {quarentena.length > 0 && (
+        <Card style={{ padding: 26 }}>
+          <h2 style={{ margin: 0, fontSize: 20 }}>Batidas em quarentena</h2>
+          <p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>
+            Registros que chegaram do aparelho mas não puderam entrar no ponto. Se a pessoa entrar de novo no app e a batida subir normalmente, ela sai daqui sozinha.
+          </p>
+          <div style={{ overflowX: 'auto', marginTop: 18 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: '#405371' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: '#7183a3' }}>
+                  <th style={{ padding: 8 }}>Funcionário</th><th style={{ padding: 8 }}>Registro</th><th style={{ padding: 8 }}>Horário (aparelho)</th><th style={{ padding: 8 }}>Recebido</th><th style={{ padding: 8 }}>Motivo</th><th style={{ padding: 8 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {quarentena.map((item) => (
+                  <tr key={item.id} style={{ borderTop: '1px solid #eef2f8', opacity: processando === item.id ? 0.6 : 1 }}>
+                    <td style={{ padding: 8, fontWeight: 700 }}>{item.nome} <span style={{ color: '#7183a3', fontWeight: 600 }}>{item.setor}</span></td>
+                    <td style={{ padding: 8 }}>{item.tipo === 'ENTRADA' ? 'Entrada' : 'Saída'}</td>
+                    <td style={{ padding: 8 }}>{dataHora(item.batidoEm)}</td>
+                    <td style={{ padding: 8 }}>{dataHora(item.recebidoEm)}</td>
+                    <td style={{ padding: 8, color: '#b9770e', fontWeight: 700 }}>{item.motivo}</td>
+                    <td style={{ padding: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button type="button" disabled={processando === item.id} onClick={() => decidirQuarentena(item, 'ACEITAR')} style={{ padding: '6px 12px', border: 0, borderRadius: 8, background: '#2aba72', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Aceitar</button>{' '}
+                      <button type="button" disabled={processando === item.id} onClick={() => decidirQuarentena(item, 'DESCARTAR')} style={{ padding: '6px 12px', border: '1px solid #f0d3d3', borderRadius: 8, background: '#fff', color: '#8a4a4f', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Descartar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
       <Card style={{ padding: 26 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: 20 }}>Esquecimentos de registro</h2>
+            <h2 style={{ margin: 0, fontSize: 20 }}>Registros com problema</h2>
             <p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>
-              O horário previsto já fica registrado. Quando o prazo para justificar passa sem justificativa, vira uma justificativa automática de esquecimento: aceite (conta as horas) ou não aceite (falta, desconta as horas).
+              Registros fora de sequência em dias já encerrados (por exemplo, entrada sem saída ou duas entradas seguidas). Use Corrigir para incluir o registro que faltou ou excluir um duplicado. Os esquecimentos de registro ficam na aba Justificativas.
             </p>
           </div>
           <input type="month" value={mes} onChange={(e) => { setEstado({ carregando: true, erro: null }); setMes(e.target.value || mesAtual()); }} style={{ padding: '8px 10px', border: '1px solid #d8e6fc', borderRadius: 8, color: '#405371', fontWeight: 700 }} />
         </div>
 
         {estado.erro && <p style={{ color: '#be3747', fontWeight: 700, marginTop: 18 }}>{estado.erro}</p>}
-        {!estado.carregando && !grupos.length && !estado.erro && <p style={{ color: '#2b8761', fontWeight: 700, marginTop: 18 }}>Nenhum esquecimento para decidir neste mês.</p>}
-        {pendentes > 0 && <p style={{ color: '#b9770e', fontWeight: 800, marginTop: 14 }}>{pendentes} dia(s) aguardando decisão.</p>}
-        {(aguardandoFuncionario > 0 || comJustificativa > 0) && (
-          <p style={{ color: '#7183a3', fontWeight: 700, fontSize: 12, marginTop: 10 }}>
-            {aguardandoFuncionario > 0 && <>{aguardandoFuncionario} horário(s) ainda no prazo do funcionário justificar. </>}
-            {comJustificativa > 0 && <>{comJustificativa} horário(s) já justificado(s) — decida na aba Justificativas.</>}
-          </p>
-        )}
-
-        <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
-          {grupos.map((grupo) => {
-            const situacoes = new Set(grupo.itens.map((i) => i.situacao));
-            const unica = situacoes.size === 1 ? [...situacoes][0] : null;
-            const visual = SITUACAO[unica || 'PENDENTE'];
-            const justificativasDoDia = justificativas.filter((j) => j.funcionarioId === grupo.funcionarioId && j.dia === grupo.dia);
-            const ocupado = processando === grupo.chave;
-            return (
-              <div key={grupo.chave} style={{ border: '1px solid #e5edf8', borderLeft: `4px solid ${visual.cor}`, borderRadius: 10, padding: 14, background: '#fff' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <strong style={{ color: '#1d3156', fontSize: 14 }}>{grupo.nome}</strong>
-                  <span style={{ color: '#7183a3', fontSize: 11, fontWeight: 800 }}>{grupo.setor}</span>
-                  <span style={{ color: '#243755', fontSize: 12, fontWeight: 800, textTransform: 'capitalize' }}>{diaLongo(grupo.dia)}</span>
-                  <span style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 99, background: visual.fundo, color: visual.cor, fontSize: 10, fontWeight: 900 }}>{unica ? visual.texto : 'Decisões diferentes'}</span>
-                </div>
-
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                  {grupo.itens.map((item) => (
-                    <span key={item.id} title={SITUACAO[item.situacao]?.texto} style={{ padding: '5px 9px', borderRadius: 8, background: SITUACAO[item.situacao]?.fundo, color: SITUACAO[item.situacao]?.cor, fontSize: 11, fontWeight: 800 }}>
-                      {item.tipo === 'ENTRADA' ? 'Entrada' : 'Saída'} prevista {horaDe(item.batidoEm)}
-                    </span>
-                  ))}
-                </div>
-
-                {justificativasDoDia.length > 0 ? (
-                  <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
-                    {justificativasDoDia.map((j) => {
-                      const cor = JUSTIFICATIVA_CORES[j.status] || JUSTIFICATIVA_CORES['Em análise'];
-                      return (
-                        <div key={j.id} style={{ padding: '7px 10px', borderRadius: 8, background: cor.fundo, border: `1px solid ${cor.borda}`, fontSize: 11.5, color: '#405371', fontWeight: 600 }}>
-                          <b>Justificativa ({j.status})</b> {j.horaInicio}–{j.horaFim}: {[rotuloTipoJustificativa(j.tipo), j.motivo].filter(Boolean).join(' — ')}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p style={{ margin: '10px 0 0', color: '#8a99b1', fontSize: 11.5, fontWeight: 700 }}>O funcionário não justificou no prazo. Justificativa automática: esquecimento de registro.</p>
-                )}
-
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                  {unica !== 'ABONADA' && <button type="button" disabled={ocupado} onClick={() => decidir(grupo, 'ABONADA')} style={botao('#fff', '#2b8761')}>Aceitar justificativa automática</button>}
-                  {unica !== 'FALTA' && <button type="button" disabled={ocupado} onClick={() => decidir(grupo, 'FALTA')} style={botao('#fff', '#be3747')}>Não aceitar (falta)</button>}
-                  {unica !== 'PENDENTE' && <button type="button" disabled={ocupado} onClick={() => decidir(grupo, 'PENDENTE')} style={botao('#405371', '#f1f4f9')}>Desfazer decisão</button>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
-      <Card style={{ padding: 26 }}>
-        <h2 style={{ margin: 0, fontSize: 18 }}>Registros com problema</h2>
-        <p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Registros fora de sequência em dias já encerrados (por exemplo, duas entradas seguidas). Se for um registro duplicado, exclua-o em Corrigir no calendário do funcionário.</p>
-        {!estado.carregando && !dados.pares.length && !estado.erro && <p style={{ color: '#2b8761', fontWeight: 700, marginTop: 18 }}>Nenhum registro com problema neste mês.</p>}
-        {dados.pares.length > 0 && (
+        {!estado.carregando && !pares.length && !estado.erro && <p style={{ color: '#2b8761', fontWeight: 700, marginTop: 18 }}>Nenhum registro com problema neste mês.</p>}
+        {pares.length > 0 && (
           <div style={{ overflowX: 'auto', marginTop: 18 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: '#405371' }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: '#7183a3' }}>
-                  <th style={{ padding: 8 }}>Funcionário</th><th style={{ padding: 8 }}>Setor</th><th style={{ padding: 8 }}>Entrada</th><th style={{ padding: 8 }}>Saída</th><th style={{ padding: 8 }}>Problema</th>
+                  <th style={{ padding: 8 }}>Funcionário</th><th style={{ padding: 8 }}>Setor</th><th style={{ padding: 8 }}>Entrada</th><th style={{ padding: 8 }}>Saída</th><th style={{ padding: 8 }}>Problema</th><th style={{ padding: 8 }} />
                 </tr>
               </thead>
               <tbody>
-                {dados.pares.map((item, i) => (
+                {pares.map((item, i) => (
                   <tr key={`${item.funcionarioId}-${item.entrada || item.saida}-${i}`} style={{ borderTop: '1px solid #eef2f8' }}>
                     <td style={{ padding: 8, fontWeight: 700 }}>{item.nome}</td>
                     <td style={{ padding: 8 }}>{item.setor}</td>
                     <td style={{ padding: 8 }}>{dataHora(item.entrada)}</td>
                     <td style={{ padding: 8 }}>{dataHora(item.saida)}</td>
                     <td style={{ padding: 8, color: '#b9770e', fontWeight: 700 }}>{item.observacoes.map((o) => ROTULOS[o] || o).join(' · ')}</td>
+                    <td style={{ padding: 8, textAlign: 'right' }}>
+                      <button type="button" onClick={() => onCorrigir(item.funcionarioId, chaveData(new Date(item.entrada || item.saida)))} style={{ padding: '6px 12px', border: '1px solid #d8e6fc', borderRadius: 8, background: '#fff', color: '#1767e8', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Corrigir</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

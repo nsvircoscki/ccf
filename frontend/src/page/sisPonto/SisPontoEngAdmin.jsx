@@ -11,9 +11,10 @@ import SisPontoRevisaoAdmin from './SisPontoRevisaoAdmin.jsx';
 import SisPontoExportFolha from './SisPontoExportFolha.jsx';
 import SisPontoFeriadosAdmin from './SisPontoFeriadosAdmin.jsx';
 import './sisPonto.css';
+import { useEstadoNavegavel } from '../../hooks/useNavegacao';
 
 export default function SisPontoEngAdminScreen({ destino }) {
-  const [activePage, setActivePage] = useState('dashboard');
+  const [activePage, setActivePage] = useEstadoNavegavel('dashboard');
   // Redireciona pra aba certa quando a navbar manda o admin pra cá a partir
   // de uma notificação (ex.: justificativa nova). O "ts" no destino garante
   // que o efeito roda de novo mesmo se a página pedida for repetida.
@@ -148,14 +149,22 @@ export default function SisPontoEngAdminScreen({ destino }) {
   useEffect(() => { carregarLancamentosBanco(); }, [activePage]);
   // Os avisos do ponto não vão pro sininho: ficam nos contadores das abas
   // Justificativas e Pontos a revisar, atualizados a cada minuto.
-  const [revisaoPendente, setRevisaoPendente] = useState(0);
+  // Esquecimentos sem justificativa (previstas) contam em Justificativas;
+  // registros com problema, em Pontos a revisar.
+  const [contagemRevisao, setContagemRevisao] = useState({ previstas: 0, registros: 0 });
+  // Pontos a revisar = registros com problema + batidas em quarentena.
+  const atualizarContagemRevisao = () => api.getSispontoRevisaoContagem()
+    .then((c) => setContagemRevisao({ previstas: c.previstas || 0, registros: (c.registros || 0) + (c.quarentena || 0) }))
+    .catch(() => {});
   useEffect(() => {
-    let ativo = true;
-    const atualizar = () => api.getSispontoRevisaoContagem().then((c) => { if (ativo) setRevisaoPendente(c.total || 0); }).catch(() => {});
-    atualizar();
-    const intervalo = window.setInterval(() => { atualizar(); carregarJustificativas(); }, 60000);
-    return () => { ativo = false; window.clearInterval(intervalo); };
+    atualizarContagemRevisao();
+    const intervalo = window.setInterval(() => { atualizarContagemRevisao(); carregarJustificativas(); }, 60000);
+    return () => window.clearInterval(intervalo);
   }, [activePage]);
+  // "Corrigir" na aba Pontos a revisar: abre o modal de correção do dia e,
+  // ao fechar, a lista recarrega.
+  const [versaoCorrecao, setVersaoCorrecao] = useState(0);
+  const corrigirDia = (funcionarioId, dia) => { setCalendarioFuncionarioId(funcionarioId); setDiaCorrecao(dia); };
   useEffect(() => { carregarRegistros(); }, [activePage]);
   useEffect(() => { carregarAjustes(); }, [activePage]);
   useEffect(() => { carregarHorarios(); }, [activePage]);
@@ -190,11 +199,11 @@ export default function SisPontoEngAdminScreen({ destino }) {
   }, [cadastroFuncionarios, calendarioFuncionarioId]);
   const funcionarios = useMemo(() => buildEngFuncionariosFromStorage(date, padroesHorario, cadastroFuncionarios, justificativas, registrosBackend), [date, padroesHorario, cadastroFuncionarios, justificativas, registrosBackend]);
   const setores = Array.from(new Set(funcionarios.map((f) => f.setor))).sort();
-  const justificativasPendentes = justificativas.filter((justificativa) => justificativa.status === 'Em análise').length;
+  const justificativasPendentes = justificativas.filter((justificativa) => justificativa.status === 'Em análise').length + contagemRevisao.previstas;
   const [funcionarioFiltro, setFuncionarioFiltro] = useState('Todos os funcionários');
   const [setorFiltro, setSetorFiltro] = useState('Todos os setores');
   const [statusFiltro, setStatusFiltro] = useState('Todos os status');
-  const [activeTab, setActiveTab] = useState('resumo');
+  const [activeTab, setActiveTab] = useEstadoNavegavel('resumo');
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState(funcionarios[0] || { nome: 'Sem registros', setor: '—', entrada: '—', intervalo: '—', retorno: '—', saida: '—', total: '00h00', status: 'Ausente', justificativa: 0, jornadaPrevista: '08:50', jornadaRealizada: '00h00', jornadaTipo: 'Jornada prevista', banco: '+00h00' });
 
   useEffect(() => {
@@ -296,9 +305,9 @@ export default function SisPontoEngAdminScreen({ destino }) {
             </button>
             <button className={`sis-admin-nav-item ${activePage === 'revisao' ? 'active' : ''}`} onClick={() => setActivePage('revisao')}>
               <CircleAlert size={16} /> Pontos a revisar
-              {revisaoPendente > 0 && (
-                <span title="Horários sem registro aguardando decisão e registros com problema" style={{ marginLeft: 'auto', minWidth: 20, height: 20, padding: '0 5px', borderRadius: 999, background: '#e5484d', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: activePage === 'revisao' ? '0 0 0 2px #1767e8' : '0 0 0 2px #fff' }}>
-                  {revisaoPendente > 99 ? '99+' : revisaoPendente}
+              {contagemRevisao.registros > 0 && (
+                <span title="Registros com problema e batidas em quarentena" style={{ marginLeft: 'auto', minWidth: 20, height: 20, padding: '0 5px', borderRadius: 999, background: '#e5484d', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: activePage === 'revisao' ? '0 0 0 2px #1767e8' : '0 0 0 2px #fff' }}>
+                  {contagemRevisao.registros > 99 ? '99+' : contagemRevisao.registros}
                 </span>
               )}
             </button>
@@ -552,11 +561,11 @@ export default function SisPontoEngAdminScreen({ destino }) {
 
           {activePage === 'justificativas' && (
             <section className="sis-justificativas-view">
-              <SisPontoJustificativasAdmin justificativas={justificativas} carregando={carregandoJustificativas} onAtualizado={carregarJustificativas} />
+              <SisPontoJustificativasAdmin justificativas={justificativas} carregando={carregandoJustificativas} onAtualizado={() => { carregarJustificativas(); atualizarContagemRevisao(); }} onEsquecimentoDecidido={atualizarContagemRevisao} />
             </section>
           )}
 
-          {activePage === 'revisao' && <SisPontoRevisaoAdmin />}
+          {activePage === 'revisao' && <SisPontoRevisaoAdmin onCorrigir={corrigirDia} atualizacao={versaoCorrecao} onQuarentenaDecidida={atualizarContagemRevisao} />}
 
           {activePage === 'relatorios' && <SisPontoExportFolha onExportarDia={exportarRelatorio} />}
 
@@ -726,7 +735,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
         onExcluir={excluirBatidaEng}
         onAdicionar={incluirBatidaEng}
         ajustes={ajustesDoCalendario}
-        onClose={() => setDiaCorrecao(null)}
+        onClose={() => { setDiaCorrecao(null); setVersaoCorrecao((v) => v + 1); atualizarContagemRevisao(); }}
       />}
       {confirmacaoModal && <ConfirmacaoPonto {...confirmacaoModal} onClose={() => setConfirmacaoModal(null)} />}
       {popupDiaJustificativa && (

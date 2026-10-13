@@ -1,8 +1,70 @@
 import { useEffect, useState } from 'react';
 import { usuarioService } from '../services/usuarioService';
+import { api } from '../services/api';
 import {
   Actions, ConfirmModal, Field, SelectField, Section, Shell, Switch, Toast, useToast, C, MONT, SANS,
 } from '../components/cadastros/CadastroKit.jsx';
+
+// Aparelhos com sessão do ponto ativa (token "só ponto", 60 dias): com ela o
+// celular envia batidas mesmo depois que o login normal venceu. Revogar corta
+// na hora — as batidas que o aparelho ainda enviar vão para a quarentena
+// (aba Pontos a revisar) em vez de entrar no ponto.
+function AparelhosPonto({ usuario, show, accent }) {
+  const [sessoes, setSessoes] = useState(null);
+  const [revogando, setRevogando] = useState(null);
+
+  useEffect(() => {
+    let ativo = true;
+    api.getSessoesPonto(usuario.id).then((lista) => { if (ativo) setSessoes(lista); }).catch(() => { if (ativo) setSessoes([]); });
+    return () => { ativo = false; };
+  }, [usuario.id]);
+
+  const revogar = async (sessaoId) => {
+    setRevogando(sessaoId || 'todas');
+    try {
+      await api.revogarSessoesPonto(usuario.id, sessaoId);
+      setSessoes(await api.getSessoesPonto(usuario.id));
+      show(sessaoId ? 'Aparelho desconectado do ponto.' : `Todos os aparelhos de ${usuario.nome} foram desconectados do ponto.`, 'ok');
+    } catch {
+      show('Erro ao revogar.', 'err');
+    } finally {
+      setRevogando(null);
+    }
+  };
+
+  const data = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—');
+  const aparelho = (userAgent) => {
+    const ua = userAgent || '';
+    if (/iPhone|iPad/i.test(ua)) return 'iPhone/iPad';
+    if (/Android/i.test(ua)) return 'Android';
+    if (/Windows/i.test(ua)) return 'Windows';
+    if (/Mac/i.test(ua)) return 'Mac';
+    return 'Aparelho';
+  };
+
+  return (
+    <div style={{ marginTop: 30 }}>
+      <Section icon="id" title="Aparelhos do ponto" desc="Celulares que podem enviar pontos guardados offline (válido 60 dias, renova a cada envio)" accent={accent}>
+        <div style={{ gridColumn: '1 / -1', fontFamily: SANS, fontSize: 13, color: C.text }}>
+          {sessoes === null && <span style={{ color: C.muted }}>Carregando…</span>}
+          {sessoes?.length === 0 && <span style={{ color: C.muted }}>Nenhum aparelho conectado.</span>}
+          {sessoes?.map((sessao) => (
+            <div key={sessao.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderTop: `1px solid ${C.borderSoft}` }}>
+              <span style={{ flex: 1 }}>
+                <strong>{aparelho(sessao.userAgent)}</strong>
+                <span style={{ color: C.muted, fontSize: 12 }}> · conectado em {data(sessao.criadoEm)} · último envio {data(sessao.ultimoUso)} · vale até {data(sessao.expiraEm)}</span>
+              </span>
+              <button type="button" disabled={Boolean(revogando)} onClick={() => revogar(sessao.id)} style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.label, fontFamily: MONT, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Desconectar</button>
+            </div>
+          ))}
+          {sessoes?.length > 1 && (
+            <button type="button" disabled={Boolean(revogando)} onClick={() => revogar(null)} style={{ marginTop: 10, padding: '8px 14px', borderRadius: 8, border: '1px solid #f0d3d3', background: '#fff', color: '#8a4a4f', fontFamily: MONT, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Desconectar todos</button>
+          )}
+        </div>
+      </Section>
+    </div>
+  );
+}
 
 const formVazio = {
   nome: '',
@@ -332,6 +394,8 @@ export default function UsuariosView({ onBack, usuarioAtual }) {
         </Section>
         </div>
       )}
+
+      {editando && <AparelhosPonto key={selecionado.id} usuario={selecionado} show={show} accent={accent} />}
 
       {confirmarDesativar && (
         <ConfirmModal

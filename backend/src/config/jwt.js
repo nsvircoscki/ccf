@@ -27,3 +27,15 @@ export function gerarToken(usuarioId) {
 export function verificarToken(token) {
   return jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
 }
+
+// Sessão "só ponto" (ver PontoSessao no schema): token de longa duração
+// guardado no aparelho para enviar batidas quando o servidor voltar (ele fica
+// desligado à noite e nos fins de semana). Só vale em POST /sis-ponto/sync —
+// o autenticar() normal recusa qualquer token com escopo.
+export const VALIDADE_SESSAO_PONTO_MS = 60 * 24 * 3600 * 1000;
+
+export function gerarTokenPonto(sessaoId, usuarioId) {
+  return jwt.sign({ sub: usuarioId, sid: sessaoId, escopo: 'ponto' }, process.env.JWT_SECRET, {
+    expiresIn: Math.floor(VALIDADE_SESSAO_PONTO_MS / 1000), algorithm: 'HS256',
+  });
+}

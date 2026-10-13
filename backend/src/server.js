@@ -21,6 +21,7 @@ import tarefaRoutes from './routes/tarefaRoutes.js';
 import sisPontoRoutes from './routes/sisPontoRoutes.js';
 import usuarioRoutes from './routes/usuarioRoutes.js';
 import pontoExportRoutes from './routes/pontoExportRoutes.js';
+import pontoSyncRoutes from './routes/pontoSyncRoutes.js';
 import { gerarPrevistas } from './services/ponto/batidaService.js';
 
 // Para aqui, com mensagem clara, se faltar o segredo — ver config/jwt.js.
@@ -43,6 +44,10 @@ app.use(bloquearOperadores);
 
 // Única rota aberta: é por ela que a pessoa consegue o token. As rotas dela
 // que exigem sessão (/me, /alterar-senha) aplicam o autenticar por conta própria.
+// O app testa isto antes de enviar a fila de pontos: a rede do celular pode
+// estar ok com o servidor desligado (noite e fim de semana).
+app.get('/health', (_req, res) => res.json({ ok: true, agora: new Date().toISOString() }));
+
 app.use(['/auth/login', '/auth/criar-senha', '/auth/alterar-senha'], limitarTentativasLogin);
 app.use('/auth', authRoutes);
 
@@ -50,6 +55,9 @@ app.use('/auth', authRoutes);
 // vez de sessão. Precisa vir antes do /sis-ponto autenticado abaixo; caminhos
 // que não forem do export seguem adiante normalmente.
 app.use('/sis-ponto', pontoExportRoutes);
+// Envio da fila de pontos: aceita a sessão normal ou o token "só ponto" do
+// aparelho (ver routes/pontoSyncRoutes.js).
+app.use('/sis-ponto', pontoSyncRoutes);
 
 // Todo o resto exige sessão: autenticar identifica quem chama e preenche
 // req.usuario antes de qualquer rota rodar.

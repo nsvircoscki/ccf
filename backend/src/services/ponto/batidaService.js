@@ -147,6 +147,11 @@ export async function sincronizar(itens, quem, dispositivo = {}) {
     (await prisma.user.findMany({ where: { id: { in: [...new Set(validos.map((v) => v.funcionarioId))] } }, include: { role: true } }))
       .map((u) => [u.id, u]),
   );
+  const quarentenaAnterior = new Map(
+    (await prisma.pontoBatidaQuarentena.findMany({ where: { clientId: { in: ids } }, select: { clientId: true, situacao: true } }))
+      .map((q) => [q.clientId, q]),
+  );
+  const paraQuarentena = [];
 
   const novos = [];
   for (const v of validos) {
@@ -157,13 +162,22 @@ export async function sincronizar(itens, quem, dispositivo = {}) {
       resultados.set(v.clientId, { clientId: v.clientId, status: 'duplicado', ...(igual ? {} : { conflito: true }) });
       continue;
     }
-    const alvo = alvos.get(v.funcionarioId);
-    if (!alvo || !alvo.ativo || !alvo.registraPonto) {
-      resultados.set(v.clientId, { clientId: v.clientId, status: 'rejeitado', erro: 'Funcionário inexistente, inativo ou sem registro de ponto.' });
+    // O RH já descartou esta batida na quarentena: não entra de novo.
+    if (quarentenaAnterior.get(v.clientId)?.situacao === 'DESCARTADA') {
+      resultados.set(v.clientId, { clientId: v.clientId, status: 'descartado', erro: 'Descartado pelo RH na revisão.' });
       continue;
     }
-    if (alvo.id !== quem.id) {
-      resultados.set(v.clientId, { clientId: v.clientId, status: 'rejeitado', erro: 'Cada pessoa só pode registrar o próprio ponto.' });
+    const alvo = alvos.get(v.funcionarioId);
+    if (!alvo) {
+      resultados.set(v.clientId, { clientId: v.clientId, status: 'rejeitado', erro: 'Funcionário inexistente.' });
+      continue;
+    }
+    // Não entra no ponto, mas não se perde: vai para a revisão do RH.
+    const motivoQuarentena = !alvo.ativo || !alvo.registraPonto ? 'Funcionário inativo ou sem registro de ponto.'
+      : alvo.id !== quem.id ? `Enviado pela sessão de outra pessoa (${quem.nome}).` : null;
+    if (motivoQuarentena) {
+      paraQuarentena.push({ ...v, motivo: motivoQuarentena });
+      resultados.set(v.clientId, { clientId: v.clientId, status: 'quarentena', definitivo: true, erro: `Em revisão pelo RH: ${motivoQuarentena}` });
       continue;
     }
     novos.push(v);
@@ -182,8 +196,15 @@ export async function sincronizar(itens, quem, dispositivo = {}) {
       const porUsuario = new Map();
       for (const v of novos) porUsuario.set(v.funcionarioId, [...(porUsuario.get(v.funcionarioId) || []), v.batidoEm]);
       for (const [userId, datas] of porUsuario) await reclassificar(userId, datas, tx);
+      // Chegou pelo envio normal: se estava na quarentena (ex.: sessão
+      // expirada antes), sai de lá sozinha.
+      await tx.pontoBatidaQuarentena.updateMany({
+        where: { clientId: { in: novos.map((v) => v.clientId) }, situacao: 'PENDENTE' },
+        data: { situacao: 'RESOLVIDA', decididoEm: new Date() },
+      });
     });
   }
+  if (paraQuarentena.length) await gravarQuarentena(paraQuarentena);
 
   const aceitos = [...resultados.values()].filter((r) => r.status !== 'rejeitado').length;
   if (dispositivo.deviceId) {
@@ -197,6 +218,88 @@ export async function sincronizar(itens, quem, dispositivo = {}) {
   }
 
   return { resultados: [...resultados.values()] };
+}
+
+function gravarQuarentena(itens) {
+  return prisma.pontoBatidaQuarentena.createMany({
+    data: itens.map((v) => ({
+      clientId: v.clientId, funcionarioId: v.funcionarioId, tipo: v.tipo, batidoEm: v.batidoEm,
+      deviceId: v.deviceId, motivo: String(v.motivo).slice(0, 300),
+    })),
+    skipDuplicates: true,
+  });
+}
+
+// Envio que o servidor não consegue atribuir a ninguém (sessão expirada,
+// revogada ou inválida): as batidas ficam na quarentena para o RH ver, e o
+// aparelho continua com elas na fila — depois de um login, sobem normalmente
+// e saem da quarentena sozinhas. Só aceita funcionário que existe (evita lixo).
+export async function quarentenarSemSessao(itens, motivo) {
+  if (!Array.isArray(itens)) throw new Error('Envie { batidas: [...] }.');
+  if (itens.length > MAX_ITENS_SYNC) throw new Error(`Máximo de ${MAX_ITENS_SYNC} registros por envio.`);
+  const resultados = [];
+  const validos = [];
+  for (const item of itens) {
+    const v = validarItem(item);
+    if (v.erro) { if (v.clientId) resultados.push({ clientId: v.clientId, status: 'rejeitado', erro: v.erro }); continue; }
+    validos.push(v);
+  }
+  const existentes = new Set((await prisma.user.findMany({
+    where: { id: { in: [...new Set(validos.map((v) => v.funcionarioId))] } }, select: { id: true },
+  })).map((u) => u.id));
+  const aceitos = validos.filter((v) => existentes.has(v.funcionarioId));
+  validos.filter((v) => !existentes.has(v.funcionarioId))
+    .forEach((v) => resultados.push({ clientId: v.clientId, status: 'rejeitado', erro: 'Funcionário inexistente.' }));
+  if (aceitos.length) await gravarQuarentena(aceitos.map((v) => ({ ...v, motivo })));
+  aceitos.forEach((v) => resultados.push({ clientId: v.clientId, status: 'quarentena', definitivo: false, erro: motivo }));
+  return { resultados, sessaoInvalida: true, motivo };
+}
+
+// --- Quarentena: revisão do RH ---------------------------------------------
+
+export async function listarQuarentena(situacao = 'PENDENTE') {
+  const itens = await prisma.pontoBatidaQuarentena.findMany({
+    where: situacao ? { situacao } : {}, orderBy: { batidoEm: 'asc' }, take: 1000,
+  });
+  const usuarios = new Map((await prisma.user.findMany({
+    where: { id: { in: [...new Set(itens.map((q) => q.funcionarioId))] } }, include: { role: true },
+  })).map((u) => [u.id, u]));
+  return itens.map((q) => ({
+    id: q.id, clientId: q.clientId, funcionarioId: q.funcionarioId,
+    nome: usuarios.get(q.funcionarioId)?.name || '—', setor: usuarios.get(q.funcionarioId)?.role?.name || '—',
+    tipo: q.tipo, batidoEm: q.batidoEm, deviceId: q.deviceId, recebidoEm: q.recebidoEm, motivo: q.motivo, situacao: q.situacao,
+  }));
+}
+
+// acao: 'ACEITAR' (vira batida do ponto, com o mesmo clientId — um reenvio
+// depois responde "duplicado") | 'DESCARTAR'.
+export async function decidirQuarentena(ids, acao, quem) {
+  if (!['ACEITAR', 'DESCARTAR'].includes(acao)) throw new Error('Decisão inválida.');
+  if (!Array.isArray(ids) || !ids.length) throw new Error('Informe as batidas.');
+  const itens = await prisma.pontoBatidaQuarentena.findMany({ where: { id: { in: ids }, situacao: 'PENDENTE' } });
+  if (!itens.length) return { atualizados: 0 };
+  const agora = new Date();
+  await prisma.$transaction(async (tx) => {
+    if (acao === 'ACEITAR') {
+      await tx.pontoBatida.createMany({
+        data: itens.map((q) => ({
+          clientId: q.clientId, userId: q.funcionarioId, tipo: q.tipo, batidoEm: q.batidoEm, deviceId: q.deviceId,
+          registradoPorId: quem.id, motivoAjuste: `Aceita na revisão (quarentena): ${q.motivo}`,
+        })),
+        skipDuplicates: true,
+      });
+      const porUsuario = new Map();
+      for (const q of itens) porUsuario.set(q.funcionarioId, [...(porUsuario.get(q.funcionarioId) || []), q.batidoEm]);
+      for (const [userId, datas] of porUsuario) await reclassificar(userId, datas, tx);
+    }
+    await tx.pontoBatidaQuarentena.updateMany({
+      where: { id: { in: itens.map((q) => q.id) } },
+      data: { situacao: acao === 'ACEITAR' ? 'ACEITA' : 'DESCARTADA', decididoPorId: quem.id, decididoEm: agora },
+    });
+  });
+  // Batida aceita pode cobrir um horário que tinha virado esquecimento.
+  if (acao === 'ACEITAR') await gerarPrevistas();
+  return { atualizados: itens.length };
 }
 
 // Compatibilidade com o front antigo (POST /registros sem fila offline).
@@ -295,9 +398,9 @@ export async function listarParaRevisao(periodo, agora = new Date()) {
   return { pares, previstas };
 }
 
-// Contador da aba "Pontos a revisar" (o aviso do ponto não vai pro sininho):
-// esquecimentos com prazo vencido e sem justificativa (PARA_DECIDIR) +
-// registros com problema (sem saída, sem entrada, inconsistentes) de dias já
+// Contadores do painel do ponto (o aviso do ponto não vai pro sininho):
+// esquecimentos com prazo vencido e sem justificativa (PARA_DECIDIR, aba
+// Justificativas) + registros com problema (aba Pontos a revisar) (sem saída, sem entrada, inconsistentes) de dias já
 // encerrados do mês atual e do anterior.
 export async function contarParaRevisao(agora = new Date()) {
   const contexto = await contextoEtapas();
@@ -322,7 +425,8 @@ export async function contarParaRevisao(agora = new Date()) {
       }
     }
   }
-  return { previstas, registros, total: previstas + registros };
+  const quarentena = await prisma.pontoBatidaQuarentena.count({ where: { situacao: 'PENDENTE' } });
+  return { previstas, registros, quarentena, total: previstas + registros + quarentena };
 }
 
 // ENG decide: ABONADA (conta as horas), FALTA (desconta) ou PENDENTE (desfaz).
@@ -395,7 +499,7 @@ export async function remover({ funcionarioId, tempo, motivo }, quem) {
   });
   if (!batida) {
     const prevista = await prisma.pontoBatida.findFirst({ where: { userId: funcionarioId, batidoEm, removidoEm: null } });
-    if (prevista) throw new Error('Horário previsto não se exclui: o ENG decide se abona ou se é falta (aba Pontos a revisar).');
+    if (prevista) throw new Error('Horário previsto não se exclui: o ENG decide se abona ou se é falta (aba Justificativas).');
     return null;
   }
 
