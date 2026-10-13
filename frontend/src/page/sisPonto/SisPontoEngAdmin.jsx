@@ -9,6 +9,7 @@ import SisPontoJustificativasAdmin from './SisPontoJustificativasAdmin.jsx';
 import SisPontoJornadaAdmin from './SisPontoJornadaAdmin.jsx';
 import SisPontoRevisaoAdmin from './SisPontoRevisaoAdmin.jsx';
 import SisPontoExportFolha from './SisPontoExportFolha.jsx';
+import SisPontoRelatorioJustificativas from './SisPontoRelatorioJustificativas.jsx';
 import SisPontoFeriadosAdmin from './SisPontoFeriadosAdmin.jsx';
 import './sisPonto.css';
 import { useEstadoNavegavel } from '../../hooks/useNavegacao';
@@ -109,7 +110,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
   const [diaCorrecao, setDiaCorrecao] = useState(null);
   const registrosCorrecao = diaCorrecao ? [...(calendarioRegistros[diaCorrecao] || [])].sort() : [];
   const horarioEsperadoCorrecao = (indice) => {
-    const expectativas = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, new Date(`${diaCorrecao}T12:00:00`)) || [];
+    const expectativas = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, new Date(`${diaCorrecao}T12:00:00`), feriados) || [];
     if (!expectativas.length) return [indice % 2 === 0 ? 'Entrada' : 'Saída', null];
     return expectativas[indice % expectativas.length];
   };
@@ -131,7 +132,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
     .map((a) => [a.batidoEm, a]));
 
   const statusRegistroEng = (registro, indice, _registrosDoDia, chaveDia = date) => {
-    const expectativas = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, new Date(`${chaveDia}T12:00:00`)) || [];
+    const expectativas = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, new Date(`${chaveDia}T12:00:00`), feriados) || [];
     return statusRegistroComExpectativa(registro, indice, expectativas, justificativas, calendarioFuncionarioId, chaveDia);
   };
 
@@ -197,7 +198,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
       setCalendarioFuncionarioId(cadastroFuncionarios[0].id);
     }
   }, [cadastroFuncionarios, calendarioFuncionarioId]);
-  const funcionarios = useMemo(() => buildEngFuncionariosFromStorage(date, padroesHorario, cadastroFuncionarios, justificativas, registrosBackend), [date, padroesHorario, cadastroFuncionarios, justificativas, registrosBackend]);
+  const funcionarios = useMemo(() => buildEngFuncionariosFromStorage(date, padroesHorario, cadastroFuncionarios, justificativas, registrosBackend, feriados), [date, padroesHorario, cadastroFuncionarios, justificativas, registrosBackend, feriados]);
   const setores = Array.from(new Set(funcionarios.map((f) => f.setor))).sort();
   const justificativasPendentes = justificativas.filter((justificativa) => justificativa.status === 'Em análise').length + contagemRevisao.previstas;
   const [funcionarioFiltro, setFuncionarioFiltro] = useState('Todos os funcionários');
@@ -497,8 +498,8 @@ export default function SisPontoEngAdminScreen({ destino }) {
                               <p style={{ margin: '4px 0 8px', fontSize: 11, color: '#405371', fontWeight: 600, lineHeight: 1.4 }}>{[rotuloTipoJustificativa(justificativa.tipo), justificativa.motivo].filter(Boolean).join(' — ')}</p>
                               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                 <button type="button" disabled={processando} onClick={() => decidirJustificativa(justificativa.id, 'Aceita')} style={{ border: 0, borderRadius: 7, padding: '6px 10px', background: '#2aba72', color: '#fff', fontWeight: 800, fontSize: 10.5, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Aceitar</button>
-                                <button type="button" disabled={processando} onClick={() => decidirJustificativa(justificativa.id, 'Inválida')} style={{ border: 0, borderRadius: 7, padding: '6px 10px', background: '#ff9c2e', color: '#fff', fontWeight: 800, fontSize: 10.5, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Inválida</button>
-                                <button type="button" disabled={processando} onClick={() => decidirJustificativa(justificativa.id, 'Recusada')} style={{ border: 0, borderRadius: 7, padding: '6px 10px', background: '#e4544e', color: '#fff', fontWeight: 800, fontSize: 10.5, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Recusar</button>
+                                <button type="button" disabled={processando} title="Conta no banco de horas igual à aceita; fica registrada no relatório" onClick={() => decidirJustificativa(justificativa.id, 'Inválida')} style={{ border: 0, borderRadius: 7, padding: '6px 10px', background: '#ff9c2e', color: '#fff', fontWeight: 800, fontSize: 10.5, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Inválida</button>
+                                <button type="button" disabled={processando} title="Conta no banco de horas igual à aceita; fica registrada no relatório" onClick={() => decidirJustificativa(justificativa.id, 'Recusada')} style={{ border: 0, borderRadius: 7, padding: '6px 10px', background: '#e4544e', color: '#fff', fontWeight: 800, fontSize: 10.5, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Recusar</button>
                               </div>
                             </div>
                           );
@@ -567,7 +568,10 @@ export default function SisPontoEngAdminScreen({ destino }) {
 
           {activePage === 'revisao' && <SisPontoRevisaoAdmin onCorrigir={corrigirDia} atualizacao={versaoCorrecao} onQuarentenaDecidida={atualizarContagemRevisao} />}
 
-          {activePage === 'relatorios' && <SisPontoExportFolha onExportarDia={exportarRelatorio} />}
+          {activePage === 'relatorios' && <>
+            <SisPontoExportFolha onExportarDia={exportarRelatorio} />
+            <section className="sis-empty-view" style={{ marginTop: 16 }}><SisPontoRelatorioJustificativas justificativas={justificativas} /></section>
+          </>}
 
           {activePage === 'feriados' && <SisPontoFeriadosAdmin />}
 
@@ -656,7 +660,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
                             const chave = chaveData(dia);
                             const itens = Array.isArray(calendarioRegistros[chave]) ? calendarioRegistros[chave].map((registro) => new Date(registro)).sort((a, b) => a - b) : [];
                             const statusItens = itens.map((registro, registroIndex) => statusRegistroEng(registro, registroIndex, itens, chave));
-                            const horariosDia = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, dia) || [];
+                            const horariosDia = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, dia, feriados) || [];
                             const { temAtraso, temJustificado, temJustificadoPendente, horariosPreenchidos } = statusCalendarioDoDia(itens, statusItens, horariosDia, justificativas, calendarioFuncionarioId, chave);
                             const pertenceAoMes = dia.getMonth() === mes.getMonth();
                             const ehHoje = chave === chaveData(new Date());
@@ -703,7 +707,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
                         .filter((dia) => {
                           const chaveDia = chaveData(dia);
                           const registrosDia = Array.isArray(calendarioRegistros[chaveDia]) ? calendarioRegistros[chaveDia] : [];
-                          const expectativasDia = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, dia) || [];
+                          const expectativasDia = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, dia, feriados) || [];
                           return statusJustificativaSlotsFaltantes(justificativas, calendarioFuncionarioId, chaveDia, expectativasDia, registrosDia.length) === 'Aceita';
                         }).length;
                       const justificadasMes = dias.reduce((total, [chaveDia, registrosDia]) => total + registrosDia.filter((registro, indice, lista) => statusRegistroEng(new Date(registro), indice, lista, chaveDia) === 'Justificado').length, 0) + diasDoMesSemRegistroJustificados;
@@ -781,8 +785,8 @@ function PopupJustificativasDia({ dia, itens, processandoId, onDecidir, onClose 
                 {justificativa.status === 'Em análise' ? (
                   <div style={{ display: 'flex', gap: 7, marginTop: 10, flexWrap: 'wrap' }}>
                     <button type="button" disabled={processando} onClick={() => onDecidir(justificativa.id, 'Aceita')} style={{ border: 0, borderRadius: 8, padding: '7px 12px', background: '#2aba72', color: '#fff', fontWeight: 800, fontSize: 11, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Aceitar</button>
-                    <button type="button" disabled={processando} onClick={() => onDecidir(justificativa.id, 'Inválida')} style={{ border: 0, borderRadius: 8, padding: '7px 12px', background: '#ff9c2e', color: '#fff', fontWeight: 800, fontSize: 11, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Inválida</button>
-                    <button type="button" disabled={processando} onClick={() => onDecidir(justificativa.id, 'Recusada')} style={{ border: 0, borderRadius: 8, padding: '7px 12px', background: '#e4544e', color: '#fff', fontWeight: 800, fontSize: 11, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Recusar</button>
+                    <button type="button" disabled={processando} title="Conta no banco de horas igual à aceita; fica registrada no relatório" onClick={() => onDecidir(justificativa.id, 'Inválida')} style={{ border: 0, borderRadius: 8, padding: '7px 12px', background: '#ff9c2e', color: '#fff', fontWeight: 800, fontSize: 11, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Inválida</button>
+                    <button type="button" disabled={processando} title="Conta no banco de horas igual à aceita; fica registrada no relatório" onClick={() => onDecidir(justificativa.id, 'Recusada')} style={{ border: 0, borderRadius: 8, padding: '7px 12px', background: '#e4544e', color: '#fff', fontWeight: 800, fontSize: 11, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Recusar</button>
                   </div>
                 ) : (
                   <div style={{ marginTop: 8, color: '#7183a3', fontSize: 10.5, fontWeight: 700 }}>Decidida em {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(justificativa.atualizadoEm))}</div>

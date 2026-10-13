@@ -462,7 +462,8 @@ export async function listarMeusEsquecimentos(quem) {
 
 // ENG aceitou a justificativa: os horários previstos ainda pendentes dentro do
 // período dela ficam abonados (contam as horas) — sem precisar decidir de novo
-// na revisão. Recusada não mexe: o previsto continua para o ENG marcar falta.
+// na revisão. Inválida e Recusada (chamado igual, ver rota) também abonam:
+// as duas contam no banco e só ficam registradas para o relatório.
 export async function abonarPrevistasDaJustificativa({ funcionarioId, dia, horaInicio, horaFim }, quem) {
   if (!funcionarioId || !dia || !horaInicio || !horaFim) return 0;
   const previstas = await prisma.pontoBatida.findMany({
@@ -683,7 +684,15 @@ async function gerarPrevistasImpl(agora = new Date()) {
       if (!previstos.length) continue;
       const doDia = porDia.get(dia) || [];
       const reais = doDia.filter((b) => b.origem !== 'PREVISTA' && !b.removidoEm);
-      const faltantes = feriados.has(dia) ? new Set() : new Set(horariosSemBatida(previstos, reais, dia).map((p) => p.indice));
+      // Dia encerrado com saída (tem entrada e a última batida é saída): a
+      // pessoa foi embora — saiu antes ou não bateu o almoço. Não vira
+      // esquecimento nem pede justificativa; o banco conta só o trabalhado.
+      // (Previsto ainda pendente desse dia sai sozinho, no "remover" abaixo.)
+      const ultimaReal = [...reais].sort((x, y) => new Date(x.batidoEm) - new Date(y.batidoEm)).at(-1);
+      const encerrouComSaida = ultimaReal?.tipo === 'SAIDA' && reais.some((r) => r.tipo === 'ENTRADA');
+      const faltantes = feriados.has(dia) || encerrouComSaida
+        ? new Set()
+        : new Set(horariosSemBatida(previstos, reais, dia).map((p) => p.indice));
 
       for (const p of previstos) {
         const clientId = `prevista:${usuario.id}:${dia}:${p.indice}`;

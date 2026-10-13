@@ -88,15 +88,21 @@ export function calcularHistoricoSemanal(registrosBlob = {}, mesRef = new Date()
   return semanas;
 }
 
-// Uma justificativa "Aceita" (validada) ou "Inválida" (aguardando o
-// funcionário refazê-la, mas que continua valendo enquanto isso) cobre um
-// registro de ponto quando é do mesmo funcionário, do mesmo dia, e o horário
-// do registro cai dentro do período (horaInicio-horaFim) que foi justificado.
-// Uma "Recusada" não cobre nada — o dia volta a aparecer normalmente.
+// Justificativa decidida — "Aceita", "Inválida" ou "Recusada" — vale igual:
+// cobre o período e conta no banco de horas como se a pessoa tivesse
+// trabalhado normalmente e esquecido de bater o ponto. Inválida e recusada só
+// ficam registradas para o relatório (informação para o ENG); o funcionário
+// não refaz e não perde horas. "Em análise" ainda não conta.
+const STATUS_QUE_VALEM_HORAS = ['Aceita', 'Inválida', 'Recusada'];
+export const justificativaValeHoras = (justificativa) => STATUS_QUE_VALEM_HORAS.includes(justificativa.status);
+
+// Uma justificativa que vale horas cobre um registro de ponto quando é do
+// mesmo funcionário, do mesmo dia, e o horário do registro cai dentro do
+// período (horaInicio-horaFim) que foi justificado.
 export function encontrarJustificativaAceita(justificativas = [], funcionarioId, chaveDia, horaHHMM) {
   if (!horaHHMM) return null;
   const minutos = minutoDoHorario(horaHHMM.slice(0, 5));
-  return justificativas.find((justificativa) => (justificativa.status === 'Aceita' || justificativa.status === 'Inválida')
+  return justificativas.find((justificativa) => justificativaValeHoras(justificativa)
     && justificativa.funcionarioId === funcionarioId
     && justificativa.dia === chaveDia
     && minutos >= minutoDoHorario(justificativa.horaInicio)
@@ -110,15 +116,14 @@ export function encontrarJustificativaAceita(justificativas = [], funcionarioId,
 // Não exige que o horário exato do slot caia dentro do período declarado na
 // justificativa: uma justificativa decidida para o dia já é suficiente,
 // mesmo que a pessoa não tenha trabalhado nenhum minuto daquele dia.
-// Retorna 'Aceita', 'Inválida' (Aceita tem prioridade se houver as duas) ou null.
+// Retorna 'Aceita' (Aceita ou Inválida — valem igual) ou null.
 export function statusJustificativaSlotsFaltantes(justificativas = [], funcionarioId, chaveDia, expectativas = [], totalRegistros = 0) {
   if (totalRegistros >= expectativas.length) return null;
 
-  const doDia = justificativas.filter((justificativa) => (justificativa.status === 'Aceita' || justificativa.status === 'Inválida')
+  const doDia = justificativas.filter((justificativa) => justificativaValeHoras(justificativa)
     && justificativa.funcionarioId === funcionarioId
     && justificativa.dia === chaveDia);
-  if (!doDia.length) return null;
-  return doDia.some((justificativa) => justificativa.status === 'Aceita') ? 'Aceita' : 'Inválida';
+  return doDia.length ? 'Aceita' : null;
 }
 
 // Quando um trecho do dia não tem batida mas está coberto por uma justificativa
@@ -137,7 +142,7 @@ export function horariosJustificadosFaltantes(totalRegistros = 0, expectativas =
   const preenchidos = expectativas.map(() => null);
   if (totalRegistros >= expectativas.length) return preenchidos;
 
-  const justificativaAceita = justificativas.find((justificativa) => justificativa.status === 'Aceita'
+  const justificativaAceita = justificativas.find((justificativa) => justificativaValeHoras(justificativa)
     && justificativa.funcionarioId === funcionarioId
     && justificativa.dia === chaveDia) || null;
   if (!justificativaAceita) return preenchidos;
@@ -195,8 +200,12 @@ const NOME_DIA_CONFIG = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sex
 // Integral, com almoço) gera 4 expectativas, um com 1 turno gera 2. Quem é
 // horista ou não tem padrão designado não tem nenhuma expectativa (null) —
 // não existe "atrasado" nem "saída antecipada" pra essas pessoas.
-export function expectativasDoFuncionario(funcionario, padroes = {}, data = new Date()) {
+// Feriado (feriados: Map 'YYYY-MM-DD' -> nome) também não tem horário fixo:
+// quem trabalha no dia não fica atrasado nem precisa justificar — as horas
+// viram crédito no banco.
+export function expectativasDoFuncionario(funcionario, padroes = {}, data = new Date(), feriados = null) {
   if (!funcionario || ehHorista(funcionario)) return null;
+  if (feriados?.has?.(chaveData(data))) return null;
   const padrao = funcionario.padraoHorarioId && padroes[funcionario.padraoHorarioId];
   if (!padrao) return null;
   const turnos = padrao.dias?.[NOME_DIA_CONFIG[data.getDay()]];
@@ -253,10 +262,10 @@ function periodosSeSobrepoem(inicioA, fimA, inicioB, fimB) {
 // com `jaEnviada`: true assim que existe QUALQUER justificativa cobrindo
 // aquele período específico, mesmo que ainda esteja "Em análise" — pra sumir
 // da contagem no momento do envio, sem esperar o admin decidir.
-export function pendenciasDeJustificativa(registros = {}, funcionario, padroes = {}, justificativas = []) {
+export function pendenciasDeJustificativa(registros = {}, funcionario, padroes = {}, justificativas = [], feriados = null) {
   const pendencias = [];
   Object.entries(registros).forEach(([dia, itens]) => {
-    const expectativas = expectativasDoFuncionario(funcionario, padroes, new Date(`${dia}T12:00:00`)) || [];
+    const expectativas = expectativasDoFuncionario(funcionario, padroes, new Date(`${dia}T12:00:00`), feriados) || [];
     if (!expectativas.length) return;
     (itens || []).forEach((registroIso, indice) => {
       const status = statusRegistroComExpectativa(registroIso, indice, expectativas, justificativas, funcionario?.id, dia);
@@ -326,7 +335,7 @@ function construirFuncionarioSemExpectativa(funcionario, registrosDia) {
   };
 }
 
-export function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Date()), padroes = {}, cadastro = [], justificativas = [], registrosBackend = {}) {
+export function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Date()), padroes = {}, cadastro = [], justificativas = [], registrosBackend = {}, feriados = null) {
   try {
     const funcionarios = Array.from(new Map(cadastro.filter((funcionario) => funcionario?.id).map((funcionario) => [funcionario.id, funcionario])).values());
     if (!funcionarios.length) return [];
@@ -335,7 +344,7 @@ export function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Dat
       const perfil = funcionario.nome;
       const blob = extrairRegistrosFuncionario(registrosBackend, funcionario.id);
       const registrosDia = (blob[selectedDate] || []).map((iso) => new Date(iso)).sort((a, b) => a - b);
-      const expectativas = expectativasDoFuncionario(funcionario, padroes, new Date(`${selectedDate}T12:00:00`));
+      const expectativas = expectativasDoFuncionario(funcionario, padroes, new Date(`${selectedDate}T12:00:00`), feriados);
       if (!expectativas) return construirFuncionarioSemExpectativa(funcionario, registrosDia);
 
       const numeroTurnos = expectativas.length / 2;
@@ -385,7 +394,7 @@ export function buildEngFuncionariosFromStorage(selectedDate = chaveData(new Dat
       // banco de horas (a pessoa não perde as horas do período justificado),
       // mas o "Total de horas" continua mostrando apenas o que foi batido de fato.
       const minutosJustificados = justificativas
-        .filter((justificativa) => justificativa.status === 'Aceita' && justificativa.funcionarioId === funcionario.id && justificativa.dia === selectedDate)
+        .filter((justificativa) => justificativaValeHoras(justificativa) && justificativa.funcionarioId === funcionario.id && justificativa.dia === selectedDate)
         .reduce((soma, justificativa) => soma + Math.max(0, minutoDoHorario(justificativa.horaFim) - minutoDoHorario(justificativa.horaInicio)), 0);
       const minutosDaJornada = minutosPrevistos(expectativas);
       const jornadaPrevista = formatMinutos(minutosDaJornada);
@@ -449,7 +458,7 @@ export function calcularBancoHoras(funcionario, registrosBlob = {}, padroes = {}
 
     const previsto = feriados.has(dia) ? 0 : minutosPrevistos(expectativasDoFuncionario(funcionario, padroes, data) || []);
     const justificado = justificativas
-      .filter((j) => j.status === 'Aceita' && j.funcionarioId === funcionario.id && j.dia === dia)
+      .filter((j) => justificativaValeHoras(j) && j.funcionarioId === funcionario.id && j.dia === dia)
       .reduce((soma, j) => soma + Math.max(0, minutoDoHorario(j.horaFim) - minutoDoHorario(j.horaInicio)), 0);
     const considerado = Math.max(trabalhado, Math.min(trabalhado + justificado, previsto));
     const saldo = considerado - previsto;
@@ -527,7 +536,7 @@ export const fimDoPrazo = (dia, horaFim, prazoHoras) => new Date(new Date(`${dia
 export function montarItensParaJustificar({ atrasos = [], esquecimentos = [], funcionario, padroes = {}, justificativas = [], prazoHoras = 48, agora = new Date() }) {
   const itens = new Map();
   const jaEnviada = (dia, inicio, fim) => justificativas.some((j) => j.funcionarioId === funcionario?.id && j.dia === dia
-    && j.status !== 'Recusada' && periodosSeSobrepoem(j.horaInicio, j.horaFim, inicio, fim));
+    && periodosSeSobrepoem(j.horaInicio, j.horaFim, inicio, fim));
 
   atrasos.forEach((a) => {
     const chave = `atraso|${a.dia}|${a.horaInicio}|${a.horaFim}`;

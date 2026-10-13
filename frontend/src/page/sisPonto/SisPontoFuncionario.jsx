@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CalendarDays, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, CloudOff, CloudUpload, FileText, LogOut, Hourglass, Image as ImageIcon, LogIn, Pencil, TimerReset, Trash2 } from 'lucide-react';
+import { CalendarDays, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, CloudOff, CloudUpload, FileText, LogOut, Hourglass, Image as ImageIcon, LogIn, TimerReset, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useEhCelular } from '../../hooks/useEhCelular';
 import { registrarBatida, pendentesDoFuncionario, inscrever, obterEstado, sincronizarPendentes } from '../../services/pontoOffline.js';
@@ -76,7 +76,17 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
       setPadroesHorario({ ...PADROES_HORARIO_PADRAO, ...dados });
     }).catch(() => {});
   }, [usuarioLogado, aba]);
-  const expectativasHoje = expectativasDoFuncionario(funcionarioAtual, padroesHorario, agora) || [];
+  // Feriados do ano exibido e do ano atual (o registro de hoje também confere:
+  // feriado não tem horário fixo).
+  const [feriados, setFeriados] = useState(new Map());
+  const anoExibido = mes.getFullYear();
+  useEffect(() => {
+    let ativo = true;
+    Promise.all([carregarFeriados(api, anoExibido), carregarFeriados(api, new Date().getFullYear())])
+      .then(([doAno, atual]) => { if (ativo) setFeriados(new Map([...atual, ...doAno])); });
+    return () => { ativo = false; };
+  }, [anoExibido]);
+  const expectativasHoje = expectativasDoFuncionario(funcionarioAtual, padroesHorario, agora, feriados) || [];
   const funcionarioEhHorista = ehHorista(funcionarioAtual);
 
   useEffect(() => {
@@ -113,13 +123,6 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
   useEffect(() => {
     api.getSispontoLancamentosBanco().then((lista) => setLancamentosBanco(Array.isArray(lista) ? lista : [])).catch(() => {});
   }, []);
-  const [feriados, setFeriados] = useState(new Map());
-  const anoExibido = mes.getFullYear();
-  useEffect(() => {
-    let ativo = true;
-    carregarFeriados(api, anoExibido).then((mapa) => { if (ativo) setFeriados(mapa); });
-    return () => { ativo = false; };
-  }, [anoExibido]);
   // Batidas que o ENG incluiu no meu ponto (iso -> { motivo, por }): aparecem marcadas.
   const [ajustes, setAjustes] = useState(new Map());
   const carregarRegistros = () => {
@@ -216,19 +219,19 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
   };
   const horarioEsperado = (indice, registrosDoDia = []) => {
     const dataRegistro = registrosDoDia[indice] ? new Date(registrosDoDia[indice]) : agora;
-    const expectativas = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dataRegistro) || [];
+    const expectativas = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dataRegistro, feriados) || [];
     if (!expectativas.length) return [indice % 2 === 0 ? 'Entrada' : 'Saída', null];
     return expectativas[indice % expectativas.length];
   };
   const proximoEsperado = horarioEsperado(registrosHoje.length, registrosHoje);
   const statusRegistro = (registro, indice, registrosDoDia = [], chaveDia = hoje) => {
     const dataRegistro = registrosDoDia[indice] ? new Date(registrosDoDia[indice]) : new Date(`${chaveDia}T12:00:00`);
-    const expectativas = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dataRegistro) || [];
+    const expectativas = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dataRegistro, feriados) || [];
     return statusRegistroComExpectativa(registro, indice, expectativas, justificativas, funcionarioAtual?.id, chaveDia);
   };
   const atrasosNoMes = registrosNoMes.reduce((total, [data, itens]) => total + itens.filter((registro, indice) => statusRegistro(registro, indice, itens, data) === 'Atrasado/Saída Antecipada').length, 0);
   const diasDoMesSemRegistroJustificados = Array.from({ length: new Date(mes.getFullYear(), mes.getMonth() + 1, 0).getDate() }, (_, indice) => new Date(mes.getFullYear(), mes.getMonth(), indice + 1))
-    .filter((dia) => { const chaveDia = chaveData(dia); const itensDia = registros[chaveDia] || []; const expectativasDia = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dia) || []; return statusJustificativaSlotsFaltantes(justificativas, funcionarioAtual?.id, chaveDia, expectativasDia, itensDia.length) === 'Aceita'; }).length;
+    .filter((dia) => { const chaveDia = chaveData(dia); const itensDia = registros[chaveDia] || []; const expectativasDia = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dia, feriados) || []; return statusJustificativaSlotsFaltantes(justificativas, funcionarioAtual?.id, chaveDia, expectativasDia, itensDia.length) === 'Aceita'; }).length;
   const justificadasNoMes = registrosNoMes.reduce((total, [data, itens]) => total + itens.filter((registro, indice) => statusRegistro(registro, indice, itens, data) === 'Justificado').length, 0) + diasDoMesSemRegistroJustificados;
   const registrosDoModal = diaModal ? registros[diaModal] || [] : [];
   const statusRegistroDoModal = (registro, indice, registrosDoDia) => statusRegistro(registro, indice, registrosDoDia, diaModal);
@@ -244,20 +247,15 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
   // sem envio: se o mesmo dia tiver atraso de manhã e saída antecipada à
   // tarde, a da manhã aparece primeiro e, assim que enviada, a da tarde
   // entra no lugar dela.
-  const pendenciasAtraso = useMemo(() => pendenciasDeJustificativa(registros, funcionarioAtual, padroesHorario, justificativas), [registros, funcionarioAtual, padroesHorario, justificativas]);
+  const pendenciasAtraso = useMemo(() => pendenciasDeJustificativa(registros, funcionarioAtual, padroesHorario, justificativas, feriados), [registros, funcionarioAtual, padroesHorario, justificativas, feriados]);
   const pendenciasNaoEnviadas = pendenciasAtraso.filter((pendencia) => !pendencia.jaEnviada && agora <= fimDoPrazo(pendencia.dia, pendencia.horaFim, prazoHoras));
   const pendenciaSugerida = pendenciasNaoEnviadas[0] || null;
   const itensParaJustificar = montarItensParaJustificar({ atrasos: pendenciasAtraso, esquecimentos, funcionario: funcionarioAtual, padroes: padroesHorario, justificativas, prazoHoras, agora });
   const itensNaoEnviados = itensParaJustificar.filter((item) => !item.jaEnviada && !item.prazoEncerrado);
-  // Justificativas que o admin recusou ou marcou como inválida também
-  // disputam o preenchimento automático, com prioridade sobre atrasos ainda
-  // nem enviados (o admin já deu um retorno, então isso é mais urgente).
-  const pendenciasRefazer = useMemo(() => justificativas
-    .filter((item) => item.funcionarioId === idFuncionarioAtual && (item.status === 'Recusada' || item.status === 'Inválida'))
-    .sort((a, b) => new Date(a.atualizadoEm || a.criadoEm) - new Date(b.atualizadoEm || b.criadoEm)), [justificativas, idFuncionarioAtual]);
-  // Mas só "Recusada" entra no número vermelho da aba — "Inválida" ainda é só
-  // um ajuste solicitado pelo admin, não uma rejeição definitiva.
-  const pendenciasRefazerNoContador = pendenciasRefazer.filter((item) => item.status === 'Recusada').length;
+  // Nada volta para o funcionário refazer: inválida e recusada contam no
+  // banco igual à aceita e só ficam registradas para o relatório do ENG.
+  const pendenciasRefazer = useMemo(() => [], []);
+  const pendenciasRefazerNoContador = 0;
 
   const cartaoRegistrar = (
     <Card style={{ padding: 22, textAlign: 'center' }}>
@@ -366,7 +364,7 @@ export default function SisPontoFuncionarioScreen({ usuario, destino, onSair }) 
             </div>
             <div className="ponto-cal">
               {diasCalendario.map(({ data: dia, pertenceAoMes }) => {
-                const chave = chaveData(dia); const itens = registros[chave] || []; const ehHoje = chave === hoje; const horariosDia = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dia) || []; const statusItens = itens.map((registro, indice) => statusRegistro(registro, indice, itens, chave)); const { temAtraso, temJustificado, temJustificadoPendente, horariosPreenchidos } = statusCalendarioDoDia(itens, statusItens, horariosDia, justificativas, funcionarioAtual?.id, chave);
+                const chave = chaveData(dia); const itens = registros[chave] || []; const ehHoje = chave === hoje; const horariosDia = expectativasDoFuncionario(funcionarioAtual, padroesHorario, dia, feriados) || []; const statusItens = itens.map((registro, indice) => statusRegistro(registro, indice, itens, chave)); const { temAtraso, temJustificado, temJustificadoPendente, horariosPreenchidos } = statusCalendarioDoDia(itens, statusItens, horariosDia, justificativas, funcionarioAtual?.id, chave);
                 return <motion.div key={chave} initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .2 }} whileHover={{ backgroundColor: '#f8fbff' }} className="ponto-dia" style={{ background: pertenceAoMes ? '#fff' : '#f4f7fb', boxShadow: ehHoje ? 'inset 0 0 0 2px #3682ff' : 'none', position: 'relative' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: ehHoje ? 800 : 700, color: ehHoje ? '#1767e8' : pertenceAoMes ? '#344766' : '#a7b4c9' }}><span style={ehHoje ? { display: 'grid', placeItems: 'center', width: 23, height: 23, borderRadius: '50%', background: '#1767e8', color: '#fff' } : {}}>{dia.getDate()}</span>{itens.length > 0 && <span title={temAtraso ? 'Há registro em atraso' : temJustificado ? 'Atraso justificado' : 'Registros no horário'} style={{ width: 8, height: 8, borderRadius: '50%', background: temAtraso ? '#ffb24a' : temJustificadoPendente ? '#f2c14e' : temJustificado ? '#4b83f5' : itens.length % 2 ? '#ffad42' : '#38bc7b' }} />}{itens.length === 0 && temJustificado && <span title="Justificado" style={{ width: 8, height: 8, borderRadius: '50%', background: temJustificadoPendente ? '#f2c14e' : '#4b83f5' }} />}</div>
                   {(itens.length > 0 || horariosPreenchidos.some(Boolean)) && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '5px 8px', marginTop: 9 }}>
@@ -469,7 +467,6 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
   const minhasJustificativas = useMemo(() => justificativas
     .filter((item) => item.funcionarioId === funcionarioId)
     .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm)), [justificativas, funcionarioId]);
-  const justificativaEmEdicao = editandoId ? minhasJustificativas.find((item) => item.id === editandoId) : null;
 
   const handleArquivo = (event) => {
     const arquivo = (event.target.files || [])[0];
@@ -664,7 +661,7 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
             <div key={justificativa.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 10, border: '1px solid #ffc4bd', background: '#fff4f3' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12.5, fontWeight: 900, color: '#1d3156' }}>{new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(`${justificativa.dia}T12:00:00`))} · {justificativa.horaInicio}–{justificativa.horaFim}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#c23b34' }}>{justificativa.status === 'Recusada' ? 'Justificativa recusada' : 'Justificativa inválida'} — refaça</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#c23b34' }}>Justificativa recusada — refaça</div>
               </div>
               <button type="button" onClick={() => refazer(justificativa)} style={{ border: 0, borderRadius: 8, padding: '7px 10px', background: '#c2650a', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>Refazer</button>
             </div>
@@ -693,13 +690,6 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
         <h2 style={{ margin: 0, fontSize: compacto ? 16 : 20 }}>{editandoId ? 'Refazer justificativa' : lote ? `Justificar ${lote.length} pendência(s)` : 'Nova justificativa'}</h2>
         {!compacto && <p style={{ margin: '6px 0 20px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Descreva uma ausência, atraso ou saída antecipada e, se tiver, anexe um documento.</p>}
         {compacto && <div style={{ height: 12 }} />}
-        {justificativaEmEdicao && (justificativaEmEdicao.status === 'Recusada' || justificativaEmEdicao.status === 'Inválida') && (
-          <div style={{ marginBottom: 16, padding: '10px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: '#fff4f3', color: '#c23b34' }}>
-            {justificativaEmEdicao.status === 'Recusada'
-              ? 'Essa justificativa foi recusada.'
-              : 'Essa justificativa foi marcada como inválida.'} Ajuste os dados abaixo e reenvie para uma nova análise.
-          </div>
-        )}
         {!editandoId && pendenciaSugerida && form.dia === pendenciaSugerida.dia && form.horaInicio === pendenciaSugerida.horaInicio && (
           <div style={{ marginBottom: 16, padding: '10px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: '#fff8ee', color: '#b9770e' }}>
             Preenchemos abaixo o período em que você não bateu o ponto em {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(`${pendenciaSugerida.dia}T12:00:00`))} — confira e ajuste se precisar.
@@ -769,8 +759,8 @@ function SisPontoJustificativaForm({ funcionarioId, nome, setor, justificativas,
                 {justificativa.motivo && <p style={{ margin: '4px 0 0', color: '#405371', fontSize: 12, fontWeight: 600, ...(compacto ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}) }}>{justificativa.motivo}</p>}
                 {justificativa.anexoNome && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, color: '#7183a3', fontSize: 11, fontWeight: 700 }}><FileText size={13} /> {justificativa.anexoNome}</span>}
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  {(justificativa.status === 'Inválida' || justificativa.status === 'Recusada') && <button type="button" onClick={() => refazer(justificativa)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 0, borderRadius: 8, padding: '8px 12px', background: '#c2650a', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}><Pencil size={12} /> Refazer justificativa</button>}
-                  <button type="button" onClick={() => excluir(justificativa)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e5cdd0', borderRadius: 8, padding: '8px 12px', background: '#fff', color: '#8a4a4f', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}><Trash2 size={12} /> Excluir</button>
+                  {/* Já analisada fica registrada para o relatório: só exclui o que ainda está em análise. */}
+                  {justificativa.status === 'Em análise' && !justificativa.historicoDecisoes?.length && <button type="button" onClick={() => excluir(justificativa)} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e5cdd0', borderRadius: 8, padding: '8px 12px', background: '#fff', color: '#8a4a4f', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}><Trash2 size={12} /> Excluir</button>}
                 </div>
               </motion.div>;
             })}

@@ -230,12 +230,12 @@ async function atualizarJustificativaImpl(id, dados, quem) {
   if (!ehAdmin(quem) && dados.status && proximoStatus !== 'Em análise') {
     throw new Error('Só a administração aceita ou recusa justificativas.');
   }
-  // O funcionário só edita o que ainda está em análise ou foi devolvido; uma
-  // justificativa já aceita não muda mais (senão dava pra ampliar o período
-  // depois de aprovado). Toda edição dele volta para "Em análise".
+  // O funcionário só edita o que ainda está em análise; decidida (aceita,
+  // inválida ou recusada — todas contam no banco de horas, as duas últimas
+  // só ficam registradas para o relatório) não muda mais.
   const alteraConteudo = ['dia', 'horaInicio', 'horaFim', 'tipo', 'motivo', 'anexoDataUrl'].some((campo) => dados[campo] !== undefined);
-  if (!ehAdmin(quem) && alteraConteudo && existente.status === 'Aceita') {
-    throw new Error('Esta justificativa já foi aceita e não pode ser alterada.');
+  if (!ehAdmin(quem) && alteraConteudo && ['Aceita', 'Inválida', 'Recusada'].includes(existente.status)) {
+    throw new Error('Esta justificativa já foi decidida e não pode ser alterada.');
   }
   const dia = dados.dia !== undefined ? String(dados.dia).trim() : existente.dia;
   const horaInicio = dados.horaInicio !== undefined ? String(dados.horaInicio).trim() : existente.horaInicio;
@@ -254,6 +254,18 @@ async function atualizarJustificativaImpl(id, dados, quem) {
     );
   }
 
+  // Recusa/inválida/aceita anterior não se perde quando o funcionário refaz
+  // (a recusada volta para "Em análise"): fica no histórico, para o relatório.
+  const novoStatus = !ehAdmin(quem) && alteraConteudo ? 'Em análise' : proximoStatus;
+  const decididaAntes = ['Aceita', 'Inválida', 'Recusada'].includes(existente.status);
+  const historicoDecisoes = decididaAntes && novoStatus !== existente.status
+    ? [...(existente.historicoDecisoes || []), {
+      status: existente.status, decididoEm: existente.decididoEm || existente.atualizadoEm,
+      dia: existente.dia, horaInicio: existente.horaInicio, horaFim: existente.horaFim, tipo: existente.tipo, motivo: existente.motivo,
+    }]
+    : existente.historicoDecisoes;
+  const agora = new Date().toISOString();
+
   atual[index] = {
     ...existente,
     dia,
@@ -262,8 +274,10 @@ async function atualizarJustificativaImpl(id, dados, quem) {
     ...(dados.tipo !== undefined ? { tipo: String(dados.tipo).trim() } : {}),
     ...(dados.motivo !== undefined ? { motivo: String(dados.motivo).trim().slice(0, MOTIVO_MAX) } : {}),
     ...anexo,
-    status: !ehAdmin(quem) && alteraConteudo ? 'Em análise' : proximoStatus,
-    atualizadoEm: new Date().toISOString(),
+    status: novoStatus,
+    ...(historicoDecisoes ? { historicoDecisoes } : {}),
+    ...(ehAdmin(quem) && dados.status && novoStatus !== 'Em análise' ? { decididoEm: agora } : {}),
+    atualizadoEm: agora,
   };
 
   store.justificativas = atual;
@@ -281,6 +295,10 @@ async function excluirJustificativaImpl(id, quem) {
   const alvo = atual.find((item) => item.id === id);
   if (alvo && !ehAdmin(quem) && alvo.funcionarioId !== quem?.id) {
     throw new Error('Você só pode excluir as suas justificativas.');
+  }
+  // Decidida (ou já decidida antes) fica registrada para o relatório.
+  if (alvo && !ehAdmin(quem) && (alvo.status !== 'Em análise' || alvo.historicoDecisoes?.length)) {
+    throw new Error('Justificativa já analisada não pode ser excluída.');
   }
   const existe = Boolean(alvo);
   store.justificativas = atual.filter((item) => item.id !== id);

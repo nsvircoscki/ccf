@@ -179,8 +179,10 @@ router.put('/justificativas/:id', async (req, res) => {
   try {
     const justificativa = await atualizarJustificativa(req.params.id, req.body, req.usuario);
     if (!justificativa) return res.status(404).json({ error: 'Justificativa não encontrada.' });
-    // Aceitar a justificativa de um esquecimento já abona o horário previsto.
-    if (req.body?.status === 'Aceita') await abonarPrevistasDaJustificativa(justificativa, req.usuario);
+    // Aceita, Inválida e Recusada contam igual no banco de horas (inválida e
+    // recusada são só registro para o ENG): todas abonam o horário previsto
+    // de um esquecimento.
+    if (['Aceita', 'Inválida', 'Recusada'].includes(req.body?.status)) await abonarPrevistasDaJustificativa(justificativa, req.usuario);
     res.json(justificativa);
   } catch (error) {
     res.status(400).json({ error: error.message || 'Erro ao atualizar justificativa.' });
