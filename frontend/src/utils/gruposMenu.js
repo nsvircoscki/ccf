@@ -32,13 +32,14 @@ export const GRUPOS = {
   },
   relatorios: {
     label: 'Relatórios',
-    desc: 'Tabela de serviços e pontos de levantamento',
+    desc: 'Tabela de serviços, pontos de levantamento e CAR',
     titulo: 'Relatórios — escolha qual abrir',
     icon: BarChart3,
     color: '#4f46e5',
     itens: [
       { id: 'tabela-servicos', label: 'Tabela de Serviços', desc: 'Todos os projetos, etapa atual e o que falta em cada um', icon: Table, color: '#4d7c0f' },
       { id: 'importar-pontos', label: 'Pontos', desc: 'Converte exportação de levantamento (GNSS/RTK) em tabela/Excel', icon: FileSpreadsheet, color: '#0369a1' },
+      { id: 'car', label: 'CAR', desc: 'Relatório e acompanhamento do Cadastro Ambiental Rural', icon: FileText, color: '#7c2d12' },
     ],
   },
   config: {
