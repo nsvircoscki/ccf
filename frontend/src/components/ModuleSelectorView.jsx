@@ -26,6 +26,7 @@ const MODULOS = [
   { id: 'sis-mon', label: 'SIS MON', desc: 'Sistema de monografia', icon: BookOpen, color: '#92400e', wip: true },
   { id: 'importar-pontos', label: 'Pontos', desc: 'Converte exportação de levantamento (GNSS/RTK) em tabela/Excel', icon: FileSpreadsheet, color: '#0369a1' },
   { id: 'tabela-servicos', label: 'Tabela de Serviços', desc: 'Todos os projetos, etapa atual e o que falta em cada um', icon: Table, color: '#4d7c0f' },
+  { id: 'car', label: 'CAR', desc: 'Relatório e acompanhamento do Cadastro Ambiental Rural', icon: FileText, color: '#7c2d12' },
   { id: 'faturamento', label: 'Faturamento', desc: 'Emitir boletos e notas fiscais', icon: Receipt, color: '#b91c1c' },
   { id: 'tarefas', label: 'Tarefas', desc: 'Planilha de atividades por setor, com histórico do que já foi concluído', icon: ClipboardCheck, color: '#ea580c' },
   { id: 'sis-ponto', label: 'SIS Ponto', desc: 'Sistema para bater o ponto dos funcionários', icon: Clock3, color: '#2563eb' },

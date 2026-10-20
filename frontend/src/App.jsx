@@ -16,6 +16,7 @@ import ConfigDocumentosView from './page/ConfigDocumentosView';
 import ConfigEtapasView from './page/ConfigEtapasView';
 import ImportarPontosView from './page/ImportarPontosView';
 import TabelaServicosView from './page/TabelaServicosView';
+import RelatorioCarView from './page/RelatorioCarView';
 import FaturamentoView from './page/FaturamentoView';
 import TarefasView from './page/TarefasView';
 import SisPontoView from './page/SisPontoView';
@@ -237,6 +238,13 @@ export default function App() {
 
           {telaAtiva === 'tabela-servicos' && (
             <TabelaServicosView onBack={() => setModuloEscolhido(false)} kanban={kanban} />
+          )}
+
+          {telaAtiva === 'car' && (
+            <RelatorioCarView
+              onBack={voltarOu(() => setModuloEscolhido(false))}
+              kanban={kanban}
+            />
           )}
 
           {telaAtiva === 'faturamento' && (

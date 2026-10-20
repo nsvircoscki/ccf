@@ -22,6 +22,7 @@ const ITENS = [
   { id: 'sis-mon', label: 'SIS MON', icon: BookOpen, color: '#92400e', wip: true },
   { id: 'importar-pontos', label: 'Pontos', icon: FileSpreadsheet, color: '#0369a1' },
   { id: 'tabela-servicos', label: 'Tabela de Serviços', icon: Table, color: '#4d7c0f' },
+  { id: 'car', label: 'CAR', icon: FileText, color: '#7c2d12' },
   { id: 'faturamento', label: 'Faturamento', icon: Receipt, color: '#b91c1c' },
   { id: 'tarefas', label: 'Tarefas', icon: ClipboardCheck, color: '#ea580c' },
   { id: 'sis-ponto', label: 'SIS Ponto', icon: Clock3, color: '#2563eb' },
