@@ -13,6 +13,8 @@ export const initialServices = [
   { id: 12, nome: 'Loc', indice: 1.0, ativo: true, selecionado: false },
   { id: 13, nome: 'At', indice: 1.0, ativo: true, selecionado: false },
   { id: 14, nome: 'Ext', indice: 1.0, ativo: true, selecionado: false },
+  { id: 16, nome: 'DANC', indice: 1.0, ativo: true, selecionado: false },
+  { id: 17, nome: 'Rel. Usu', indice: 1.0, ativo: true, selecionado: false },
   { id: 15, nome: 'Outros', indice: 0, ativo: true, selecionado: false, editavel: true },
 ];
 

@@ -9,6 +9,17 @@ export const workflowController = {
     } catch (error) { res.status(500).json({ error: "Erro ao buscar projetos." }); }
   },
 
+  async alterarStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const atualizado = await workflowService.alterarStatus(id, status);
+      res.json(atualizado);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+
   async criar(req, res) {
     const { name, types, terreno } = req.body;
     try {
@@ -36,5 +47,5 @@ export const workflowController = {
       await workflowService.excluirProjeto(req.params.id);
       res.status(200).json({ message: 'Projeto inteiro excluído com sucesso!' });
     } catch (error) { res.status(500).json({ error: 'Erro ao excluir projeto.' }); }
-  }
+  },
 };

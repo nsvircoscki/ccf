@@ -32,6 +32,14 @@ const MAPA_TIPOS_ABREVIADOS = {
   'Cad': 'Cadastral',
   'Loc': 'Locação',
   'Mov de Terra': 'Movimentação de Terra',
+  'Altim': 'Altimetria',
+  'DANC': 'DANC',
+  // O frontend grava 'Rel. Usu' (com espaço); 'Rel.Usu' fica por compatibilidade
+  // com registros antigos. Sem a chave certa, mapearTiposSolicitados descarta o
+  // tipo em silêncio (.filter(Boolean)) e o projeto nunca é criado no Kanban.
+  'Rel. Usu': 'Relatório de Usucapião',
+  'Rel.Usu': 'Relatório de Usucapião',
+  'CCIR/ITR' : 'CCIR/ITR',
   // Mapeia para si mesmo: precisa entrar em tiposSolicitados para aparecer na
   // ficha em PDF, mesmo sem virar projeto no Kanban (não há tipo "Outros"
   // cadastrado em TipoProcessoEtapa — ver o filtro antes de fabricarProjeto,
@@ -63,6 +71,24 @@ function paraNumero(valor) {
   const numero = parseFloat(texto);
   return Number.isFinite(numero) ? numero : null;
 }
+
+// Número digitado no cadastro (opcional). Vira nome de pasta no servidor, então
+// só letras, números e hífen — e em maiúsculas, porque no Windows "leg-2024-1"
+// e "LEG-2024-1" seriam a mesma pasta. Aceita os formatos que já existem no
+// banco: "2026-052", "LEG-2024-043"...
+const FORMATO_NUMERO_MANUAL = /^[A-Z0-9]+(-[A-Z0-9]+)*$/;
+
+function normalizarNumeroManual(numero) {
+  return String(numero || '').trim().toUpperCase();
+}
+
+function validarNumeroManual(numero) {
+  if (numero.length < 3 || numero.length > 30 || !FORMATO_NUMERO_MANUAL.test(numero)) {
+    throw new Error('Número do serviço inválido: use de 3 a 30 caracteres, só letras, números e hífen (ex.: 2025-150).');
+  }
+}
+
+const montarNumeroAutomatico = (ano, sequencial) => `${ano}-${String(sequencial).padStart(3, '0')}`;
 
 function criarPastaServico(numeroServico) {
   const caminho = path.join(PASTA_BASE_SERVICOS, numeroServico);
@@ -452,10 +478,53 @@ export const servicoService = {
       throw new Error("nomeCliente e municipio são obrigatórios.");
     }
 
+    // Número escolhido no cadastro; vazio = gera automático como sempre.
+    const numeroManual = normalizarNumeroManual(dados.numeroServico);
+    if (numeroManual) {
+      validarNumeroManual(numeroManual);
+      const existente = await prisma.servico.findUnique({ where: { numeroServico: numeroManual } });
+      if (existente) throw new Error(`Já existe um serviço com o número ${numeroManual}.`);
+    }
+
     const tiposSolicitados = mapearTiposSolicitados(servicosSelecionados);
     const ano = new Date().getFullYear();
 
     const servico = await prisma.$transaction(async (tx) => {
+      // Número manual: grava direto, com sequencial 0. Informar o valor
+      // explicitamente faz o Postgres NÃO consumir a sequência — senão a
+      // numeração automática pularia um número a cada cadastro manual.
+      if (numeroManual) {
+        const criadoManual = await tx.servico.create({
+          data: {
+            numeroServico: numeroManual,
+            sequencial: 0,
+            nomeCliente,
+            tipoCliente: tipoCliente || 'Padrão',
+            contato,
+            matricula,
+            terreno: terreno || 'Urbano',
+            possuiCar,
+            possuiCertificacao,
+            confrontaCertificacao,
+            codRespTecnPossui,
+            respTecnPossui,
+            codRespTecn,
+            respTecn,
+            notas,
+            area: paraNumero(area),
+            municipio,
+            linhaSecaKm: paraNumero(linhaSecaKm),
+            rioKm: paraNumero(rioKm),
+            tiposSolicitados,
+            valorTotal: paraNumero(valorTotal)
+          }
+        });
+        return tx.servico.update({
+          where: { id: criadoManual.id },
+          data: { caminhoPasta: criarPastaServico(numeroManual) }
+        });
+      }
+
       // 1) Cria com um numeroServico provisório só para reservar o
       // "sequencial" (gerado pelo Postgres via autoincrement, atômico e
       // sem risco de colisão mesmo com cadastros simultâneos). Esse valor
@@ -490,14 +559,25 @@ export const servicoService = {
       // cliente não entra aqui, fica só como dado de busca (nomeCliente no
       // próprio Servico) — ver decidirOrcamento para a mesma regra no nome
       // do projeto do Kanban.
-      const numeroServico = `${ano}-${String(criado.sequencial).padStart(3, '0')}`;
+      let sequencial = criado.sequencial;
+      let numeroServico = montarNumeroAutomatico(ano, sequencial);
+
+      // Um número digitado à mão pode ocupar um que a sequência ainda ia gerar
+      // (ex.: cadastraram "2026-200" com a sequência em 170). Chegando nele,
+      // pula pro próximo valor da sequência em vez de falhar por duplicidade.
+      while (await tx.servico.findUnique({ where: { numeroServico } })) {
+        const [{ proximo }] = await tx.$queryRaw`SELECT nextval(pg_get_serial_sequence('"Servico"', 'sequencial'))::int AS proximo`;
+        sequencial = proximo;
+        numeroServico = montarNumeroAutomatico(ano, sequencial);
+      }
+
       const caminhoPasta = criarPastaServico(numeroServico);
 
       // O projeto no Kanban só nasce quando o orçamento é aprovado (ver
       // decidirOrcamento) — o cadastro em si não fabrica mais nada no Kanban.
       return tx.servico.update({
         where: { id: criado.id },
-        data: { numeroServico, caminhoPasta }
+        data: { numeroServico, sequencial, caminhoPasta }
       });
     });
 
@@ -521,12 +601,11 @@ export const servicoService = {
   },
 
   // Decide o orçamento: reprova só muda o status; aprova fabrica um projeto no
-  // Kanban por tipo solicitado. O nome do projeto reaproveita ano+sequencial do
-  // próprio numeroServico e insere no fim um número local a ESTE serviço (1, 2,
-  // 3...), na ordem dos tipos aprovados — ex.: "2026-052-2" é o 2º processo
-  // aprovado do serviço 2026-052 (não um contador global do tipo). Como o
-  // sequencial do serviço já é único, isso já garante nomes sem colisão, sem
-  // precisar de sigla nem de um contador global por tipo.
+  // Kanban por tipo solicitado. O nome do projeto é o numeroServico inteiro
+  // mais um número local a ESTE serviço (1, 2, 3...), na ordem dos tipos
+  // aprovados — ex.: "2026-052-2" é o 2º processo aprovado do serviço 2026-052
+  // (não um contador global do tipo). Como o numeroServico é único, isso já
+  // garante nomes sem colisão, sem precisar de sigla nem de contador por tipo.
   async decidirOrcamento(servicoId, decisao) {
     const servico = await prisma.servico.findUnique({
       where: { id: servicoId },
@@ -547,8 +626,6 @@ export const servicoService = {
       };
     }
 
-    if (servico.statusOrcamento === "APROVADO") throw new Error("Este orçamento já foi aprovado.");
-
     // Os tipos que viram projeto vêm do orçamento (itensOrcamento.selecionado),
     // não de tiposSolicitados — esse último fica travado no que foi marcado no
     // cadastro e não acompanha o que o usuário de fato selecionou/ajustou na
@@ -560,33 +637,71 @@ export const servicoService = {
       .map((item) => MAPA_TIPOS_ABREVIADOS[item.nome])
       .filter((tipo) => tipo && tiposDisponiveis.includes(tipo));
 
-    const [ano, sequencialGlobal] = servico.numeroServico.split('-');
+
+    // Se já aprovado, só fabrica projetos para tipos que ainda NÃO têm workflow.
+    // Isso permite adicionar novos serviços ao orçamento após a aprovação inicial
+    // sem duplicar projetos que já existem no Kanban.
+    // Workflow não guarda o tipo num campo próprio: fabricarProjeto grava
+    // types.join(', ') em description (ver workflowService.js). É de lá que os
+    // tipos já fabricados precisam ser lidos — usar um campo inexistente faria
+    // o Set virar {undefined} e reaprovar duplicaria todos os projetos.
+    const tiposJaExistentes = new Set(
+      servico.workflows.flatMap((w) => (w.description || '').split(', ').map((t) => t.trim()).filter(Boolean))
+    );
+    const tiposNovos = servico.statusOrcamento === 'APROVADO'
+      ? tiposParaFabricar.filter((t) => !tiposJaExistentes.has(t))
+      : tiposParaFabricar;
+
+    if (servico.statusOrcamento === 'APROVADO' && tiposNovos.length === 0) {
+      // Nenhum tipo novo selecionado — apenas atualiza os dados do serviço
+      const atualizado = await prisma.servico.update({
+        where: { id: servicoId },
+        data: { statusOrcamento: 'APROVADO' },
+      });
+      return {
+        message: 'Orçamento atualizado. Nenhum projeto novo (serviços já existiam no Kanban).',
+        servico: atualizado,
+        projetos: [],
+      };
+    }
+
+    // Calcula o próximo número de sequência de processo para não sobrescrever
+    // os que já existem (ex.: se já há 2 workflows, o novo começa em 3).
+    const proximoNumero = servico.workflows.length;
 
     const { servicoAprovado, projetosGerados } = await prisma.$transaction(async (tx) => {
       const gerados = [];
+      const temRetificacao = tiposNovos.includes('Retificação');
 
-      for (let i = 0; i < tiposParaFabricar.length; i++) {
-        const tipoProcesso = tiposParaFabricar[i];
-        const numeroDoProcesso = i + 1;
-        const nomeProjeto = `${ano}-${sequencialGlobal}-${numeroDoProcesso}`;
+      for (let i = 0; i < tiposNovos.length; i++) {
+        const tipoProcesso = tiposNovos[i];
+        const numeroDoProcesso = proximoNumero + i + 1;
+        // Número do serviço inteiro + índice. Antes pegava só as duas
+        // primeiras partes do número ("LEG-2024-043" virava "LEG-2024-1"), e
+        // dois serviços LEG-2024-xxx colidiam no mesmo nome de projeto.
+        const nomeProjeto = `${servico.numeroServico}-${numeroDoProcesso}`;
+        const removerDossie = temRetificacao && tipoProcesso !== 'Retificação';
         const projeto = await workflowService.fabricarProjeto(
-          nomeProjeto, [tipoProcesso], servico.terreno || 'Urbano', servico.id, servico.matricula, tx,
+          nomeProjeto, [tipoProcesso], servico.terreno || 'Urbano', servico.id, servico.matricula, tx, removerDossie
         );
         gerados.push(projeto);
       }
 
       const atualizado = await tx.servico.update({
         where: { id: servicoId },
-        data: { statusOrcamento: "APROVADO" }
+        data: { statusOrcamento: 'APROVADO' },
       });
 
       return { servicoAprovado: atualizado, projetosGerados: gerados };
     }, { timeout: 30000 });
 
+    const jaAprovado = servico.statusOrcamento === 'APROVADO';
     return {
-      message: `Orçamento aprovado! ${projetosGerados.length} projeto(s) no Kanban.`,
+      message: jaAprovado
+        ? `${projetosGerados.length} novo(s) projeto(s) adicionado(s) ao Kanban!`
+        : `Orçamento aprovado! ${projetosGerados.length} projeto(s) no Kanban.`,
       servico: servicoAprovado,
-      projetos: projetosGerados
+      projetos: projetosGerados,
     };
   }
 };

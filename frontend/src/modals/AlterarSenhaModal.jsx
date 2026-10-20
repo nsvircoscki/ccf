@@ -32,7 +32,7 @@ export function AlterarSenhaModal({ usuarioLogado, onClose }) {
 
     setSalvando(true);
     try {
-      const res = await authService.alterarSenha(usuarioLogado, senhaAtual, novaSenha);
+      const res = await authService.alterarSenha(senhaAtual, novaSenha);
       if (!res.ok) {
         setErro(res.data?.error || 'Erro ao alterar senha.');
         return;

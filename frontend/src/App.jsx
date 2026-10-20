@@ -8,18 +8,23 @@ import IntroScreen from './components/IntroScreen';
 import ModuleSelectorView from './components/ModuleSelectorView';
 import CadastroServicoView from './components/CadastroServicoView';
 import Orcamento from './page/Orcamento';
-import EmissaoDocumentos from './page/EmissaoDocumentos';
 import CadastroClienteView from './page/CadastroClienteView';
 import CadastroImovelView from './page/CadastroImovelView';
 import VinculacaoView from './page/VinculacaoView';
+import GerarDocumentosView from './page/GerarDocumentosView';
 import ConfigDocumentosView from './page/ConfigDocumentosView';
 import ConfigEtapasView from './page/ConfigEtapasView';
+import UsuariosView from './page/UsuariosView';
 import ImportarPontosView from './page/ImportarPontosView';
 import TabelaServicosView from './page/TabelaServicosView';
-import RelatorioCarView from './page/RelatorioCarView';
 import FaturamentoView from './page/FaturamentoView';
 import TarefasView from './page/TarefasView';
 import SisPontoView from './page/SisPontoView';
+import SisPontoFuncionarioScreen from './page/sisPonto/SisPontoFuncionario.jsx';
+import { useEhCelular } from './hooks/useEhCelular';
+import { useEstadoNavegavel, limparHistorico, voltar, usePodeVoltar } from './hooks/useNavegacao';
+import { authService } from './services/authService';
+import { sincronizarPendentes, garantirSessaoPonto, encerrarSessaoPonto } from './services/pontoOffline';
 
 import { EditarProjetoModal } from './modals/EditarProjetoModal';
 import { TicketDetailModal } from './modals/TicketDetailModal';
@@ -31,24 +36,87 @@ import { DetalhesProjetoModal } from './modals/DetalhesProjetoModal';
 
 const COLUNAS_VISUAIS = ['Iniciar', 'Em Andamento', 'Concluído'];
 
+// Cópia de { id, nome, setor } da última sessão válida, usada só quando o app
+// abre sem rede (ver o efeito que restaura a sessão).
+const CHAVE_USUARIO_OFFLINE = 'ccf:usuario';
+function guardarUsuarioOffline(usuario) {
+  if (usuario) localStorage.setItem(CHAVE_USUARIO_OFFLINE, JSON.stringify({ id: usuario.id, nome: usuario.nome, setor: usuario.setor }));
+  else localStorage.removeItem(CHAVE_USUARIO_OFFLINE);
+}
+function lerUsuarioOffline() {
+  try { return JSON.parse(localStorage.getItem(CHAVE_USUARIO_OFFLINE)); } catch { return null; }
+}
+
 export default function App() {
   const kanban = useKanban();
-  const [usuarioLogado, setUsuarioLogado] = useState(null);
+  // A pessoa logada: { id, nome, setor }. `usuarioLogado` continua sendo o
+  // SETOR (string) — é o que permissões, Kanban e "Minhas Etapas" comparam, e
+  // deixá-lo igual evita mexer em todas essas telas.
+  const [usuarioAtual, setUsuarioAtual] = useState(null);
+  const usuarioLogado = usuarioAtual?.setor || null;
+  // Enquanto confere um token guardado (recarregou a página), não mostra o
+  // login — senão ele pisca antes de a sessão ser restaurada.
+  const [verificandoSessao, setVerificandoSessao] = useState(() => authService.temToken());
   // A animação só toca uma vez, antes do primeiro login da sessão — depois de
   // "concluída" ela não volta a aparecer mesmo se o usuário sair e entrar de
   // novo (senão o "Sair" no Navbar viraria um replay da splash toda vez).
   const [introConcluida, setIntroConcluida] = useState(false);
+  const ehCelular = useEhCelular();
   // O seletor de módulos aparece a cada entrada no site — diferente da intro,
   // ele reaparece sempre que o usuário faz login de novo (não fica "visto"
   // para sempre na sessão).
-  const [moduloEscolhido, setModuloEscolhido] = useState(false);
-  const [telaAtiva, setTelaAtiva] = useState('dashboard');
+  // Módulo aberto e tela ativa ficam juntos num estado só, pra que o
+  // "Voltar" desfaça a navegação inteira (inclusive voltar ao seletor).
+  const [navegacao, navegar, definirNavegacao] = useEstadoNavegavel({ modulo: false, tela: 'dashboard' });
+  const moduloEscolhido = navegacao.modulo;
+  const telaAtiva = navegacao.tela;
+  const podeVoltar = usePodeVoltar();
+  const setTelaAtiva = (tela) => { if (tela !== telaAtiva) navegar({ modulo: true, tela }); };
+  // Seletor de módulos, login e logout recomeçam o histórico.
+  const setModuloEscolhido = (modulo) => {
+    limparHistorico();
+    definirNavegacao((atual) => ({ ...atual, modulo }));
+  };
+  // "Voltar" das próprias telas: página anterior; sem histórico, o destino
+  // fixo de antes.
+  const voltarOu = (padrao) => () => (podeVoltar ? voltar() : padrao());
   const [workflowParaImpressao, setWorkflowParaImpressao] = useState(null);
   // Destino dentro do SIS Ponto quando a navbar redireciona pra lá a partir
   // de uma notificação (ex.: justificativa nova → abre direto a aba certa no
   // painel do ENG). O "ts" força o efeito a rodar de novo mesmo clicando em
   // duas notificações seguidas com a mesma página de destino.
-  const [sisPontoDestino, setSisPontoDestino] = useState(null);
+
+  // Recarregou a página com um token guardado: confere com o backend se ele
+  // ainda vale (pode ter expirado, ou a pessoa pode ter sido desativada).
+  useEffect(() => {
+    if (!authService.temToken()) return;
+    authService.sessaoAtual()
+      .then((res) => {
+        // Sessão válida: garante o token "só ponto" deste aparelho (se ainda não tem).
+        if (res.ok) { setUsuarioAtual(res.data); guardarUsuarioOffline(res.data); garantirSessaoPonto(); }
+        else { authService.definirToken(null); guardarUsuarioOffline(null); }
+      })
+      // Sem rede (não é sessão recusada): abre com a pessoa da última sessão,
+      // pra tela de ponto funcionar offline. As batidas ficam na fila do
+      // aparelho e o backend confere o token quando elas forem enviadas.
+      .catch(() => {
+        const emCache = lerUsuarioOffline();
+        if (emCache) setUsuarioAtual(emCache);
+        else authService.definirToken(null);
+      })
+      .finally(() => setVerificandoSessao(false));
+  }, []);
+
+  // O backend recusou a sessão no meio do uso (token expirou ou a pessoa foi
+  // desativada): volta pra tela de login em vez de deixar tudo falhando.
+  useEffect(() => {
+    authService.aoExpirarSessao(() => {
+      authService.definirToken(null);
+      guardarUsuarioOffline(null);
+      setUsuarioAtual(null);
+      setModuloEscolhido(false);
+    });
+  }, []);
 
   const [modais, setModais] = useState({
     editarProjeto: false,
@@ -125,18 +193,46 @@ export default function App() {
     return <IntroScreen onDone={() => setIntroConcluida(true)} />;
   }
 
-  const handleLogin = (nome) => {
+  // Recebe { token, usuario } do login ou da criação de senha.
+  const handleLogin = ({ token, usuario }) => {
+    authService.definirToken(token);
+    guardarUsuarioOffline(usuario);
     setModuloEscolhido(false);
-    setUsuarioLogado(nome);
+    setUsuarioAtual(usuario);
+    // Token "só ponto" novo para este aparelho (60 dias) e envio do que
+    // ficou na fila por sessão expirada.
+    garantirSessaoPonto({ renovar: true }).finally(() => sincronizarPendentes({ forcar: true }));
+    // O polling do Kanban não carrega nada sem token; com a sessão pronta,
+    // busca já em vez de esperar o próximo ciclo.
+    kanban.carregarDados();
   };
 
   const handleLogout = () => {
+    // Sair encerra a sessão do ponto deste aparelho (antes de esquecer o token normal).
+    encerrarSessaoPonto();
+    authService.definirToken(null);
+    guardarUsuarioOffline(null);
     setModuloEscolhido(false);
-    setUsuarioLogado(null);
+    setUsuarioAtual(null);
   };
+
+  if (verificandoSessao) return null;
 
   if (!usuarioLogado) {
     return <LoginView onLogin={handleLogin} globalCss={globalCss} />;
+  }
+
+  // Celular: o app é só o registro de ponto e as justificativas da própria
+  // pessoa (inclusive do ENG). Painel, Kanban e cadastros ficam no computador.
+  if (ehCelular) {
+    return (
+      <>
+        {globalCss}
+        <div style={{ height: '100dvh', overflow: 'hidden', background: '#f8fafc' }}>
+          <SisPontoFuncionarioScreen usuario={usuarioAtual} onSair={handleLogout} />
+        </div>
+      </>
+    );
   }
 
   if (!moduloEscolhido) {
@@ -145,9 +241,10 @@ export default function App() {
         {globalCss}
         <ModuleSelectorView
           usuarioLogado={usuarioLogado}
+          usuarioAtual={usuarioAtual}
           onAbrirModulo={(id) => {
-            setTelaAtiva(id);
-            setModuloEscolhido(true);
+            limparHistorico();
+            navegar({ modulo: true, tela: id });
           }}
         />
       </>
@@ -165,16 +262,16 @@ export default function App() {
           telaAtiva={telaAtiva}
           setTelaAtiva={setTelaAtiva}
           usuarioLogado={usuarioLogado}
+          usuarioAtual={usuarioAtual}
           setUsuarioLogado={handleLogout}
           onVoltarModulos={() => setModuloEscolhido(false)}
           kanban={kanban}
-          onIrParaSisPonto={(pagina) => setSisPontoDestino({ pagina, ts: Date.now() })}
         />
 
         <div className="flex-1 flex flex-col min-h-0" style={{ minHeight: 0, overflow: 'hidden' }}>
           {telaAtiva === 'cadastro' && (
             <CadastroServicoView
-              onBack={() => setTelaAtiva('dashboard')}
+              onBack={voltarOu(() => setTelaAtiva('dashboard'))}
               onServicoCriado={kanban.carregarDados}
             />
           )}
@@ -205,57 +302,56 @@ export default function App() {
 
           {telaAtiva === 'orcamento' && (
             <Orcamento
-              onBack={() => setTelaAtiva('dashboard')}
+              onBack={voltarOu(() => setTelaAtiva('dashboard'))}
               onOrcamentoDecidido={kanban.carregarDados}
             />
           )}
 
-          {telaAtiva === 'emissao-documentos' && <EmissaoDocumentos />}
-
           {telaAtiva === 'clientes' && (
-            <CadastroClienteView onBack={() => setTelaAtiva('dashboard')} />
+            <CadastroClienteView onBack={voltarOu(() => setTelaAtiva('dashboard'))} />
           )}
 
           {telaAtiva === 'imoveis' && (
-            <CadastroImovelView onBack={() => setTelaAtiva('dashboard')} />
+            <CadastroImovelView onBack={voltarOu(() => setTelaAtiva('dashboard'))} />
           )}
 
           {telaAtiva === 'vinculacao' && (
-            <VinculacaoView onBack={() => setTelaAtiva('dashboard')} />
+            <VinculacaoView onBack={voltarOu(() => setTelaAtiva('dashboard'))} />
+          )}
+
+          {telaAtiva === 'gerar-documentos' && (
+            <GerarDocumentosView onBack={voltarOu(() => setTelaAtiva('dashboard'))} />
           )}
 
           {telaAtiva === 'config-documentos' && (
-            <ConfigDocumentosView onBack={() => setTelaAtiva('dashboard')} />
+            <ConfigDocumentosView onBack={voltarOu(() => setTelaAtiva('dashboard'))} />
           )}
 
           {telaAtiva === 'config-etapas' && (
-            <ConfigEtapasView onBack={() => setTelaAtiva('dashboard')} usuarioLogado={usuarioLogado} />
+            <ConfigEtapasView onBack={voltarOu(() => setTelaAtiva('dashboard'))} usuarioLogado={usuarioLogado} />
+          )}
+
+          {telaAtiva === 'config-usuarios' && (
+            <UsuariosView onBack={voltarOu(() => setTelaAtiva('dashboard'))} usuarioAtual={usuarioAtual} />
           )}
 
           {telaAtiva === 'importar-pontos' && (
-            <ImportarPontosView onBack={() => setModuloEscolhido(false)} />
+            <ImportarPontosView onBack={voltarOu(() => setModuloEscolhido(false))} />
           )}
 
           {telaAtiva === 'tabela-servicos' && (
-            <TabelaServicosView onBack={() => setModuloEscolhido(false)} kanban={kanban} />
-          )}
-
-          {telaAtiva === 'car' && (
-            <RelatorioCarView
-              onBack={voltarOu(() => setModuloEscolhido(false))}
-              kanban={kanban}
-            />
+            <TabelaServicosView onBack={voltarOu(() => setModuloEscolhido(false))} kanban={kanban} />
           )}
 
           {telaAtiva === 'faturamento' && (
-            <FaturamentoView onBack={() => setModuloEscolhido(false)} usuarioLogado={usuarioLogado} />
+            <FaturamentoView onBack={voltarOu(() => setModuloEscolhido(false))} usuarioLogado={usuarioLogado} />
           )}
 
           {telaAtiva === 'tarefas' && (
-            <TarefasView onBack={() => setModuloEscolhido(false)} usuarioLogado={usuarioLogado} />
+            <TarefasView onBack={voltarOu(() => setModuloEscolhido(false))} usuarioLogado={usuarioLogado} />
           )}
 
-          {telaAtiva === 'sis-ponto' && <SisPontoView usuarioLogado={usuarioLogado} destino={sisPontoDestino} />}
+          {telaAtiva === 'sis-ponto' && <SisPontoView usuario={usuarioAtual} />}
         </div>
 
 

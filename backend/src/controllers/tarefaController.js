@@ -16,10 +16,20 @@ export const tarefaController = {
 
   async criar(req, res) {
     try {
-      const tarefa = await tarefaService.criar(req.body);
+      const tarefa = await tarefaService.criar({ ...req.body, criadoPor: req.usuario.setor });
       res.status(201).json(tarefa);
     } catch (error) {
       res.status(400).json({ error: error.message });
+    }
+  },
+
+  async reordenar(req, res) {
+    try {
+      const { ids } = req.body;
+      await tarefaService.reordenar(ids);
+      res.status(200).json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
     }
   },
 
@@ -50,33 +60,30 @@ export const tarefaController = {
     }
   },
 
+  async colocarEmAguardo(req, res) {
+    try {
+      const tarefa = await tarefaService.colocarEmAguardo(req.params.id, req.body.motivo);
+      res.status(200).json(tarefa);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+
+  async retomar(req, res) {
+    try {
+      const tarefa = await tarefaService.retomar(req.params.id);
+      res.status(200).json(tarefa);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+
   async excluir(req, res) {
     try {
       await tarefaService.excluir(req.params.id);
       res.status(204).send();
     } catch (error) {
       res.status(404).json({ error: error.message });
-    }
-  },
-
-  async abrirPasta(req, res) {
-    try {
-      const { caminho } = req.body;
-      if (!caminho) return res.status(400).json({ error: 'Caminho não informado.' });
-
-      const { exec } = await import('child_process');
-      const command = process.platform === 'win32' ? `start "" "${caminho}"` : `open "${caminho}"`;
-
-      exec(command, (err) => {
-        if (err) {
-          console.error('Erro ao abrir pasta:', err);
-          return res.status(500).json({ error: 'Não foi possível abrir a pasta automaticamente.' });
-        }
-        res.json({ ok: true });
-      });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'Erro interno ao abrir a pasta.' });
     }
   },
 };

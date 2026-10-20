@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
 import LeafIcon from './LeafIcon';
 import { authService } from '../services/authService';
-import { AnimatedSelect } from './AnimatedDropdown';
 
-const USUARIOS = ['DES', 'TOPO', 'ENG', 'CRD', 'DEV'];
+// Último usuário que entrou nesta máquina: quem usa sempre o mesmo computador
+// só digita a senha. Guardado só o nome de usuário, nunca a senha.
+const CHAVE_ULTIMO_LOGIN = 'ccf:ultimoLogin';
+const lerUltimoLogin = () => {
+  try { return localStorage.getItem(CHAVE_ULTIMO_LOGIN) || ''; } catch { return ''; }
+};
 
 const fieldStyle = {
   width: '100%',
@@ -34,27 +38,38 @@ export function LoginView({ onLogin, globalCss }) {
   const [senhaInput, setSenhaInput] = useState('');
   const [confirmarSenhaInput, setConfirmarSenhaInput] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
-  const [usuarioSelecionadoLogin, setUsuarioSelecionadoLogin] = useState('');
+  const [loginInput, setLoginInput] = useState(lerUltimoLogin);
   // 'login': tela normal. 'criar-senha': primeiro acesso desse usuário —
   // password_hash ainda é nulo no banco, então pedimos pra ele definir uma.
   const [modo, setModo] = useState('login');
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
+  // Nome da pessoa no primeiro acesso (vem do backend, pra saudação).
+  const [nomePrimeiroAcesso, setNomePrimeiroAcesso] = useState('');
 
-  const trocarUsuario = (nome) => {
-    setUsuarioSelecionadoLogin(nome);
-    setModo('login');
-    setSenhaInput('');
-    setConfirmarSenhaInput('');
+  // Mudou o usuário digitado: volta pro login normal (sai do "criar senha"
+  // que era de outra conta).
+  const trocarLogin = (valor) => {
+    setLoginInput(valor);
+    if (modo === 'criar-senha') {
+      setModo('login');
+      setSenhaInput('');
+      setConfirmarSenhaInput('');
+    }
     setErro('');
+  };
+
+  const entrar = (sessao) => {
+    try { localStorage.setItem(CHAVE_ULTIMO_LOGIN, loginInput.trim().toLowerCase()); } catch { /* sem storage */ }
+    onLogin(sessao);
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setErro('');
 
-    if (!usuarioSelecionadoLogin) {
-      setErro('Selecione um usuário para entrar.');
+    if (!loginInput.trim()) {
+      setErro('Informe o usuário.');
       return;
     }
 
@@ -65,12 +80,13 @@ export function LoginView({ onLogin, globalCss }) {
       }
       setCarregando(true);
       try {
-        const res = await authService.criarSenha(usuarioSelecionadoLogin, senhaInput);
+        const res = await authService.criarSenha(loginInput, senhaInput);
         if (!res.ok) {
           setErro(res.data?.error || 'Erro ao criar senha.');
           return;
         }
-        onLogin(usuarioSelecionadoLogin);
+        // Criar a senha já devolve a sessão ({ token, usuario }).
+        entrar(res.data);
       } catch (erro) {
         console.error(erro);
         setErro('Erro ao conectar com o servidor.');
@@ -82,18 +98,19 @@ export function LoginView({ onLogin, globalCss }) {
 
     setCarregando(true);
     try {
-      const res = await authService.login(usuarioSelecionadoLogin, senhaInput);
+      const res = await authService.login(loginInput, senhaInput);
       if (!res.ok) {
         setErro(res.data?.error || 'Erro ao entrar.');
         return;
       }
       if (res.data.precisaCriarSenha) {
+        setNomePrimeiroAcesso(res.data.nome || '');
         setModo('criar-senha');
         setSenhaInput('');
         setConfirmarSenhaInput('');
         return;
       }
-      onLogin(usuarioSelecionadoLogin);
+      entrar(res.data);
     } catch (erro) {
       console.error(erro);
       setErro('Erro ao conectar com o servidor.');
@@ -205,7 +222,7 @@ export function LoginView({ onLogin, globalCss }) {
             </h1>
             <p style={{ fontFamily: '"Open Sans", sans-serif', fontSize: 14, color: '#6b7a99', margin: 0 }}>
               {modo === 'criar-senha'
-                ? `Primeiro acesso de ${usuarioSelecionadoLogin} — defina uma senha para continuar.`
+                ? `Primeiro acesso de ${nomePrimeiroAcesso} — defina uma senha para continuar.`
                 : 'Acesse o sistema CCF Consultores'}
             </p>
           </div>
@@ -213,11 +230,18 @@ export function LoginView({ onLogin, globalCss }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div>
               <label style={labelStyle}>Usuário</label>
-              <AnimatedSelect
-                value={usuarioSelecionadoLogin}
-                onChange={trocarUsuario}
-                options={USUARIOS}
+              <input
+                type="text"
+                value={loginInput}
+                onChange={(e) => trocarLogin(e.target.value)}
+                placeholder="seu.usuario"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                autoFocus={!loginInput}
                 style={fieldStyle}
+                onFocus={(e) => (e.target.style.borderColor = '#1a3a8a')}
+                onBlur={(e) => (e.target.style.borderColor = '#d8e0f0')}
               />
             </div>
 
@@ -229,7 +253,8 @@ export function LoginView({ onLogin, globalCss }) {
                   value={senhaInput}
                   onChange={(e) => setSenhaInput(e.target.value)}
                   placeholder="••••••••"
-                  autoFocus
+                  autoComplete={modo === 'criar-senha' ? 'new-password' : 'current-password'}
+                  autoFocus={Boolean(loginInput)}
                   style={{ ...fieldStyle, padding: '12px 44px 12px 16px' }}
                   onFocus={(e) => (e.target.style.borderColor = '#1a3a8a')}
                   onBlur={(e) => (e.target.style.borderColor = '#d8e0f0')}

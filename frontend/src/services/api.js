@@ -1,18 +1,87 @@
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// Sem VITE_API_URL: no próprio computador fala direto com o backend; aberto por
+// outro endereço (celular via rede/túnel HTTPS), usa /api no mesmo endereço —
+// o servidor do Vite (dev/preview) ou o proxy reverso repassam para o backend.
+const ehLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const BASE_URL = import.meta.env.VITE_API_URL || (ehLocal ? 'http://localhost:3000' : '/api');
+
+// ---- SESSÃO ----
+// O token vem do login (ver authService no backend) e vai em toda requisição.
+// Fica em localStorage pra sessão sobreviver a um recarregar de página.
+const CHAVE_TOKEN = 'ccf:token';
+let tokenAtual = localStorage.getItem(CHAVE_TOKEN);
+let aoPerderSessao = null;
+
+export function definirToken(token) {
+    tokenAtual = token || null;
+    if (tokenAtual) localStorage.setItem(CHAVE_TOKEN, tokenAtual);
+    else localStorage.removeItem(CHAVE_TOKEN);
+}
+
+export const temToken = () => Boolean(tokenAtual);
+
+// Token "só ponto" deste aparelho (60 dias, renovado a cada envio): envia a
+// fila de pontos mesmo depois que a sessão normal de 12h venceu — o servidor
+// fica desligado à noite e nos fins de semana. Não abre nenhuma outra tela.
+const CHAVE_TOKEN_PONTO = 'ccf:tokenPonto';
+let tokenPonto = localStorage.getItem(CHAVE_TOKEN_PONTO);
+
+export function definirTokenPonto(token) {
+    tokenPonto = token || null;
+    if (tokenPonto) localStorage.setItem(CHAVE_TOKEN_PONTO, tokenPonto);
+    else localStorage.removeItem(CHAVE_TOKEN_PONTO);
+}
+
+export const temTokenPonto = () => Boolean(tokenPonto);
+
+// fetch com tempo-limite: com o servidor desligado o túnel pode demorar a
+// responder, e a fila não deve ficar presa esperando.
+async function fetchComLimite(url, opts = {}, ms = 10000) {
+    const controle = new AbortController();
+    const timer = setTimeout(() => controle.abort(), ms);
+    try {
+        return await fetch(url, { ...opts, signal: controle.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+// O App registra aqui o que fazer quando o backend recusa a sessão (token
+// expirado, usuário desativado): voltar pra tela de login.
+export function aoExpirarSessao(callback) {
+    aoPerderSessao = callback;
+}
+
+// Toda chamada ao backend passa por aqui — é o único lugar que põe o token.
+// Antes eram dezenas de fetch montando os próprios headers, e um header
+// esquecido já custou caro (o antigo typo "hearder" em reordenarTarefas).
+async function req(url, opts = {}) {
+    const headers = { ...(opts.headers || {}) };
+    if (tokenAtual) headers.Authorization = `Bearer ${tokenAtual}`;
+    const res = await fetch(url, { ...opts, headers });
+    if (res.status === 401 && tokenAtual && aoPerderSessao) aoPerderSessao();
+    return res;
+}
+
+// <img src>, <a href> e window.open não mandam header, então pros recursos
+// abertos assim o token vai na própria URL (o backend só aceita isso em GET).
+function comToken(url) {
+    if (!tokenAtual) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(tokenAtual)}`;
+}
 
 export const api = {
     getWorkflows: async() => {
-        const res = await fetch(`${BASE_URL}/workflows`);
+        const res = await req(`${BASE_URL}/workflows`);
         return res.json();
     },
 
     getTickets: async () => {
-        const res = await fetch(`${BASE_URL}/tickets`);
+        const res = await req(`${BASE_URL}/tickets`);
         return res.json();
     },
 
     createWorkflow: async(name, types, terreno = 'Urbano') => {
-        const res = await fetch(`${BASE_URL}/workflows`, {
+        const res = await req(`${BASE_URL}/workflows`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, types, terreno })
@@ -20,8 +89,17 @@ export const api = {
         return { data: await res.json(), ok: res.ok };
     },
 
+    alterarStatusProcesso: async(id, status) => {
+        const res = await req(`${BASE_URL}/workflows/${id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
     updateWorkflow: async (id, types, terreno) => {
-        await fetch(`${BASE_URL}/workflows/${id}`, {
+        await req(`${BASE_URL}/workflows/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ types, terreno })
@@ -29,7 +107,7 @@ export const api = {
     },
 
     updateWorkflowDetails: async (id, { matricula, endereco, details }) => {
-        const res = await fetch(`${BASE_URL}/workflows/${id}/details`, {
+        const res = await req(`${BASE_URL}/workflows/${id}/details`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ matricula, endereco, details })
@@ -38,11 +116,11 @@ export const api = {
     },
 
     deleteWorkflow: async(id) => {
-        await fetch(`${BASE_URL}/workflows/${id}`, { method: 'DELETE' });
+        await req(`${BASE_URL}/workflows/${id}`, { method: 'DELETE' });
     },
 
     createTicket: async ({ title, description, workflowId, currentStepId }) => {
-        const res = await fetch(`${BASE_URL}/tickets`, {
+        const res = await req(`${BASE_URL}/tickets`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title, description, workflowId, currentStepId })
@@ -55,7 +133,7 @@ export const api = {
     },
 
     updateTicket: async (id, { description }) => {
-        const res = await fetch(`${BASE_URL}/tickets/${id}`, {
+        const res = await req(`${BASE_URL}/tickets/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ description })
@@ -64,11 +142,11 @@ export const api = {
     },
 
     deleteTicket: async (id) => {
-        await fetch(`${BASE_URL}/tickets/${id}`, { method: 'DELETE' });
+        await req(`${BASE_URL}/tickets/${id}`, { method: 'DELETE' });
     },
 
     moveTicket: async (ticketId, toStepId, userId) => {
-        await fetch(`${BASE_URL}/tickets/move`, {
+        await req(`${BASE_URL}/tickets/move`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ticketId, toStepId, userId })
@@ -76,7 +154,7 @@ export const api = {
     },
 
     addComment: async (ticketId, userId, text) => {
-        const res = await fetch(`${BASE_URL}/tickets/${ticketId}/comments`, {
+        const res = await req(`${BASE_URL}/tickets/${ticketId}/comments`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ticketId, userId, text })
@@ -86,17 +164,17 @@ export const api = {
 
     // ---- NOVOS MÉTODOS PARA O FLUXO DE SERVIÇOS ----
     getSispontoFuncionarios: async () => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/funcionarios`);
+        const res = await req(`${BASE_URL}/sis-ponto/funcionarios`);
         return res.json();
     },
 
     getSispontoRegistros: async () => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/registros`);
+        const res = await req(`${BASE_URL}/sis-ponto/registros`);
         return res.json();
     },
 
     createSispontoFuncionario: async (dados) => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/funcionarios`, {
+        const res = await req(`${BASE_URL}/sis-ponto/funcionarios`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dados)
@@ -105,7 +183,7 @@ export const api = {
     },
 
     updateSispontoFuncionario: async (id, dados) => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/funcionarios/${id}`, {
+        const res = await req(`${BASE_URL}/sis-ponto/funcionarios/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dados)
@@ -114,12 +192,12 @@ export const api = {
     },
 
     deleteSispontoFuncionario: async (id) => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/funcionarios/${id}`, { method: 'DELETE' });
+        const res = await req(`${BASE_URL}/sis-ponto/funcionarios/${id}`, { method: 'DELETE' });
         return res.json();
     },
 
     registrarSispontoPonto: async (dados) => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/registros`, {
+        const res = await req(`${BASE_URL}/sis-ponto/registros`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dados)
@@ -131,8 +209,241 @@ export const api = {
         return res.json();
     },
 
+    // Envio da fila offline (services/pontoOffline.js). Não lança em erro HTTP:
+    // quem chama decide o que manter na fila pelo status. Sem rede, o fetch lança.
+    // Envia a fila de pontos. credencial: 'sessao' (login normal) ou 'ponto'
+    // (token do aparelho). Não passa por req(): uma sessão normal vencida
+    // aqui não deve derrubar o app para a tela de login.
+    syncSispontoBatidas: async (payload, credencial = 'sessao') => {
+        const token = credencial === 'ponto' ? tokenPonto : tokenAtual;
+        const res = await fetchComLimite(`${BASE_URL}/sis-ponto/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify(payload)
+        }, 20000);
+        return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) };
+    },
+
+    // O servidor está no ar? (a rede do celular pode estar ok com ele desligado)
+    servidorDisponivel: async () => {
+        try {
+            const res = await fetchComLimite(`${BASE_URL}/health`, { cache: 'no-store' }, 5000);
+            return res.ok;
+        } catch {
+            return false;
+        }
+    },
+
+    criarSessaoPonto: async (deviceId) => {
+        const res = await req(`${BASE_URL}/auth/sessao-ponto`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId })
+        });
+        if (!res.ok) throw new Error('Não foi possível criar a sessão do ponto.');
+        return res.json();
+    },
+
+    sairSessaoPonto: async (deviceId) => {
+        const res = await req(`${BASE_URL}/auth/sessao-ponto/sair`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId })
+        });
+        return res.ok;
+    },
+
+    getSispontoQuarentena: async () => {
+        const res = await req(`${BASE_URL}/sis-ponto/quarentena`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao carregar a quarentena.');
+        }
+        return res.json();
+    },
+
+    decidirSispontoQuarentena: async (ids, acao) => {
+        const res = await req(`${BASE_URL}/sis-ponto/quarentena/decisao`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids, acao })
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao decidir.');
+        }
+        return res.json();
+    },
+
+    getSessoesPonto: async (usuarioId) => {
+        const res = await req(`${BASE_URL}/usuarios/${encodeURIComponent(usuarioId)}/sessoes-ponto`);
+        if (!res.ok) throw new Error('Erro ao listar aparelhos.');
+        return res.json();
+    },
+
+    revogarSessoesPonto: async (usuarioId, sessaoId = null) => {
+        const res = await req(`${BASE_URL}/usuarios/${encodeURIComponent(usuarioId)}/sessoes-ponto/revogar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sessaoId ? { sessaoId } : {})
+        });
+        if (!res.ok) throw new Error('Erro ao revogar.');
+        return res.json();
+    },
+
+    // Pares sem saída/sem entrada/inconsistentes do mês (só ENG/DEV).
+    // Contador da aba "Pontos a revisar": { previstas, registros, total }.
+    getSispontoRevisaoContagem: async () => {
+        const res = await req(`${BASE_URL}/sis-ponto/revisao/contagem`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao contar pontos para revisão.');
+        }
+        return res.json();
+    },
+
+    getSispontoRevisao: async (mes) => {
+        const res = await req(`${BASE_URL}/sis-ponto/revisao?mes=${encodeURIComponent(mes)}`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao carregar pontos para revisão.');
+        }
+        return res.json();
+    },
+
+    // ENG decide os horários previstos (pessoa não bateu): ABONADA, FALTA ou PENDENTE (desfaz).
+    decidirSispontoPrevistas: async (ids, situacao) => {
+        const res = await req(`${BASE_URL}/sis-ponto/previstas/decisao`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids, situacao })
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao registrar a decisão.');
+        }
+        return res.json();
+    },
+
+    // Feriados dos anos pedidos + configuração da empresa: { config, feriados: [{ dia, nome, tipo }] }.
+    getSispontoFeriados: async (anos) => {
+        const res = await req(`${BASE_URL}/sis-ponto/feriados?anos=${anos.join(',')}`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao carregar feriados.');
+        }
+        return res.json();
+    },
+
+    // Só o ENG: { carnaval, corpusChristi, extras: [{ data: 'MM-DD' | 'AAAA-MM-DD', nome, tipo }] }.
+    salvarSispontoFeriados: async (config) => {
+        const res = await req(`${BASE_URL}/sis-ponto/feriados`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao salvar feriados.');
+        }
+        return res.json();
+    },
+
+    // Lançamentos manuais no banco de horas: [{ id, funcionarioId, nome, dia, minutos, motivo, por, criadoEm }].
+    getSispontoLancamentosBanco: async () => {
+        const res = await req(`${BASE_URL}/sis-ponto/banco/lancamentos`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao carregar lançamentos do banco de horas.');
+        }
+        return res.json();
+    },
+
+    criarSispontoLancamentoBanco: async (dados) => {
+        const res = await req(`${BASE_URL}/sis-ponto/banco/lancamentos`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao lançar horas.');
+        }
+        return res.json();
+    },
+
+    excluirSispontoLancamentoBanco: async (id) => {
+        const res = await req(`${BASE_URL}/sis-ponto/banco/lancamentos/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao excluir lançamento.');
+        }
+        return res.json();
+    },
+
+    // Regras do ponto: { prazoJustificativaHoras }. Todos leem; só o ENG salva.
+    getSispontoRegras: async () => {
+        const res = await req(`${BASE_URL}/sis-ponto/regras`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao carregar as regras do ponto.');
+        }
+        return res.json();
+    },
+
+    salvarSispontoRegras: async (regras) => {
+        const res = await req(`${BASE_URL}/sis-ponto/regras`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(regras)
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao salvar as regras do ponto.');
+        }
+        return res.json();
+    },
+
+    // CSV do mês no formato do Sistema Ponto (mesmo do /export.csv), pela sessão do ENG.
+    baixarSispontoFolhaCsv: async (mes) => {
+        const res = await req(`${BASE_URL}/sis-ponto/folha.csv?mes=${encodeURIComponent(mes)}`);
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao gerar o CSV da folha.');
+        }
+        return res.blob();
+    },
+
+    // Esquecimentos da própria pessoa: [{ id, dia, hora, tipo, situacao: 'PENDENTE' | 'FALTA' }].
+    getSispontoMeusEsquecimentos: async () => {
+        const res = await req(`${BASE_URL}/sis-ponto/meus-esquecimentos`);
+        if (!res.ok) return [];
+        return res.json();
+    },
+
+    // Batidas incluídas pelo ENG: [{ funcionarioId, batidoEm, motivo, por, em }].
+    getSispontoAjustes: async () => {
+        const res = await req(`${BASE_URL}/sis-ponto/batidas/ajustes`);
+        if (!res.ok) return [];
+        return res.json();
+    },
+
+    // Correção pelo ENG: inclui uma batida { funcionarioId, tipo: 'ENTRADA'|'SAIDA', batidoEm, motivo }.
+    inserirSispontoAjuste: async (dados) => {
+        const res = await req(`${BASE_URL}/sis-ponto/batidas/ajuste`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados)
+        });
+        if (!res.ok) {
+            const erro = await res.json().catch(() => ({}));
+            throw new Error(erro.error || 'Erro ao incluir batida.');
+        }
+        return res.json();
+    },
+
     deleteSispontoRegistro: async (dados) => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/registros`, {
+        const res = await req(`${BASE_URL}/sis-ponto/registros`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dados)
@@ -145,12 +456,12 @@ export const api = {
     },
 
     getSispontoJustificativas: async () => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/justificativas`);
+        const res = await req(`${BASE_URL}/sis-ponto/justificativas`);
         return res.json();
     },
 
     createSispontoJustificativa: async (dados) => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/justificativas`, {
+        const res = await req(`${BASE_URL}/sis-ponto/justificativas`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dados)
@@ -163,7 +474,7 @@ export const api = {
     },
 
     updateSispontoJustificativa: async (id, dados) => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/justificativas/${id}`, {
+        const res = await req(`${BASE_URL}/sis-ponto/justificativas/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dados)
@@ -176,7 +487,7 @@ export const api = {
     },
 
     deleteSispontoJustificativa: async (id) => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/justificativas/${id}`, { method: 'DELETE' });
+        const res = await req(`${BASE_URL}/sis-ponto/justificativas/${id}`, { method: 'DELETE' });
         if (!res.ok) {
             const erro = await res.json().catch(() => ({}));
             throw new Error(erro.error || 'Erro ao excluir justificativa.');
@@ -185,7 +496,7 @@ export const api = {
     },
 
     getSispontoPadroesHorario: async () => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/padroes-horario`);
+        const res = await req(`${BASE_URL}/sis-ponto/padroes-horario`);
         if (!res.ok) {
             const erro = await res.json().catch(() => ({}));
             throw new Error(erro.error || 'Erro ao carregar padrões de horário.');
@@ -194,7 +505,7 @@ export const api = {
     },
 
     updateSispontoPadraoHorario: async (padraoId, dias) => {
-        const res = await fetch(`${BASE_URL}/sis-ponto/padroes-horario/${padraoId}`, {
+        const res = await req(`${BASE_URL}/sis-ponto/padroes-horario/${padraoId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ dias })
@@ -207,21 +518,21 @@ export const api = {
     },
 
     getServicos: async () => {
-        const res = await fetch(`${BASE_URL}/servicos`);
+        const res = await req(`${BASE_URL}/servicos`);
         return res.json();
     },
 
     // URL direta: a ficha é aberta numa aba pelo navegador, não consumida aqui.
-    urlPdfServico: (servicoId) => `${BASE_URL}/servicos/${servicoId}/pdf`,
+    urlPdfServico: (servicoId) => comToken(`${BASE_URL}/servicos/${servicoId}/pdf`),
 
     // A "versao" quebra o cache do navegador: sem ela, trocar a imagem de um
     // serviço continuaria exibindo a antiga, já que a URL não muda.
     urlImagemServico: (servicoId, versao) =>
-        `${BASE_URL}/servicos/${servicoId}/imagem${versao ? `?v=${encodeURIComponent(versao)}` : ''}`,
+        comToken(`${BASE_URL}/servicos/${servicoId}/imagem${versao ? `?v=${encodeURIComponent(versao)}` : ''}`),
 
     // Prévia da ficha: devolve o PDF como blob para exibir num iframe.
     gerarPreviaPdf: async (servicoId, dados, signal) => {
-        const res = await fetch(`${BASE_URL}/servicos/${servicoId}/pdf-previa`, {
+        const res = await req(`${BASE_URL}/servicos/${servicoId}/pdf-previa`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dados),
@@ -232,12 +543,12 @@ export const api = {
     },
 
     getServicoById: async (id) => {
-        const res = await fetch(`${BASE_URL}/servicos/${id}`);
+        const res = await req(`${BASE_URL}/servicos/${id}`);
         return res.json();
     },
 
     createServico: async (dadosServico) => {
-        const res = await fetch(`${BASE_URL}/servicos`, {
+        const res = await req(`${BASE_URL}/servicos`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dadosServico)
@@ -246,7 +557,7 @@ export const api = {
     },
 
     salvarOrcamento: async (servicoId, dadosOrcamento) => {
-        const res = await fetch(`${BASE_URL}/servicos/${servicoId}/orcamento`, {
+        const res = await req(`${BASE_URL}/servicos/${servicoId}/orcamento`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dadosOrcamento)
@@ -255,7 +566,7 @@ export const api = {
     },
 
     updateServico: async (servicoId, dadosServico) => {
-        const res = await fetch(`${BASE_URL}/servicos/${servicoId}`, {
+        const res = await req(`${BASE_URL}/servicos/${servicoId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dadosServico)
@@ -264,7 +575,7 @@ export const api = {
     },
 
     aprovarOrcamento: async (servicoId, decisao) => {
-        const res = await fetch(`${BASE_URL}/servicos/${servicoId}/aprovar-orcamento`, {
+        const res = await req(`${BASE_URL}/servicos/${servicoId}/aprovar-orcamento`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ decisao })
@@ -274,17 +585,17 @@ export const api = {
 
     // ---- CLIENTES ----
     getClientes: async () => {
-        const res = await fetch(`${BASE_URL}/clientes`);
+        const res = await req(`${BASE_URL}/clientes`);
         return res.json();
     },
 
     getClienteById: async (id) => {
-        const res = await fetch(`${BASE_URL}/clientes/${id}`);
+        const res = await req(`${BASE_URL}/clientes/${id}`);
         return res.json();
     },
 
     createCliente: async (dadosCliente) => {
-        const res = await fetch(`${BASE_URL}/clientes`, {
+        const res = await req(`${BASE_URL}/clientes`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dadosCliente)
@@ -293,7 +604,7 @@ export const api = {
     },
 
     updateCliente: async (id, dadosCliente) => {
-        const res = await fetch(`${BASE_URL}/clientes/${id}`, {
+        const res = await req(`${BASE_URL}/clientes/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dadosCliente)
@@ -302,22 +613,22 @@ export const api = {
     },
 
     deleteCliente: async (id) => {
-        await fetch(`${BASE_URL}/clientes/${id}`, { method: 'DELETE' });
+        await req(`${BASE_URL}/clientes/${id}`, { method: 'DELETE' });
     },
 
     // ---- IMÓVEIS ----
     getImoveis: async () => {
-        const res = await fetch(`${BASE_URL}/imoveis`);
+        const res = await req(`${BASE_URL}/imoveis`);
         return res.json();
     },
 
     getImovelById: async (id) => {
-        const res = await fetch(`${BASE_URL}/imoveis/${id}`);
+        const res = await req(`${BASE_URL}/imoveis/${id}`);
         return res.json();
     },
 
     createImovel: async (dadosImovel) => {
-        const res = await fetch(`${BASE_URL}/imoveis`, {
+        const res = await req(`${BASE_URL}/imoveis`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dadosImovel)
@@ -326,7 +637,7 @@ export const api = {
     },
 
     updateImovel: async (id, dadosImovel) => {
-        const res = await fetch(`${BASE_URL}/imoveis/${id}`, {
+        const res = await req(`${BASE_URL}/imoveis/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dadosImovel)
@@ -335,11 +646,11 @@ export const api = {
     },
 
     deleteImovel: async (id) => {
-        await fetch(`${BASE_URL}/imoveis/${id}`, { method: 'DELETE' });
+        await req(`${BASE_URL}/imoveis/${id}`, { method: 'DELETE' });
     },
 
     extrairDescricaoImovel: async ({ base64, mimeType }) => {
-        const res = await fetch(`${BASE_URL}/imoveis/extrair-descricao`, {
+        const res = await req(`${BASE_URL}/imoveis/extrair-descricao`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ base64, mimeType })
@@ -348,14 +659,14 @@ export const api = {
     },
 
     buscarCartorioPorCns: async (cns) => {
-        const res = await fetch(`${BASE_URL}/cartorios/${encodeURIComponent(cns)}`);
+        const res = await req(`${BASE_URL}/cartorios/${encodeURIComponent(cns)}`);
         if (!res.ok) return null;
         return res.json();
     },
 
     // ---- VINCULAÇÃO ----
     salvarVinculacao: async (servicoId, dadosVinculacao) => {
-        const res = await fetch(`${BASE_URL}/servicos/${servicoId}/vinculacao`, {
+        const res = await req(`${BASE_URL}/servicos/${servicoId}/vinculacao`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dadosVinculacao)
@@ -365,12 +676,12 @@ export const api = {
 
     // ---- DOCUMENTOS ----
     getTemplatesDocumento: async () => {
-        const res = await fetch(`${BASE_URL}/documentos/templates`);
+        const res = await req(`${BASE_URL}/documentos/templates`);
         return res.json();
     },
 
     salvarMapeamentoTiposDocumento: async (mapa) => {
-        const res = await fetch(`${BASE_URL}/documentos/mapeamento-tipos`, {
+        const res = await req(`${BASE_URL}/documentos/mapeamento-tipos`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ mapa }),
@@ -379,10 +690,10 @@ export const api = {
     },
 
     // URL direta: o navegador dispara o download, não é consumida via fetch.
-    urlGerarDocumento: (servicoId, templateKey) => `${BASE_URL}/documentos/${servicoId}/${templateKey}`,
+    urlGerarDocumento: (servicoId, templateKey) => comToken(`${BASE_URL}/documentos/${servicoId}/${templateKey}`),
 
     registrarDocumentosNoProtocolo: async (servicoId, chaves) => {
-        const res = await fetch(`${BASE_URL}/documentos/${servicoId}/protocolo`, {
+        const res = await req(`${BASE_URL}/documentos/${servicoId}/protocolo`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chaves }),
@@ -391,85 +702,128 @@ export const api = {
     },
 
     // ---- AUTENTICAÇÃO ----
-    login: async (usuario, senha) => {
-        const res = await fetch(`${BASE_URL}/auth/login`, {
+    // `login` é o nome de usuário digitado na tela de entrada.
+    login: async (login, senha) => {
+        const res = await req(`${BASE_URL}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ usuario, senha }),
+            body: JSON.stringify({ login, senha }),
         });
         return { data: await res.json(), ok: res.ok };
     },
 
-    criarSenha: async (usuario, novaSenha) => {
-        const res = await fetch(`${BASE_URL}/auth/criar-senha`, {
+    criarSenha: async (login, novaSenha) => {
+        const res = await req(`${BASE_URL}/auth/criar-senha`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ usuario, novaSenha }),
+            body: JSON.stringify({ login, novaSenha }),
         });
         return { data: await res.json(), ok: res.ok };
     },
 
-    alterarSenha: async (usuario, senhaAtual, novaSenha) => {
-        const res = await fetch(`${BASE_URL}/auth/alterar-senha`, {
+    // Sem usuário no corpo: o backend troca a senha de quem está no token.
+    alterarSenha: async (senhaAtual, novaSenha) => {
+        const res = await req(`${BASE_URL}/auth/alterar-senha`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ usuario, senhaAtual, novaSenha }),
+            body: JSON.stringify({ senhaAtual, novaSenha }),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    // Confere o token guardado ao recarregar a página e devolve a pessoa.
+    getSessao: async () => {
+        const res = await req(`${BASE_URL}/auth/me`);
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    // ---- USUÁRIOS (cadastro de pessoas — só ENG/DEV) ----
+    getUsuarios: async () => {
+        const res = await req(`${BASE_URL}/usuarios`);
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    getSetores: async () => {
+        const res = await req(`${BASE_URL}/usuarios/setores`);
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    criarUsuario: async (dados) => {
+        const res = await req(`${BASE_URL}/usuarios`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    atualizarUsuario: async (id, dados) => {
+        const res = await req(`${BASE_URL}/usuarios/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dados),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    definirSenhaUsuario: async (id, novaSenha) => {
+        const res = await req(`${BASE_URL}/usuarios/${id}/senha`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ novaSenha }),
         });
         return { data: await res.json(), ok: res.ok };
     },
 
     // ---- TIPOS DE PROCESSO (etapas padrão do Kanban) ----
     getTiposProcesso: async () => {
-        const res = await fetch(`${BASE_URL}/tipos-processo`);
+        const res = await req(`${BASE_URL}/tipos-processo`);
         return res.json();
     },
 
-    // x-usuario: o backend só aceita a escrita vinda de "ENG" (ver
-    // tipoProcessoRoutes.js) — mesmo nível de checagem informal do resto do
-    // sistema, que ainda não tem sessão/token.
-    atualizarTipoProcesso: async (tipoProcesso, etapas, usuarioLogado) => {
-        const res = await fetch(`${BASE_URL}/tipos-processo/${encodeURIComponent(tipoProcesso)}`, {
+    // Só ENG/DEV conseguem gravar — o backend confere pelo setor da sessão
+    // (ver tipoProcessoRoutes.js).
+    atualizarTipoProcesso: async (tipoProcesso, etapas) => {
+        const res = await req(`${BASE_URL}/tipos-processo/${encodeURIComponent(tipoProcesso)}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'x-usuario': usuarioLogado || '' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ etapas }),
         });
         return { data: await res.json(), ok: res.ok };
     },
 
     // ---- NOTIFICAÇÕES (setor responsável pela próxima etapa) ----
-    getNotificacoes: async (usuarioLogado) => {
-        const res = await fetch(`${BASE_URL}/notificacoes`, {
-            headers: { 'x-usuario': usuarioLogado || '' },
-        });
+    // O setor das notificações vem da sessão, não mais do header x-usuario.
+    getNotificacoes: async () => {
+        const res = await req(`${BASE_URL}/notificacoes`);
         return res.json();
     },
 
     marcarNotificacaoComoLida: async (id) => {
-        const res = await fetch(`${BASE_URL}/notificacoes/${id}/lida`, { method: 'PUT' });
+        const res = await req(`${BASE_URL}/notificacoes/${id}/lida`, { method: 'PUT' });
         return res.json();
     },
 
-    marcarTodasNotificacoesComoLidas: async (usuarioLogado) => {
-        const res = await fetch(`${BASE_URL}/notificacoes/marcar-todas-lidas`, {
+    marcarTodasNotificacoesComoLidas: async () => {
+        const res = await req(`${BASE_URL}/notificacoes/marcar-todas-lidas`, {
             method: 'PUT',
-            headers: { 'x-usuario': usuarioLogado || '' },
         });
         return res.json();
     },
 
     excluirNotificacao: async (id) => {
-        const res = await fetch(`${BASE_URL}/notificacoes/${id}`, { method: 'DELETE' });
+        const res = await req(`${BASE_URL}/notificacoes/${id}`, { method: 'DELETE' });
         return res.json();
     },
 
     // ---- FATURAMENTO: COBRANÇAS (boletos) ----
     getCobrancas: async () => {
-        const res = await fetch(`${BASE_URL}/cobrancas`);
+        const res = await req(`${BASE_URL}/cobrancas`);
         return res.json();
     },
 
     criarCobranca: async (dados) => {
-        const res = await fetch(`${BASE_URL}/cobrancas`, {
+        const res = await req(`${BASE_URL}/cobrancas`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dados),
@@ -479,28 +833,28 @@ export const api = {
 
     // Cada parcela é um boleto emitido individualmente.
     emitirParcelaCobranca: async (cobrancaId, numeroParcela) => {
-        const res = await fetch(`${BASE_URL}/cobrancas/${cobrancaId}/parcelas/${numeroParcela}/emitir`, { method: 'POST' });
+        const res = await req(`${BASE_URL}/cobrancas/${cobrancaId}/parcelas/${numeroParcela}/emitir`, { method: 'POST' });
         return { data: await res.json(), ok: res.ok };
     },
 
     // Boleto já emitido no banco, só o PDF que não veio — tenta de novo sem
     // re-emitir (evita duplicar o boleto no Inter).
     tentarBaixarPdfParcela: async (cobrancaId, numeroParcela) => {
-        const res = await fetch(`${BASE_URL}/cobrancas/${cobrancaId}/parcelas/${numeroParcela}/baixar-pdf`, { method: 'POST' });
+        const res = await req(`${BASE_URL}/cobrancas/${cobrancaId}/parcelas/${numeroParcela}/baixar-pdf`, { method: 'POST' });
         return { data: await res.json(), ok: res.ok };
     },
 
     // URL direta: o PDF é aberto numa aba pelo navegador, não consumida aqui.
-    urlPdfParcelaCobranca: (cobrancaId, numeroParcela) => `${BASE_URL}/cobrancas/${cobrancaId}/parcelas/${numeroParcela}/pdf`,
+    urlPdfParcelaCobranca: (cobrancaId, numeroParcela) => comToken(`${BASE_URL}/cobrancas/${cobrancaId}/parcelas/${numeroParcela}/pdf`),
 
     // ---- FATURAMENTO: NOTAS FISCAIS ----
     getNotasFiscais: async () => {
-        const res = await fetch(`${BASE_URL}/notas-fiscais`);
+        const res = await req(`${BASE_URL}/notas-fiscais`);
         return res.json();
     },
 
     criarNotaFiscal: async (dados) => {
-        const res = await fetch(`${BASE_URL}/notas-fiscais`, {
+        const res = await req(`${BASE_URL}/notas-fiscais`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dados),
@@ -509,18 +863,18 @@ export const api = {
     },
 
     emitirNotaFiscal: async (id) => {
-        const res = await fetch(`${BASE_URL}/notas-fiscais/${id}/emitir`, { method: 'POST' });
+        const res = await req(`${BASE_URL}/notas-fiscais/${id}/emitir`, { method: 'POST' });
         return { data: await res.json(), ok: res.ok };
     },
 
     // Nota já emitida na prefeitura, só o PDF que não veio — tenta de novo
     // sem re-emitir (evita duplicar a NFS-e).
     tentarBaixarPdfNotaFiscal: async (id) => {
-        const res = await fetch(`${BASE_URL}/notas-fiscais/${id}/baixar-pdf`, { method: 'POST' });
+        const res = await req(`${BASE_URL}/notas-fiscais/${id}/baixar-pdf`, { method: 'POST' });
         return { data: await res.json(), ok: res.ok };
     },
 
-    urlPdfNotaFiscal: (id) => `${BASE_URL}/notas-fiscais/${id}/pdf`,
+    urlPdfNotaFiscal: (id) => comToken(`${BASE_URL}/notas-fiscais/${id}/pdf`),
 
     // ---- TAREFAS ----
     getTarefas: async ({ setor, servicoId, status } = {}) => {
@@ -529,12 +883,12 @@ export const api = {
         if (servicoId) params.set('servicoId', servicoId);
         if (status) params.set('status', status);
         const query = params.toString();
-        const res = await fetch(`${BASE_URL}/tarefas${query ? `?${query}` : ''}`);
+        const res = await req(`${BASE_URL}/tarefas${query ? `?${query}` : ''}`);
         return res.json();
     },
 
     criarTarefa: async (dados) => {
-        const res = await fetch(`${BASE_URL}/tarefas`, {
+        const res = await req(`${BASE_URL}/tarefas`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dados),
@@ -542,8 +896,20 @@ export const api = {
         return { data: await res.json(), ok: res.ok };
     },
 
+    reordenarTarefas: async (ids) => {
+        const res = await req(`${BASE_URL}/tarefas/reordenar`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids }),
+        });
+        // O controller devolve o motivo real em { error } quando falha — sem
+        // isso o toast só consegue dizer "não foi possível", que não ajuda
+        // ninguém a descobrir o que aconteceu.
+        return { ok: res.ok, data: res.ok ? null : await res.json().catch(() => null) };
+    },
+
     concluirTarefa: async (id, setor) => {
-        const res = await fetch(`${BASE_URL}/tarefas/${id}/concluir`, {
+        const res = await req(`${BASE_URL}/tarefas/${id}/concluir`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ setor }),
@@ -552,17 +918,31 @@ export const api = {
     },
 
     reabrirTarefa: async (id) => {
-        const res = await fetch(`${BASE_URL}/tarefas/${id}/reabrir`, { method: 'POST' });
+        const res = await req(`${BASE_URL}/tarefas/${id}/reabrir`, { method: 'POST' });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    colocarTarefaEmAguardo: async (id, motivo) => {
+        const res = await req(`${BASE_URL}/tarefas/${id}/aguardar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ motivo }),
+        });
+        return { data: await res.json(), ok: res.ok };
+    },
+
+    retomarTarefa: async (id) => {
+        const res = await req(`${BASE_URL}/tarefas/${id}/retomar`, { method: 'POST' });
         return { data: await res.json(), ok: res.ok };
     },
 
     excluirTarefa: async (id) => {
-        const res = await fetch(`${BASE_URL}/tarefas/${id}`, { method: 'DELETE' });
+        const res = await req(`${BASE_URL}/tarefas/${id}`, { method: 'DELETE' });
         return { ok: res.ok };
     },
 
     atualizarObservacaoTarefa: async (id, observacoes) => {
-        const res = await fetch(`${BASE_URL}/tarefas/${id}/observacao`, {
+        const res = await req(`${BASE_URL}/tarefas/${id}/observacao`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ observacoes }),
@@ -570,12 +950,15 @@ export const api = {
         return { data: await res.json(), ok: res.ok };
     },
 
-    abrirPastaTarefa: async (caminho) => {
-        const res = await fetch(`${BASE_URL}/tarefas/abrir-pasta`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ caminho }),
-        });
-        return { data: await res.json(), ok: res.ok };
+    // O DELETE responde 204 sem corpo quando dá certo; o motivo da recusa
+    // (ex.: parcela de boleto já emitido) só vem no corpo do erro.
+    excluirCobranca: async (id) => {
+        const res = await req(`${BASE_URL}/cobrancas/${id}`, { method: 'DELETE' });
+        return { ok: res.ok, data: res.ok ? null : await res.json().catch(() => null) };
+    },
+
+    excluirNotaFiscal: async (id) => {
+        const res = await req(`${BASE_URL}/notas-fiscais/${id}`, { method: 'DELETE' });
+        return { ok: res.ok, data: res.ok ? null : await res.json().catch(() => null) };
     },
 };

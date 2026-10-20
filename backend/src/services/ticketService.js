@@ -2,6 +2,25 @@
 import { prisma } from '../prisma.js';
 import { notificationService } from './notificationService.js';
 
+// Erro com status: a mensagem pode ir para a tela (as do Prisma não vão).
+function erroComStatus(status, mensagem) {
+  return Object.assign(new Error(mensagem), { status });
+}
+
+// Mesma regra do quadro (KanbanView, temPermissao): só o setor dono da etapa
+// atual do cartão — ou ENG/DEV — move ou exclui. Cartão sem etapa com setor
+// definido conta como do CRD, igual à tela.
+async function cartaoComPermissao(ticketId, quem) {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: String(ticketId) },
+    include: { currentStep: { include: { requiredRole: true } } },
+  });
+  if (!ticket) throw erroComStatus(404, 'Tarefa não encontrada.');
+  const dono = ticket.currentStep?.requiredRole?.name || 'CRD';
+  if (!['ENG', 'DEV'].includes(quem?.setor) && dono !== quem?.setor) throw erroComStatus(403, 'Sem permissão para mexer nesta tarefa.');
+  return ticket;
+}
+
 export const ticketService = {
   async listarTodos() {
     return prisma.ticket.findMany({
@@ -37,26 +56,26 @@ export const ticketService = {
     });
   },
 
+  // userId é o id do User logado (pessoa), vindo da sessão — antes era o nome
+  // do setor, resolvido pro usuário genérico dele ("Equipe Desenho").
   async adicionarComentario(ticketId, userId, text) {
-    const role = await prisma.role.findUnique({ where: { name: userId } });
-    const user = await prisma.user.findFirst({ where: { roleId: role.id } });
-
     return prisma.comment.create({
-      data: { text, ticketId, userId: user.id },
+      data: { text, ticketId, userId },
       include: { user: true }
     });
   },
 
-  async moverTicket(ticketId, toStepId, userId) {
-    const role = await prisma.role.findUnique({ where: { name: userId } });
-    const user = await prisma.user.findFirst({ where: { roleId: role.id } });
-    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
-    const toStep = await prisma.workflowStep.findUnique({ where: { id: toStepId } });
+  async moverTicket(ticketId, toStepId, quem) {
+    const ticket = await cartaoComPermissao(ticketId, quem);
+    const toStep = await prisma.workflowStep.findUnique({ where: { id: String(toStepId) } });
+    // A etapa de destino precisa ser do mesmo projeto do cartão.
+    if (!toStep || toStep.workflowId !== ticket.workflowId) throw erroComStatus(400, 'Etapa de destino inválida.');
+    const userId = quem.id;
 
     return prisma.$transaction(async (tx) => {
       const updatedTicket = await tx.ticket.update({ where: { id: ticketId }, data: { currentStepId: toStepId } });
       await tx.ticketHistory.create({
-        data: { ticketId, fromStepId: ticket.currentStepId, toStepId, userId: user.id }
+        data: { ticketId, fromStepId: ticket.currentStepId, toStepId, userId }
       });
 
       if (toStep.step_name === 'Concluído') {
@@ -67,7 +86,8 @@ export const ticketService = {
     });
   },
 
-  async excluirTicket(ticketId) {
+  async excluirTicket(ticketId, quem) {
+    await cartaoComPermissao(ticketId, quem);
     await prisma.$transaction([
       prisma.comment.deleteMany({ where: { ticketId } }),
       prisma.ticketHistory.deleteMany({ where: { ticketId } }),

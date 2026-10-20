@@ -160,15 +160,125 @@ model User {
   id            String  @id @default(uuid())
   name          String
   email         String  @unique
+  // Nome de usuário digitado na tela de login (minúsculas, sem espaço).
+  login         String  @unique
   // Nulo = usuário ainda não criou a própria senha (força o fluxo de
   // "criar senha" no primeiro login, em vez de aceitar qualquer coisa).
   password_hash String?
+
+  // Cada User é uma pessoa (vários por setor). Desativar em vez de apagar:
+  // TicketHistory e Comment apontam pra cá, e o histórico não pode sumir.
+  ativo         Boolean @default(true)
+  // Campos do SisPonto: quem está sujeito ao registro de ponto e como.
+  registraPonto Boolean @default(true)
+  horista       Boolean @default(false)
+  // "integral" | "manha" | "tarde" (jornadas do sis-ponto.json) ou nulo.
+  padraoHorarioId String?
+  // A partir de quando a jornada é cobrada: horários previstos sem batida
+  // (esquecimento/falta) só são gerados de lá pra frente.
+  pontoDesde    DateTime @default(now())
 
   roleId        String
   role          Role   @relation(fields: [roleId], references: [id])
 
   history       TicketHistory[]
   comments      Comment[]
+  batidas       PontoBatida[]
+  sessoesPonto  PontoSessao[]
+}
+
+enum PontoTipo {
+  ENTRADA
+  SAIDA
+}
+
+// Uma batida de ponto (evento, não par). Nasce no aparelho — às vezes offline —
+// e chega pelo POST /sis-ponto/sync; clientId único torna o reenvio idempotente.
+// Nada de salário aqui: o CCF só conhece os pontos.
+model PontoBatida {
+  id                   String    @id @default(uuid())
+  clientId             String    @unique
+  userId               String
+  user                 User      @relation(fields: [userId], references: [id])
+  tipo                 PontoTipo
+  // Hora do aparelho no momento da batida.
+  batidoEm             DateTime
+  // Hora em que o servidor recebeu (pode ser bem depois, se estava offline).
+  recebidoEm           DateTime  @default(now())
+  deviceId             String?
+  // Quem estava logado no aparelho (sempre a própria pessoa nas batidas do app).
+  registradoPorId      String?
+  // "APP" | "LEGADO" (importado do sis-ponto.json) | "PREVISTA" (horário da
+  // jornada em que a pessoa não bateu — gerado pelo servidor)
+  origem               String    @default("APP")
+  // Só para PREVISTA: "PENDENTE" (aguarda o ENG) | "ABONADA" (conta as horas)
+  // | "FALTA" (desconta as horas).
+  situacao             String?
+  decididoPorId        String?
+  decididoEm           DateTime?
+  // Sequência inválida (ex.: duas entradas seguidas) não é descartada: fica
+  // marcada pra revisão e sai sinalizada no export.
+  inconsistente        Boolean   @default(false)
+  motivoInconsistencia String?
+  // Exclusão pela tela vira soft delete: a batida some das telas e do export,
+  // mas o registro de que existiu (e quem tirou) fica.
+  removidoEm           DateTime?
+  removidoPorId        String?
+  // Correções do ENG exigem motivo: o da inclusão (origem AJUSTE) e o da exclusão.
+  motivoAjuste         String?
+  motivoRemocao        String?
+
+  @@index([userId, batidoEm])
+}
+
+// Último contato de cada aparelho que bate ponto. É o melhor indício que o
+// servidor tem de batidas ainda presas num celular offline.
+// Sessão "só ponto" de um aparelho: o token dela só envia batidas
+// (POST /sis-ponto/sync), nada mais. Vale até expiraEm, que é renovado a cada
+// envio aceito; revogar (por aparelho ou todas da pessoa) corta na hora.
+model PontoSessao {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  deviceId      String
+  criadoEm      DateTime  @default(now())
+  expiraEm      DateTime
+  ultimoUso     DateTime?
+  userAgent     String?
+  revogadoEm    DateTime?
+  revogadoPorId String?
+
+  @@index([userId])
+}
+
+// Batida que chegou mas não pôde entrar no ponto (sessão expirada/revogada,
+// funcionário inativo, ponto de outra pessoa...). Não é descartada: fica aqui
+// para o RH aceitar (vira PontoBatida) ou descartar. Se a mesma batida
+// (clientId) entrar depois normalmente, sai sozinha daqui.
+model PontoBatidaQuarentena {
+  id            String    @id @default(uuid())
+  clientId      String    @unique
+  // Quem o aparelho diz que bateu (não confirmado pelo servidor).
+  funcionarioId String
+  tipo          PontoTipo
+  batidoEm      DateTime
+  deviceId      String?
+  recebidoEm    DateTime  @default(now())
+  motivo        String
+  // "PENDENTE" | "ACEITA" | "DESCARTADA" | "RESOLVIDA" (entrou depois pelo envio normal)
+  situacao      String    @default("PENDENTE")
+  decididoPorId String?
+  decididoEm    DateTime?
+
+  @@index([situacao])
+}
+
+model PontoDispositivo {
+  deviceId      String   @id
+  ultimoContato DateTime
+  // Quantas batidas o aparelho ainda tinha na fila no último contato.
+  pendentes     Int      @default(0)
+  userAgent     String?
 }
 
 model Workflow {
@@ -179,6 +289,8 @@ model Workflow {
   endereco    String?
   details     String?
   terreno     String?  @default("Urbano")
+  status      String   @default("ATIVO")
+
 
   servicoId   String?
   servico     Servico? @relation(fields: [servicoId], references: [id])
@@ -485,10 +597,12 @@ model Tarefa {
   observacoes String?
   linkPasta   String?   // caminho de rede/local da pasta do serviço (ex.: \\SERVIDOR\Pasta)
 
-  status       String    @default("PENDENTE") // PENDENTE | CONCLUIDA
+  status       String    @default("PENDENTE") // PENDENTE | AGUARDO | CONCLUIDA
+  motivoAguardo String?  // o que falta pra concluir, preenchido ao colocar em aguardo
   criadoPor    String?   // setor de quem lançou (usuarioLogado no momento da criação)
   concluidoPor String?
   concluido_em DateTime?
+  ordem        Int       @default(0)
 
   created_at  DateTime  @default(now())
   updated_at  DateTime  @updatedAt

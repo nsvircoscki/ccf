@@ -13,6 +13,19 @@ function pastaCobrancas() {
   return caminho;
 }
 
+async function excluir(id) {
+  //Não permite excluir boletos já emitidos no banco
+  const cobranca = await prisma.cobranca.findUnique({
+    where: { id },
+    include: { parcelas: true }
+  });
+  if (!cobranca) throw new Error('Cobrança não encontrada.');
+  const temEmitido = cobranca.parcelas.some(p => p.status === 'EMITIDO');
+    if(temEmitido) throw new Error('Não é possível excluir parcelas de boletos que já foram emitidos');
+
+    await prisma.cobranca.delete({ where: { id } });
+}
+
 async function listar({ servicoId } = {}) {
   return prisma.cobranca.findMany({
     where: servicoId ? { servicoId } : {},
@@ -24,6 +37,16 @@ async function listar({ servicoId } = {}) {
 // Cada parcela vira um boleto emitido individualmente. O frontend já manda a
 // divisão calculada (ver FaturamentoView.jsx), mas revalidamos aqui — nunca
 // confiar só no que veio do navegador.
+// O vencimento chega do <input type="date"> como 'AAAA-MM-DD'. new Date() lê
+// esse formato como MEIA-NOITE UTC, que no Brasil (UTC-3) é o dia anterior às
+// 21h — por isso o boleto de dia 15 aparecia como dia 14 na tela. Gravando ao
+// meio-dia UTC, nenhum fuso entre UTC-11 e UTC+12 muda o dia do calendário.
+function dataDeVencimento(valor) {
+  if (valor instanceof Date) return valor;
+  const texto = String(valor).trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(texto) ? new Date(`${texto}T12:00:00.000Z`) : new Date(texto);
+}
+
 async function criar(dados) {
   if (!dados.nomeCliente || !dados.documentoCliente) {
     throw new Error('Nome e documento do cliente são obrigatórios.');
@@ -57,7 +80,7 @@ async function criar(dados) {
         create: dados.parcelas.map((parcela, index) => ({
           numero: parcela.numero || index + 1,
           valor: Number(parcela.valor),
-          vencimento: new Date(parcela.vencimento),
+          vencimento: dataDeVencimento(parcela.vencimento),
         })),
       },
     },
@@ -156,4 +179,4 @@ async function caminhoArquivoPdf(cobrancaId, numeroParcela) {
   return { caminho: parcela.caminhoPdf, nome: `boleto-${cobrancaId}-parcela-${numeroParcela}.pdf` };
 }
 
-export const cobrancaService = { listar, criar, emitirParcela, tentarBaixarPdf, caminhoArquivoPdf };
+export const cobrancaService = { listar, criar, emitirParcela, tentarBaixarPdf, caminhoArquivoPdf, excluir };

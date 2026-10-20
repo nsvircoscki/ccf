@@ -14,13 +14,19 @@ export const tarefaService = {
   async reabrir(id) {
     return api.reabrirTarefa(id);
   },
+  async colocarEmAguardo(id, motivo) {
+    return api.colocarTarefaEmAguardo(id, motivo);
+  },
+  async retomar(id) {
+    return api.retomarTarefa(id);
+  },
   async excluir(id) {
     return api.excluirTarefa(id);
   },
   async atualizarObservacao(id, observacoes) {
     return api.atualizarObservacaoTarefa(id, observacoes);
   },
-  async abrirPasta(caminho) {
-    return api.abrirPastaTarefa(caminho);
+  async reordenar(ids) {
+    return api.reordenarTarefas(ids);
   },
 };

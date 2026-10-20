@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { notificationService } from './notificationService.js';
+import { CONFIG_FERIADOS_PADRAO, validarConfigFeriados } from './ponto/feriados.js';
+import { dataLocalParaUtc } from './ponto/sequencia.js';
+import { SETORES_GESTAO_PONTO } from '../config/permissoes.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DATA_FILE = path.resolve(DATA_DIR, 'sis-ponto.json');
@@ -18,7 +20,8 @@ function diasIguais(turnos) {
 }
 
 const PADROES_HORARIO_PADRAO = {
-  integral: { dias: diasIguais([{ entrada: '08:00', saida: '12:00' }, { entrada: '13:00', saida: '18:00' }]) },
+  // Horário da CCF: 07:40–12:00 e 13:00–17:30 (sexta até 17:20) = 44 h/semana.
+  integral: { dias: { ...diasIguais([{ entrada: '07:40', saida: '12:00' }, { entrada: '13:00', saida: '17:30' }]), sexta: [{ entrada: '07:40', saida: '12:00' }, { entrada: '13:00', saida: '17:20' }] } },
   manha: { dias: diasIguais([{ entrada: '07:00', saida: '13:00' }]) },
   tarde: { dias: diasIguais([{ entrada: '13:00', saida: '19:00' }]) },
 };
@@ -40,6 +43,35 @@ const defaultStore = {
 };
 
 const STATUS_VALIDOS = ['Em análise', 'Aceita', 'Recusada', 'Inválida'];
+
+// Motivos padrão de ajuste de ponto (a lista da tela fica em
+// frontend/src/page/sisPonto/sisPontoData.js — manter as duas iguais).
+// Em "outro", a descrição por escrito é obrigatória.
+export const TIPOS_JUSTIFICATIVA = [
+  'esquecimento', 'falha_registro', 'atraso', 'levantamento', 'atestado', 'consulta',
+  'falta_justificada', 'saida_autorizada', 'compensacao', 'outro',
+];
+// Motivos que saíram da lista: justificativas antigas continuam válidas
+// (e podem ser editadas sem trocar o motivo), mas não dá pra escolhê-los de novo.
+const TIPOS_JUSTIFICATIVA_ANTIGOS = ['trabalho_externo', 'atraso_transporte', 'hora_extra'];
+
+// Prazo para a pessoa justificar, contado a partir do fim do período
+// justificado (dia + horaFim). O ENG muda pela tela; sem nada salvo, 48 h.
+export const PRAZO_JUSTIFICATIVA_PADRAO_HORAS = 48;
+
+export function prazoJustificativaEncerrado(dia, horaFim, prazoHoras, agora = new Date()) {
+  const fim = dataLocalParaUtc(dia, horaFim);
+  return agora.getTime() > fim.getTime() + prazoHoras * 3600 * 1000;
+}
+
+const SETORES_ADMIN = [...SETORES_GESTAO_PONTO, 'DEV'];
+const ehAdmin = (quem) => SETORES_ADMIN.includes(quem?.setor);
+
+function validarTipoEMotivo(tipo, motivo, tipoAnterior = null) {
+  const antigoMantido = tipo === tipoAnterior && TIPOS_JUSTIFICATIVA_ANTIGOS.includes(tipo);
+  if (!TIPOS_JUSTIFICATIVA.includes(tipo) && !antigoMantido) throw new Error('Escolha o motivo da justificativa.');
+  if (tipo === 'outro' && !motivo) throw new Error('Escreva a descrição quando escolher "Outro".');
+}
 
 async function ensureStore() {
   await fs.mkdir(DATA_DIR, { recursive: true });
@@ -87,185 +119,83 @@ async function writeStore(store) {
   await fs.writeFile(DATA_FILE, JSON.stringify(store, null, 2), 'utf8');
 }
 
-export async function listarFuncionarios() {
-  const store = await comFila(readStore);
-  return store.funcionarios || [];
-}
-
-export async function listarRegistros() {
-  const store = await comFila(readStore);
-  return store.registros || {};
-}
-
-export async function criarFuncionario(funcionario) {
-  return comFila(() => criarFuncionarioImpl(funcionario));
-}
-
-async function criarFuncionarioImpl(funcionario) {
-  const store = await readStore();
-  const id = funcionario.id || `${funcionario.setor || 'ENG'}-${Date.now()}`;
-  const novo = {
-    id,
-    nome: String(funcionario.nome || '').trim(),
-    setor: String(funcionario.setor || 'ENG').trim().toUpperCase(),
-    horista: Boolean(funcionario.horista),
-    padraoHorarioId: PADRAO_HORARIO_IDS.includes(funcionario.padraoHorarioId) ? funcionario.padraoHorarioId : null,
-  };
-
-  if (!novo.nome || !novo.setor) {
-    throw new Error('Nome e setor são obrigatórios.');
-  }
-
-  const atual = store.funcionarios || [];
-  const existente = atual.find((item) => item.id === id || (item.nome === novo.nome && item.setor === novo.setor));
-  if (existente) return existente;
-
-  store.funcionarios = [...atual, novo];
-  await writeStore(store);
-  return novo;
-}
-
-export async function atualizarFuncionario(id, dados) {
-  if (dados.padraoHorarioId !== undefined && dados.padraoHorarioId !== null && !PADRAO_HORARIO_IDS.includes(dados.padraoHorarioId)) {
-    throw new Error('Padrão de horário inválido.');
-  }
-
-  return comFila(() => atualizarFuncionarioImpl(id, dados));
-}
-
-async function atualizarFuncionarioImpl(id, dados) {
-  const store = await readStore();
-  const atual = store.funcionarios || [];
-  const index = atual.findIndex((item) => item.id === id);
-  if (index === -1) return null;
-
-  atual[index] = {
-    ...atual[index],
-    ...dados,
-    nome: String(dados.nome || atual[index].nome).trim(),
-    setor: String(dados.setor || atual[index].setor).trim().toUpperCase(),
-  };
-
-  store.funcionarios = atual;
-  await writeStore(store);
-  return atual[index];
-}
-
-export async function excluirFuncionario(id) {
-  return comFila(() => excluirFuncionarioImpl(id));
-}
-
-async function excluirFuncionarioImpl(id) {
-  const store = await readStore();
-  const funcionarios = (store.funcionarios || []).filter((item) => item.id !== id);
-  store.funcionarios = funcionarios;
-
-  // Sem isso, os registros de ponto e as justificativas do funcionário excluído
-  // continuam órfãos no store e voltam a aparecer nas planilhas individuais.
-  const registros = store.registros || {};
-  Object.keys(registros).forEach((chave) => {
-    if (registros[chave] && Object.prototype.hasOwnProperty.call(registros[chave], id)) {
-      delete registros[chave][id];
-      if (Object.keys(registros[chave]).length === 0) delete registros[chave];
-    }
-  });
-  store.registros = registros;
-
-  store.justificativas = (store.justificativas || []).filter((item) => item.funcionarioId !== id);
-
-  await writeStore(store);
-  return funcionarios;
-}
-
-export async function registrarPonto(data) {
-  return comFila(() => registrarPontoImpl(data));
-}
-
-async function registrarPontoImpl(data) {
-  const store = await readStore();
-  const registros = store.registros || {};
-  const chave = data.data; // yyyy-mm-dd
-  const id = data.funcionarioId;
-  const registrosDia = registros[chave] || {};
-  const lista = registrosDia[id] || [];
-  registrosDia[id] = [...lista, data.tempo];
-  registros[chave] = registrosDia;
-  store.registros = registros;
-  await writeStore(store);
-
-  // Quem decide se o registro ficou fora do horário é o front (que já resolveu
-  // o horário-base/override antes de chamar essa rota); aqui só disparamos o aviso.
-  if (data.atrasado) {
-    const funcionario = (store.funcionarios || []).find((item) => item.id === id);
-    if (funcionario) {
-      const direcao = data.tipo === 'Saída' ? 'antes do' : 'após o';
-      const mensagem = `"${funcionario.nome}" bateu o ponto ${data.minutosAtraso ?? ''} min ${direcao} horário em ${chave}. Envie uma justificativa.`;
-      notificationService.notificarSetor(funcionario.setor, mensagem, 'sis-ponto').catch((erro) => {
-        console.error('Erro ao notificar atraso de ponto:', erro);
-      });
-    }
-  }
-
-  return { ok: true };
-}
-
-export async function excluirRegistro(funcionarioId, chave, tempo) {
-  return comFila(() => excluirRegistroImpl(funcionarioId, chave, tempo));
-}
-
-async function excluirRegistroImpl(funcionarioId, chave, tempo) {
-  const store = await readStore();
-  const registros = store.registros || {};
-  const registrosDia = registros[chave] || {};
-  const lista = registrosDia[funcionarioId] || [];
-  const indice = lista.indexOf(tempo);
-  if (indice === -1) return null;
-
-  const novaLista = lista.filter((_, item) => item !== indice);
-  if (novaLista.length) {
-    registrosDia[funcionarioId] = novaLista;
-  } else {
-    delete registrosDia[funcionarioId];
-  }
-  registros[chave] = registrosDia;
-  store.registros = registros;
-  await writeStore(store);
-  return novaLista;
-}
+// Funcionários e batidas de ponto ficam no Postgres (User + PontoBatida, ver
+// services/ponto/batidaService.js). Neste arquivo restam justificativas e
+// padrões de horário; as chaves "funcionarios" e "registros" antigas só são
+// lidas pelo script de migração (scripts/migrarSisPontoJson.js).
 
 export async function listarJustificativas() {
   const store = await comFila(readStore);
   return store.justificativas || [];
 }
 
-export async function criarJustificativa(dados) {
-  return comFila(() => criarJustificativaImpl(dados));
+// Cada pessoa justifica o próprio ponto: quem, nome e setor vêm da sessão.
+// opcoes.ignorarPrazo: só para scripts de teste (seed).
+export async function criarJustificativa(dados, quem, opcoes = {}) {
+  return comFila(() => criarJustificativaImpl(dados, quem, opcoes));
 }
 
-async function criarJustificativaImpl(dados) {
+// Tudo o que vem da tela é conferido aqui: formato do dia e dos horários,
+// tamanho dos textos e o anexo (só imagem JPG/PNG, até ~8 MB).
+const DIA_REGEX = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const ANEXO_REGEX = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+=*$/;
+const ANEXO_MAX_CARACTERES = 11 * 1024 * 1024; // ~8 MB de imagem em base64
+const MOTIVO_MAX = 2000;
+
+function validarPeriodo(dia, horaInicio, horaFim) {
+  if (!DIA_REGEX.test(dia) || !HORA_REGEX.test(horaInicio) || !HORA_REGEX.test(horaFim)) {
+    throw new Error('Preencha o dia e o período da justificativa.');
+  }
+  if (horaFim <= horaInicio) throw new Error('O horário final precisa ser depois do inicial.');
+}
+
+function validarAnexo(dados) {
+  const dataUrl = dados.anexoDataUrl;
+  if (dataUrl === undefined) return {};
+  if (dataUrl === null || dataUrl === '') return { anexoNome: null, anexoTipo: null, anexoDataUrl: null };
+  if (typeof dataUrl !== 'string' || dataUrl.length > ANEXO_MAX_CARACTERES || !ANEXO_REGEX.test(dataUrl)) {
+    throw new Error('O documento precisa ser uma imagem JPG ou PNG de até 8 MB.');
+  }
+  return {
+    anexoNome: String(dados.anexoNome || 'documento').slice(0, 200),
+    anexoTipo: dataUrl.startsWith('data:image/png') ? 'image/png' : 'image/jpeg',
+    anexoDataUrl: dataUrl,
+  };
+}
+
+function conferirPrazo(store, dia, horaFim, quem) {
+  const prazoHoras = lerPrazoJustificativa(store);
+  if (!ehAdmin(quem) && prazoJustificativaEncerrado(dia, horaFim, prazoHoras)) {
+    throw new Error(`O prazo para justificar ${dia.split('-').reverse().join('/')} (${prazoHoras} h) já terminou. Fale com o ENG.`);
+  }
+}
+
+async function criarJustificativaImpl(dados, quem, { ignorarPrazo = false } = {}) {
   const store = await readStore();
-  const funcionarioId = String(dados.funcionarioId || '').trim();
   const dia = String(dados.dia || '').trim();
   const horaInicio = String(dados.horaInicio || '').trim();
   const horaFim = String(dados.horaFim || '').trim();
-  const motivo = String(dados.motivo || '').trim();
+  const tipo = String(dados.tipo || '').trim();
+  const motivo = String(dados.motivo || '').trim().slice(0, MOTIVO_MAX);
 
-  if (!funcionarioId || !dia || !horaInicio || !horaFim || !motivo) {
-    throw new Error('Preencha o dia, o período e a explicação da justificativa.');
-  }
+  validarPeriodo(dia, horaInicio, horaFim);
+  validarTipoEMotivo(tipo, motivo);
+  if (!ignorarPrazo) conferirPrazo(store, dia, horaFim, quem);
+  const anexo = validarAnexo(dados);
 
   const nova = {
     id: `just-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    funcionarioId,
-    nome: String(dados.nome || '').trim(),
-    setor: String(dados.setor || 'ENG').trim().toUpperCase(),
+    funcionarioId: quem.id,
+    nome: quem.nome,
+    setor: quem.setor,
     dia,
     horaInicio,
     horaFim,
+    tipo,
     motivo,
-    anexoNome: dados.anexoNome || null,
-    anexoTipo: dados.anexoTipo || null,
-    anexoDataUrl: dados.anexoDataUrl || null,
+    anexoNome: anexo.anexoNome ?? null,
+    anexoTipo: anexo.anexoTipo ?? null,
+    anexoDataUrl: anexo.anexoDataUrl ?? null,
     status: 'Em análise',
     criadoEm: new Date().toISOString(),
     atualizadoEm: new Date().toISOString(),
@@ -273,42 +203,81 @@ async function criarJustificativaImpl(dados) {
 
   store.justificativas = [...(store.justificativas || []), nova];
   await writeStore(store);
-
-  const mensagem = `"${nova.nome}" (${nova.setor}) enviou uma justificativa de ponto para ${nova.dia}.`;
-  notificationService.notificarSetor('ENG', mensagem, 'sis-ponto-justificativa').catch((erro) => {
-    console.error('Erro ao notificar justificativa de ponto:', erro);
-  });
-
+  // Sem notificação no sininho: o ENG vê pelo contador da aba Justificativas.
   return nova;
 }
 
-export async function atualizarJustificativa(id, dados) {
-  return comFila(() => atualizarJustificativaImpl(id, dados));
+// A pessoa só mexe na própria justificativa (e só pode devolvê-la para
+// "Em análise"); aceitar/recusar é da administração (ENG/DEV).
+export async function atualizarJustificativa(id, dados, quem) {
+  return comFila(() => atualizarJustificativaImpl(id, dados, quem));
 }
 
-async function atualizarJustificativaImpl(id, dados) {
+async function atualizarJustificativaImpl(id, dados, quem) {
   const store = await readStore();
   const atual = store.justificativas || [];
   const index = atual.findIndex((item) => item.id === id);
   if (index === -1) return null;
 
   const existente = atual[index];
+  if (!ehAdmin(quem) && existente.funcionarioId !== quem?.id) {
+    throw new Error('Você só pode alterar as suas justificativas.');
+  }
   const proximoStatus = dados.status ? String(dados.status).trim() : existente.status;
   if (dados.status && !STATUS_VALIDOS.includes(proximoStatus)) {
     throw new Error('Status de justificativa inválido.');
   }
+  if (!ehAdmin(quem) && dados.status && proximoStatus !== 'Em análise') {
+    throw new Error('Só a administração aceita ou recusa justificativas.');
+  }
+  // O funcionário só edita o que ainda está em análise; decidida (aceita,
+  // inválida ou recusada — todas contam no banco de horas, as duas últimas
+  // só ficam registradas para o relatório) não muda mais.
+  const alteraConteudo = ['dia', 'horaInicio', 'horaFim', 'tipo', 'motivo', 'anexoDataUrl'].some((campo) => dados[campo] !== undefined);
+  if (!ehAdmin(quem) && alteraConteudo && ['Aceita', 'Inválida', 'Recusada'].includes(existente.status)) {
+    throw new Error('Esta justificativa já foi decidida e não pode ser alterada.');
+  }
+  const dia = dados.dia !== undefined ? String(dados.dia).trim() : existente.dia;
+  const horaInicio = dados.horaInicio !== undefined ? String(dados.horaInicio).trim() : existente.horaInicio;
+  const horaFim = dados.horaFim !== undefined ? String(dados.horaFim).trim() : existente.horaFim;
+  if (dados.dia !== undefined || dados.horaInicio !== undefined || dados.horaFim !== undefined) {
+    validarPeriodo(dia, horaInicio, horaFim);
+    // Mudar para outro dia/horário é como justificar algo novo: vale o prazo.
+    if (dia !== existente.dia || horaFim !== existente.horaFim) conferirPrazo(store, dia, horaFim, quem);
+  }
+  const anexo = validarAnexo(dados);
+  if (dados.tipo !== undefined || dados.motivo !== undefined) {
+    validarTipoEMotivo(
+      String(dados.tipo ?? existente.tipo ?? '').trim(),
+      String(dados.motivo ?? existente.motivo ?? '').trim(),
+      existente.tipo,
+    );
+  }
+
+  // Recusa/inválida/aceita anterior não se perde quando o funcionário refaz
+  // (a recusada volta para "Em análise"): fica no histórico, para o relatório.
+  const novoStatus = !ehAdmin(quem) && alteraConteudo ? 'Em análise' : proximoStatus;
+  const decididaAntes = ['Aceita', 'Inválida', 'Recusada'].includes(existente.status);
+  const historicoDecisoes = decididaAntes && novoStatus !== existente.status
+    ? [...(existente.historicoDecisoes || []), {
+      status: existente.status, decididoEm: existente.decididoEm || existente.atualizadoEm,
+      dia: existente.dia, horaInicio: existente.horaInicio, horaFim: existente.horaFim, tipo: existente.tipo, motivo: existente.motivo,
+    }]
+    : existente.historicoDecisoes;
+  const agora = new Date().toISOString();
 
   atual[index] = {
     ...existente,
-    ...(dados.dia !== undefined ? { dia: dados.dia } : {}),
-    ...(dados.horaInicio !== undefined ? { horaInicio: dados.horaInicio } : {}),
-    ...(dados.horaFim !== undefined ? { horaFim: dados.horaFim } : {}),
-    ...(dados.motivo !== undefined ? { motivo: dados.motivo } : {}),
-    ...(dados.anexoNome !== undefined ? { anexoNome: dados.anexoNome } : {}),
-    ...(dados.anexoTipo !== undefined ? { anexoTipo: dados.anexoTipo } : {}),
-    ...(dados.anexoDataUrl !== undefined ? { anexoDataUrl: dados.anexoDataUrl } : {}),
-    status: proximoStatus,
-    atualizadoEm: new Date().toISOString(),
+    dia,
+    horaInicio,
+    horaFim,
+    ...(dados.tipo !== undefined ? { tipo: String(dados.tipo).trim() } : {}),
+    ...(dados.motivo !== undefined ? { motivo: String(dados.motivo).trim().slice(0, MOTIVO_MAX) } : {}),
+    ...anexo,
+    status: novoStatus,
+    ...(historicoDecisoes ? { historicoDecisoes } : {}),
+    ...(ehAdmin(quem) && dados.status && novoStatus !== 'Em análise' ? { decididoEm: agora } : {}),
+    atualizadoEm: agora,
   };
 
   store.justificativas = atual;
@@ -316,14 +285,22 @@ async function atualizarJustificativaImpl(id, dados) {
   return atual[index];
 }
 
-export async function excluirJustificativa(id) {
-  return comFila(() => excluirJustificativaImpl(id));
+export async function excluirJustificativa(id, quem) {
+  return comFila(() => excluirJustificativaImpl(id, quem));
 }
 
-async function excluirJustificativaImpl(id) {
+async function excluirJustificativaImpl(id, quem) {
   const store = await readStore();
   const atual = store.justificativas || [];
-  const existe = atual.some((item) => item.id === id);
+  const alvo = atual.find((item) => item.id === id);
+  if (alvo && !ehAdmin(quem) && alvo.funcionarioId !== quem?.id) {
+    throw new Error('Você só pode excluir as suas justificativas.');
+  }
+  // Decidida (ou já decidida antes) fica registrada para o relatório.
+  if (alvo && !ehAdmin(quem) && (alvo.status !== 'Em análise' || alvo.historicoDecisoes?.length)) {
+    throw new Error('Justificativa já analisada não pode ser excluída.');
+  }
+  const existe = Boolean(alvo);
   store.justificativas = atual.filter((item) => item.id !== id);
   await writeStore(store);
   return existe;
@@ -368,4 +345,96 @@ async function atualizarPadraoHorarioImpl(padraoId, dias) {
   store.padroesHorario = atuais;
   await writeStore(store);
   return atuais[padraoId];
+}
+
+// Feriados: os nacionais são calculados (services/ponto/feriados.js); aqui
+// fica só o que a empresa decide — Carnaval/Corpus Christi e os feriados
+// municipais/estaduais ou folgas avulsas. Sem nada salvo, vale o padrão da CCF.
+export async function obterConfigFeriados() {
+  const store = await comFila(readStore);
+  return validarConfigFeriados(store.feriados ?? CONFIG_FERIADOS_PADRAO);
+}
+
+export async function atualizarConfigFeriados(config) {
+  const validado = validarConfigFeriados(config);
+  return comFila(async () => {
+    const store = await readStore();
+    store.feriados = validado;
+    await writeStore(store);
+    return validado;
+  });
+}
+
+// Regras do ponto que o ENG ajusta pela tela (por enquanto, só o prazo).
+function lerPrazoJustificativa(store) {
+  const valor = Number(store.regrasPonto?.prazoJustificativaHoras);
+  return Number.isFinite(valor) && valor > 0 ? valor : PRAZO_JUSTIFICATIVA_PADRAO_HORAS;
+}
+
+export async function obterRegrasPonto() {
+  const store = await comFila(readStore);
+  return { prazoJustificativaHoras: lerPrazoJustificativa(store) };
+}
+
+export async function atualizarRegrasPonto(dados = {}) {
+  const prazo = Number(dados.prazoJustificativaHoras);
+  if (!Number.isInteger(prazo) || prazo < 1 || prazo > 24 * 60) {
+    throw new Error('O prazo precisa ser um número inteiro de horas (de 1 a 1440).');
+  }
+  return comFila(async () => {
+    const store = await readStore();
+    store.regrasPonto = { ...(store.regrasPonto || {}), prazoJustificativaHoras: prazo };
+    await writeStore(store);
+    return { prazoJustificativaHoras: prazo };
+  });
+}
+
+// Lançamentos manuais no banco de horas (saldo trazido de antes do sistema,
+// crédito/débito combinado...). Só a gestão do ponto lança e exclui; cada
+// pessoa vê os próprios. Entram no saldo do mês do dia lançado.
+const LANCAMENTO_MAX_MINUTOS = 1000 * 60;
+
+export async function listarLancamentosBanco(quem) {
+  const store = await comFila(readStore);
+  const todos = store.lancamentosBanco || [];
+  return ehAdmin(quem) ? todos : todos.filter((l) => l.funcionarioId === quem?.id);
+}
+
+export async function criarLancamentoBanco(dados, quem, funcionario) {
+  const dia = String(dados.dia || '').trim();
+  const minutos = Number(dados.minutos);
+  const motivo = String(dados.motivo || '').trim().slice(0, 500);
+  if (!DIA_REGEX.test(dia)) throw new Error('Informe o dia do lançamento.');
+  if (!Number.isInteger(minutos) || minutos === 0 || Math.abs(minutos) > LANCAMENTO_MAX_MINUTOS) {
+    throw new Error('Informe as horas do lançamento (diferente de zero).');
+  }
+  if (motivo.length < 3) throw new Error('Informe o motivo do lançamento.');
+  const novo = {
+    id: `banco-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    funcionarioId: funcionario.id,
+    nome: funcionario.name,
+    dia,
+    minutos,
+    motivo,
+    por: quem.nome,
+    porId: quem.id,
+    criadoEm: new Date().toISOString(),
+  };
+  return comFila(async () => {
+    const store = await readStore();
+    store.lancamentosBanco = [...(store.lancamentosBanco || []), novo];
+    await writeStore(store);
+    return novo;
+  });
+}
+
+export async function excluirLancamentoBanco(id) {
+  return comFila(async () => {
+    const store = await readStore();
+    const atual = store.lancamentosBanco || [];
+    if (!atual.some((l) => l.id === id)) return false;
+    store.lancamentosBanco = atual.filter((l) => l.id !== id);
+    await writeStore(store);
+    return true;
+  });
 }

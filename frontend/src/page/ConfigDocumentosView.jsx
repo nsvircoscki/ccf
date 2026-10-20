@@ -7,7 +7,8 @@ import { Actions, CheckboxList, Section, Shell, Toast, useToast, C } from '../co
 const TIPOS_SERVICO = [
   'Retificação', 'Desmembramento', 'Unificação', 'Usucapião', 'Alteração de Divisas',
   'CAR', 'Certificação INCRA', 'Escritura', 'Conferência', 'Cadastral',
-  'Locação', 'Movimentação de Terra', 'Extremação', 'Outros',
+  'Locação', 'Movimentação de Terra', 'Extremação', 'Altimetria', 'DANC',
+  'Relatório de Usucapião', 'CCIR/ITR', 'Outros',
 ];
 
 export default function ConfigDocumentosView({ onBack }) {

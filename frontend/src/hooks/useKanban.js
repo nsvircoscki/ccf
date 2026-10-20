@@ -1,6 +1,6 @@
 // src/hooks/useKanban.js
 import { useState, useEffect, useCallback } from 'react';
-import { api } from '../services/api';
+import { api, temToken } from '../services/api';
 
 export function useKanban() {
   const [tickets, setTickets] = useState([]);
@@ -8,6 +8,9 @@ export function useKanban() {
   const [workflowAtivo, setWorkflowAtivo] = useState(null);
 
   const carregarDados = useCallback(async () => {
+    // O hook roda desde a tela de login; sem sessão o backend só devolveria
+    // 401. O App chama carregarDados logo após o login.
+    if (!temToken()) return;
     try {
       const dadosWf = await api.getWorkflows();
       if (Array.isArray(dadosWf)) {
@@ -91,6 +94,22 @@ export function useKanban() {
     }
   };
 
+  const alterarStatusProcessoLocal = async (workflowId, status) => {
+    // Atualiza o array de workflows (para KanbanView)
+    setWorkflows(prev => prev.map(w => w.id === workflowId ? { ...w, status } : w));
+    // Atualiza o status dentro de cada ticket (para PesquisaView, que lê ticket.workflow.status)
+    setTickets(prev => prev.map(t =>
+      t.workflowId === workflowId ? { ...t, workflow: { ...t.workflow, status } } : t
+    ));
+    try {
+      const res = await api.alterarStatusProcesso(workflowId, status);
+      if (!res.ok) throw new Error();
+    } catch (error) {
+      alert("Erro ao alterar status.");
+      carregarDados();
+    }
+  };
+
   return {
     tickets,
     workflows,
@@ -102,6 +121,7 @@ export function useKanban() {
     excluirCartaoLocal,
     criarTicketLocal,
     atualizarDescricaoLocal,
-    atualizarDetalhesProjeto
+    atualizarDetalhesProjeto,
+    alterarStatusProcessoLocal
   };
 }

@@ -19,6 +19,15 @@ async function buscarCatalogo(tx = prisma) {
 }
 
 export const workflowService = {
+
+  async alterarStatus(id, status) {
+    return prisma.workflow.update({
+      where: { id },
+      data: { status }
+    });
+  },
+
+
   async listarTodos() {
     return prisma.workflow.findMany({
       include: {
@@ -31,9 +40,10 @@ export const workflowService = {
     });
   },
 
+
   // matricula: vem do Servico e já nasce preenchida no projeto, sem precisar
   // de edição manual — é o que aparece no card do Kanban e entra na busca.
-  async fabricarProjeto(name, types, terreno = 'Urbano', servicoId = null, matricula = null, tx = prisma) {
+  async fabricarProjeto(name, types, terreno = 'Urbano', servicoId = null, matricula = null, tx = prisma, removerDossie = false) {
     if (!types || types.length === 0) throw new Error("Selecione pelo menos um tipo de processo");
     const projetoExistente = await tx.workflow.findFirst({ where: { name } });
     if (projetoExistente) throw new Error("Já existe um projeto com este nome.");
@@ -59,6 +69,13 @@ export const workflowService = {
         listaTarefasMesclada.splice(indexRI + 1, 0, "Atualização IPTU");
       } else {
         listaTarefasMesclada.push("Atualização IPTU");
+      }
+    }
+
+    if (removerDossie) {
+      const indexDossie = listaTarefasMesclada.indexOf("Dossiê");
+      if (indexDossie !== -1) {
+        listaTarefasMesclada.splice(indexDossie, 1);
       }
     }
 

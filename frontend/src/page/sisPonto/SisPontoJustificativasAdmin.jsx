@@ -2,13 +2,14 @@ import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CalendarDays, ChartNoAxesColumn, Clock3, FileText, Trash2, User } from 'lucide-react';
 import { api } from '../../services/api';
-import { JUSTIFICATIVA_CORES } from './sisPontoData.js';
+import { JUSTIFICATIVA_CORES, rotuloTipoJustificativa } from './sisPontoData.js';
 import { Card, ConfirmacaoPonto } from './SisPontoComponents.jsx';
+import SisPontoEsquecimentosAdmin from './SisPontoEsquecimentosAdmin.jsx';
 
 const ORDEM_STATUS_JUSTIFICATIVA = { 'Em análise': 0, Aceita: 1, Inválida: 2, Recusada: 3 };
 const OPCOES_STATUS = ['Todos os status', 'Em análise', 'Aceita', 'Inválida', 'Recusada'];
 
-export default function SisPontoJustificativasAdmin({ justificativas, carregando, onAtualizado }) {
+export default function SisPontoJustificativasAdmin({ justificativas, carregando, onAtualizado, onEsquecimentoDecidido }) {
   const [processandoId, setProcessandoId] = useState(null);
   const [imagemAmpliada, setImagemAmpliada] = useState(null);
   const [confirmacaoExclusao, setConfirmacaoExclusao] = useState(null);
@@ -101,20 +102,35 @@ export default function SisPontoJustificativasAdmin({ justificativas, carregando
     </section>
   );
 
+  // Aceitar uma justificativa abona os horários previstos que ela cobre:
+  // os esquecimentos recarregam quando alguma justificativa muda.
+  const versaoJustificativas = justificativas.map((j) => `${j.id}:${j.status}`).join('|');
+  const esquecimentos = (
+    <SisPontoEsquecimentosAdmin
+      filtros={{ funcionario: funcionarioFiltro, setor: setorFiltro, status: statusFiltro, mes: mesFiltro }}
+      atualizacao={versaoJustificativas}
+      onDecidido={onEsquecimentoDecidido}
+    />
+  );
+
   if (carregando) {
     return <Card style={{ padding: 26, minHeight: 200 }}><p style={{ color: '#7183a3', fontSize: 13 }}>Carregando justificativas...</p></Card>;
   }
 
   if (!justificativas.length) {
-    return <Card style={{ padding: 26, minHeight: 200 }}>
-      <h2 style={{ margin: 0, fontSize: 20 }}>Justificativas</h2>
-      <p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Nenhuma solicitação enviada pelos funcionários até o momento.</p>
-    </Card>;
+    return <>
+      {esquecimentos}
+      <Card style={{ padding: 26, minHeight: 200 }}>
+        <h2 style={{ margin: 0, fontSize: 20 }}>Justificativas</h2>
+        <p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Nenhuma solicitação enviada pelos funcionários até o momento.</p>
+      </Card>
+    </>;
   }
 
   return (
     <>
     {filtros}
+    {esquecimentos}
     {!ordenadas.length && (
       <Card style={{ padding: 26, minHeight: 160, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
         <p style={{ margin: 0, color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Nenhuma justificativa encontrada com esses filtros.</p>
@@ -136,7 +152,7 @@ export default function SisPontoJustificativasAdmin({ justificativas, carregando
               <div style={{ marginTop: 8, color: '#243755', fontSize: 12, fontWeight: 800 }}>
                 {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', weekday: 'long' }).format(new Date(`${justificativa.dia}T12:00:00`))} · {justificativa.horaInicio}–{justificativa.horaFim}
               </div>
-              <p style={{ margin: '8px 0 0', color: '#405371', fontSize: 12, fontWeight: 600, lineHeight: 1.5 }}>{justificativa.motivo}</p>
+              <p style={{ margin: '8px 0 0', color: '#405371', fontSize: 12, fontWeight: 600, lineHeight: 1.5 }}>{[rotuloTipoJustificativa(justificativa.tipo), justificativa.motivo].filter(Boolean).join(' — ')}</p>
               {justificativa.anexoDataUrl && (
                 <button type="button" onClick={() => setImagemAmpliada(justificativa.anexoDataUrl)} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, border: 0, background: 'transparent', padding: 0, cursor: 'pointer' }}>
                   <span style={{ display: 'block', width: 56, height: 56, borderRadius: 8, overflow: 'hidden', border: '1px solid #e5edf8', flexShrink: 0 }}>
@@ -151,8 +167,8 @@ export default function SisPontoJustificativasAdmin({ justificativas, carregando
               {justificativa.status === 'Em análise' ? (
                 <>
                   <button type="button" disabled={processando} onClick={() => decidir(justificativa.id, 'Aceita')} style={{ border: 0, borderRadius: 8, padding: '9px 16px', background: '#2aba72', color: '#fff', fontWeight: 800, fontSize: 12, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Aceitar justificativa</button>
-                  <button type="button" disabled={processando} onClick={() => decidir(justificativa.id, 'Inválida')} style={{ border: 0, borderRadius: 8, padding: '9px 16px', background: '#ff9c2e', color: '#fff', fontWeight: 800, fontSize: 12, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Justificativa inválida</button>
-                  <button type="button" disabled={processando} onClick={() => decidir(justificativa.id, 'Recusada')} style={{ border: 0, borderRadius: 8, padding: '9px 16px', background: '#e4544e', color: '#fff', fontWeight: 800, fontSize: 12, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Recusar justificativa</button>
+                  <button type="button" disabled={processando} title="Conta no banco de horas igual à aceita; fica registrada no relatório" onClick={() => decidir(justificativa.id, 'Inválida')} style={{ border: 0, borderRadius: 8, padding: '9px 16px', background: '#ff9c2e', color: '#fff', fontWeight: 800, fontSize: 12, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Justificativa inválida</button>
+                  <button type="button" disabled={processando} title="Conta no banco de horas igual à aceita; fica registrada no relatório" onClick={() => decidir(justificativa.id, 'Recusada')} style={{ border: 0, borderRadius: 8, padding: '9px 16px', background: '#e4544e', color: '#fff', fontWeight: 800, fontSize: 12, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Recusar justificativa</button>
                 </>
               ) : (
                 <div style={{ color: '#7183a3', fontSize: 11, fontWeight: 700, textAlign: 'right' }}>

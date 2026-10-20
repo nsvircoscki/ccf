@@ -1,36 +1,31 @@
 import express from 'express';
-import { listarFuncionarios, listarRegistros, criarFuncionario, atualizarFuncionario, excluirFuncionario, registrarPonto, excluirRegistro, listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario } from '../services/sisPontoService.js';
+import { exigirSetor } from '../middlewares/autenticar.js';
+import { SETORES_GESTAO_PONTO } from '../config/permissoes.js';
+import { prisma } from '../prisma.js';
+import { listarJustificativas, criarJustificativa, atualizarJustificativa, excluirJustificativa, listarPadroesHorario, atualizarPadraoHorario, obterConfigFeriados, atualizarConfigFeriados, obterRegrasPonto, atualizarRegrasPonto, listarLancamentosBanco, criarLancamentoBanco, excluirLancamentoBanco } from '../services/sisPontoService.js';
+import { feriadosDoAno } from '../services/ponto/feriados.js';
+import { listarFuncionarios, atualizarFuncionario, registrarAvulso, listarQuarentena, decidirQuarentena, listarMapaRegistros, listarParaRevisao, decidirPrevistas, remover, inserirAjuste, listarAjustes, exportarCsv, gerarPrevistas, listarMeusEsquecimentos, abonarPrevistasDaJustificativa, contarParaRevisao } from '../services/ponto/batidaService.js';
+import { interpretarPeriodo, nomePeriodo } from '../services/ponto/exportCsv.js';
 
 const router = express.Router();
 
+// Funcionário do ponto = User com "registra ponto" ligado. Criar, renomear e
+// desligar é no cadastro de Usuários (Configurações → Usuários).
+const CADASTRO_EM_USUARIOS = 'Funcionários agora são cadastrados em Configurações → Usuários (marque "Registra ponto").';
+
 router.get('/funcionarios', async (_req, res) => {
   try {
-    const funcionarios = await listarFuncionarios();
-    res.json(funcionarios);
+    res.json(await listarFuncionarios());
   } catch (error) {
     res.status(500).json({ error: error.message || 'Erro ao listar funcionários.' });
   }
 });
 
-router.get('/registros', async (_req, res) => {
-  try {
-    const registros = await listarRegistros();
-    res.json(registros);
-  } catch (error) {
-    res.status(500).json({ error: error.message || 'Erro ao listar registros.' });
-  }
-});
+router.post('/funcionarios', (_req, res) => res.status(410).json({ error: CADASTRO_EM_USUARIOS }));
+router.delete('/funcionarios/:id', (_req, res) => res.status(410).json({ error: CADASTRO_EM_USUARIOS }));
 
-router.post('/funcionarios', async (req, res) => {
-  try {
-    const funcionario = await criarFuncionario(req.body);
-    res.status(201).json(funcionario);
-  } catch (error) {
-    res.status(400).json({ error: error.message || 'Erro ao criar funcionário.' });
-  }
-});
-
-router.put('/funcionarios/:id', async (req, res) => {
+// Só jornada e horista/mensalista (aba Jornada do admin).
+router.put('/funcionarios/:id', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (req, res) => {
   try {
     const funcionario = await atualizarFuncionario(req.params.id, req.body);
     if (!funcionario) return res.status(404).json({ error: 'Funcionário não encontrado.' });
@@ -40,19 +35,38 @@ router.put('/funcionarios/:id', async (req, res) => {
   }
 });
 
-router.delete('/funcionarios/:id', async (req, res) => {
+router.get('/registros', async (_req, res) => {
   try {
-    await excluirFuncionario(req.params.id);
-    res.json({ ok: true });
+    res.json(await listarMapaRegistros());
   } catch (error) {
-    res.status(400).json({ error: error.message || 'Erro ao excluir funcionário.' });
+    res.status(500).json({ error: error.message || 'Erro ao listar registros.' });
   }
 });
 
+// POST /sync (fila offline do aparelho) fica em routes/pontoSyncRoutes.js.
+
+// Quarentena: batidas que chegaram mas não puderam entrar no ponto.
+router.get('/quarentena', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (req, res) => {
+  try {
+    res.json(await listarQuarentena(typeof req.query.situacao === 'string' ? req.query.situacao : 'PENDENTE'));
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao listar a quarentena.' });
+  }
+});
+
+// { ids: [...], acao: 'ACEITAR' | 'DESCARTAR' }
+router.post('/quarentena/decisao', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) => {
+  try {
+    res.json(await decidirQuarentena(req.body?.ids, req.body?.acao, req.usuario));
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao decidir.' });
+  }
+});
+
+// Compatibilidade com o front sem fila offline.
 router.post('/registros', async (req, res) => {
   try {
-    const result = await registrarPonto(req.body);
-    res.status(201).json(result);
+    res.status(201).json(await registrarAvulso(req.body, req.usuario));
   } catch (error) {
     res.status(400).json({ error: error.message || 'Erro ao registrar ponto.' });
   }
@@ -60,12 +74,86 @@ router.post('/registros', async (req, res) => {
 
 router.delete('/registros', async (req, res) => {
   try {
-    const { funcionarioId, data, tempo } = req.body;
-    const resultado = await excluirRegistro(funcionarioId, data, tempo);
+    const resultado = await remover(req.body || {}, req.usuario);
     if (resultado === null) return res.status(404).json({ error: 'Registro não encontrado.' });
     res.json({ ok: true });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Erro ao excluir registro.' });
+  }
+});
+
+// Mesmo CSV do export do PC da folha (/sis-ponto/export.csv), mas baixado
+// pela tela, com a sessão do ENG — para importar no Sistema Ponto
+// (FONTE_PONTOS=arquivo, botão "Importar CSV").
+router.get('/folha.csv', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (req, res) => {
+  try {
+    const periodo = interpretarPeriodo(req.query);
+    if (!periodo) return res.status(400).json({ error: 'Informe ?mes=YYYY-MM.' });
+    const csv = await exportarCsv(periodo);
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', `attachment; filename="pontos-${nomePeriodo(periodo)}.csv"`);
+    res.set('Cache-Control', 'no-store');
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao gerar o CSV da folha.' });
+  }
+});
+
+// Esquecimentos da própria pessoa (horários previstos pendentes ou marcados
+// como falta), para a lista "Pendentes" da aba Justificativas.
+router.get('/meus-esquecimentos', async (req, res) => {
+  try {
+    res.json(await listarMeusEsquecimentos(req.usuario));
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao listar esquecimentos.' });
+  }
+});
+
+// Batidas incluídas pelo ENG (com motivo), para as telas marcarem.
+router.get('/batidas/ajustes', async (req, res) => {
+  try {
+    res.json(await listarAjustes(req.usuario));
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao listar ajustes.' });
+  }
+});
+
+// Correção pelo ENG: inclui uma batida { funcionarioId, tipo, batidoEm, motivo }.
+router.post('/batidas/ajuste', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) => {
+  try {
+    res.status(201).json(await inserirAjuste(req.body || {}, req.usuario));
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao incluir registro.' });
+  }
+});
+
+// Revisão do admin: { pares (sem saída/sem entrada/inconsistentes), previstas
+// (horários em que a pessoa não bateu, para abonar ou marcar falta) }.
+// Contadores: { previstas (aba Justificativas), registros (aba Pontos a revisar), total }.
+router.get('/revisao/contagem', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (_req, res) => {
+  try {
+    res.json(await contarParaRevisao());
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao contar pontos para revisão.' });
+  }
+});
+
+router.get('/revisao', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (req, res) => {
+  try {
+    const periodo = interpretarPeriodo(req.query);
+    if (!periodo) return res.status(400).json({ error: 'Informe ?mes=YYYY-MM.' });
+    res.json(await listarParaRevisao(periodo));
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao listar pontos para revisão.' });
+  }
+});
+
+// { ids: [...], situacao: 'ABONADA' | 'FALTA' | 'PENDENTE' (desfaz) }
+router.post('/previstas/decisao', exigirSetor(...SETORES_GESTAO_PONTO, 'DEV'), async (req, res) => {
+  try {
+    res.json(await decidirPrevistas(req.body?.ids, req.body?.situacao, req.usuario));
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao registrar a decisão.' });
   }
 });
 
@@ -80,7 +168,7 @@ router.get('/justificativas', async (_req, res) => {
 
 router.post('/justificativas', async (req, res) => {
   try {
-    const justificativa = await criarJustificativa(req.body);
+    const justificativa = await criarJustificativa(req.body, req.usuario);
     res.status(201).json(justificativa);
   } catch (error) {
     res.status(400).json({ error: error.message || 'Erro ao criar justificativa.' });
@@ -89,8 +177,12 @@ router.post('/justificativas', async (req, res) => {
 
 router.put('/justificativas/:id', async (req, res) => {
   try {
-    const justificativa = await atualizarJustificativa(req.params.id, req.body);
+    const justificativa = await atualizarJustificativa(req.params.id, req.body, req.usuario);
     if (!justificativa) return res.status(404).json({ error: 'Justificativa não encontrada.' });
+    // Aceita, Inválida e Recusada contam igual no banco de horas (inválida e
+    // recusada são só registro para o ENG): todas abonam o horário previsto
+    // de um esquecimento.
+    if (['Aceita', 'Inválida', 'Recusada'].includes(req.body?.status)) await abonarPrevistasDaJustificativa(justificativa, req.usuario);
     res.json(justificativa);
   } catch (error) {
     res.status(400).json({ error: error.message || 'Erro ao atualizar justificativa.' });
@@ -99,7 +191,7 @@ router.put('/justificativas/:id', async (req, res) => {
 
 router.delete('/justificativas/:id', async (req, res) => {
   try {
-    const existia = await excluirJustificativa(req.params.id);
+    const existia = await excluirJustificativa(req.params.id, req.usuario);
     if (!existia) return res.status(404).json({ error: 'Justificativa não encontrada.' });
     res.json({ ok: true });
   } catch (error) {
@@ -122,6 +214,76 @@ router.put('/padroes-horario/:id', async (req, res) => {
     res.json(padrao);
   } catch (error) {
     res.status(400).json({ error: error.message || 'Erro ao atualizar padrão de horário.' });
+  }
+});
+
+// Feriados de um ou mais anos (?anos=2026,2027) + a configuração da empresa.
+router.get('/feriados', async (req, res) => {
+  try {
+    const anos = String(req.query.anos || new Date().getFullYear()).split(',').map(Number).filter((a) => a >= 2000 && a <= 2100).slice(0, 5);
+    const config = await obterConfigFeriados();
+    res.json({ config, feriados: anos.flatMap((ano) => feriadosDoAno(ano, config)) });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao listar feriados.' });
+  }
+});
+
+// Só a gestão do ponto (ENG/Coordenação) muda: Carnaval/Corpus Christi e os feriados municipais/estaduais/da empresa.
+router.put('/feriados', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) => {
+  try {
+    const config = await atualizarConfigFeriados(req.body || {});
+    // Feriado novo apaga os "esquecimentos" pendentes daquele dia.
+    gerarPrevistas().catch((erro) => console.error('Erro ao gerar horários previstos:', erro.message));
+    res.json(config);
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao salvar feriados.' });
+  }
+});
+
+// Lançamentos manuais no banco de horas: cada um vê os seus; a gestão vê,
+// lança e exclui de todos. { funcionarioId, dia: 'YYYY-MM-DD', minutos (+/-), motivo }
+router.get('/banco/lancamentos', async (req, res) => {
+  try {
+    res.json(await listarLancamentosBanco(req.usuario));
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao listar lançamentos.' });
+  }
+});
+
+router.post('/banco/lancamentos', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) => {
+  try {
+    const funcionario = await prisma.user.findUnique({ where: { id: String(req.body?.funcionarioId || '') } });
+    if (!funcionario || !funcionario.ativo || !funcionario.registraPonto) return res.status(400).json({ error: 'Escolha um funcionário que registra ponto.' });
+    res.status(201).json(await criarLancamentoBanco(req.body || {}, req.usuario, funcionario));
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao lançar horas.' });
+  }
+});
+
+router.delete('/banco/lancamentos/:id', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) => {
+  try {
+    const existia = await excluirLancamentoBanco(req.params.id);
+    if (!existia) return res.status(404).json({ error: 'Lançamento não encontrado.' });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao excluir lançamento.' });
+  }
+});
+
+// Regras do ponto (prazo para justificar): todos leem, só a gestão do ponto muda.
+router.get('/regras', async (_req, res) => {
+  try {
+    res.json(await obterRegrasPonto());
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Erro ao carregar as regras do ponto.' });
+  }
+});
+
+router.put('/regras', exigirSetor(...SETORES_GESTAO_PONTO), async (req, res) => {
+  try {
+    res.json(await atualizarRegrasPonto(req.body || {}));
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Erro ao salvar as regras do ponto.' });
   }
 });
 

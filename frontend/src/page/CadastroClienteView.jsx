@@ -3,6 +3,7 @@ import { clienteService } from '../services/clienteService';
 import { formatarCEP, formatarCNPJ, formatarCPF, formatarTelefone } from '../utils/mascaras';
 import {
   Actions, Field, Icon, Reveal, SearchableSelect, SelectField, Section, Shell, Toast, useToast, C,
+  VoltarTipo,
 } from '../components/cadastros/CadastroKit.jsx';
 
 const clienteVazio = {
@@ -222,6 +223,7 @@ export default function CadastroClienteView({ onBack, modal, onSaved }) {
       {tipoEscolhido && (
         <div style={{ animation: 'fadeUp 0.3s ease both' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            {!editing && <VoltarTipo onClick={() => escolherTipo('')} />}
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 20,
               background: `${accent}14`, color: accent, fontFamily: '"Montserrat", sans-serif', fontWeight: 700, fontSize: 11.5,
@@ -229,12 +231,6 @@ export default function CadastroClienteView({ onBack, modal, onSaved }) {
               <Icon name={isPF ? 'user' : 'brief'} size={14} />
               {isPF ? 'Pessoa Física' : 'Pessoa Jurídica'}
             </span>
-            {!editing && (
-              <button type="button" onClick={() => { escolherTipo(''); }} style={{
-                background: 'none', border: 'none', cursor: 'pointer', fontFamily: '"Montserrat", sans-serif', fontWeight: 600,
-                fontSize: 12, color: C.muted, textDecoration: 'underline',
-              }}>trocar tipo</button>
-            )}
           </div>
 
           <Section icon="id" title="Dados principais" accent={accent}>

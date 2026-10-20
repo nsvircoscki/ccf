@@ -2,15 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChartNoAxesColumn, CircleAlert, Clock3, Files, FileText, LogIn, TimerReset, User, X } from 'lucide-react';
 import { api } from '../../services/api';
-import { meses, diasSemana, PADROES_HORARIO_INFO, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_CORES } from './sisPontoData.js';
-import { chaveData, hora, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, calcularHistoricoSemanal, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, ehHorista } from './sisPontoUtils.js';
-import { BancoHoras, Card, ConfirmacaoPonto, FormularioModal } from './SisPontoComponents.jsx';
+import { meses, diasSemana, PADROES_HORARIO_INFO, PADROES_HORARIO_PADRAO, JUSTIFICATIVA_CORES, rotuloTipoJustificativa } from './sisPontoData.js';
+import { chaveData, hora, calcularBancoHoras, carregarFeriados, esquecerFeriadosCarregados, buildEngFuncionariosFromStorage, extrairRegistrosFuncionario, calcularHistoricoSemanal, statusJustificativaSlotsFaltantes, statusCalendarioDoDia, expectativasDoFuncionario, statusRegistroComExpectativa, ehHorista, ehDiaDeTrabalho, diaSemRegistro } from './sisPontoUtils.js';
+import { BancoHoras, Card, ConfirmacaoPonto, ModalRegistros, FormLancamentoBanco } from './SisPontoComponents.jsx';
 import SisPontoJustificativasAdmin from './SisPontoJustificativasAdmin.jsx';
 import SisPontoJornadaAdmin from './SisPontoJornadaAdmin.jsx';
+import SisPontoRevisaoAdmin from './SisPontoRevisaoAdmin.jsx';
+import SisPontoExportFolha from './SisPontoExportFolha.jsx';
+import SisPontoRelatorioJustificativas from './SisPontoRelatorioJustificativas.jsx';
+import SisPontoFeriadosAdmin from './SisPontoFeriadosAdmin.jsx';
 import './sisPonto.css';
+import { useEstadoNavegavel } from '../../hooks/useNavegacao';
 
 export default function SisPontoEngAdminScreen({ destino }) {
-  const [activePage, setActivePage] = useState('dashboard');
+  const [activePage, setActivePage] = useEstadoNavegavel('dashboard');
   // Redireciona pra aba certa quando a navbar manda o admin pra cá a partir
   // de uma notificação (ex.: justificativa nova). O "ts" no destino garante
   // que o efeito roda de novo mesmo se a página pedida for repetida.
@@ -35,8 +40,6 @@ export default function SisPontoEngAdminScreen({ destino }) {
   const [carregandoJustificativas, setCarregandoJustificativas] = useState(true);
   const [registrosBackend, setRegistrosBackend] = useState({});
   const [confirmacaoModal, setConfirmacaoModal] = useState(null);
-  const [novoFuncionarioModal, setNovoFuncionarioModal] = useState(false);
-  const [renomeacaoModal, setRenomeacaoModal] = useState(null);
   // Dia clicado no calendário do admin (só a chave "yyyy-mm-dd") — os itens são
   // derivados ao vivo de `justificativas` a cada render, então o popup já
   // mostra o status atualizado assim que o admin decide algo nele.
@@ -51,6 +54,18 @@ export default function SisPontoEngAdminScreen({ destino }) {
       .finally(() => setCarregandoJustificativas(false));
   };
 
+  // Lançamentos manuais no banco de horas (saldo anterior, crédito/débito combinado).
+  const [lancamentosBanco, setLancamentosBanco] = useState([]);
+  const carregarLancamentosBanco = () => api.getSispontoLancamentosBanco()
+    .then((lista) => setLancamentosBanco(Array.isArray(lista) ? lista : []))
+    .catch(() => setLancamentosBanco([]));
+  const [lancamentoExcluir, setLancamentoExcluir] = useState(null);
+
+  // Batidas incluídas pelo ENG, por "funcionarioId|iso" — marcadas no calendário.
+  const [ajustes, setAjustes] = useState(new Map());
+  const carregarAjustes = () => api.getSispontoAjustes()
+    .then((lista) => setAjustes(new Map((Array.isArray(lista) ? lista : []).map((a) => [`${a.funcionarioId}|${a.batidoEm}`, a]))))
+    .catch(() => {});
   const carregarRegistros = () => api.getSispontoRegistros()
     .then((registros) => setRegistrosBackend(registros && typeof registros === 'object' ? registros : {}))
     .catch(() => {});
@@ -78,8 +93,46 @@ export default function SisPontoEngAdminScreen({ destino }) {
 
   const funcionarioCalendario = cadastroFuncionarios.find((funcionario) => funcionario.id === calendarioFuncionarioId);
 
+  // Feriados do ano do calendário (calendário e banco de horas). Ao sair da
+  // aba Feriados, recarrega — o ENG pode ter mudado a lista.
+  const [feriados, setFeriados] = useState(new Map());
+  const anoCalendario = mes.getFullYear();
+  useEffect(() => {
+    let ativo = true;
+    if (activePage !== 'feriados') {
+      carregarFeriados(api, anoCalendario).then((mapa) => { if (ativo) setFeriados(mapa); });
+    }
+    return () => { ativo = false; if (activePage === 'feriados') esquecerFeriadosCarregados(); };
+  }, [anoCalendario, activePage]);
+
+  // Correção de batidas: só o ENG exclui marcações (o funcionário, se errou,
+  // envia justificativa). Abre pelo botão "Corrigir" de cada dia do calendário.
+  const [diaCorrecao, setDiaCorrecao] = useState(null);
+  const registrosCorrecao = diaCorrecao ? [...(calendarioRegistros[diaCorrecao] || [])].sort() : [];
+  const horarioEsperadoCorrecao = (indice) => {
+    const expectativas = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, new Date(`${diaCorrecao}T12:00:00`), feriados) || [];
+    if (!expectativas.length) return [indice % 2 === 0 ? 'Entrada' : 'Saída', null];
+    return expectativas[indice % expectativas.length];
+  };
+  // Horário digitado é o horário local do dia corrigido.
+  const incluirBatidaEng = async ({ tipo, horario, motivo }) => {
+    const [ano, mesNumero, diaNumero] = diaCorrecao.split('-').map(Number);
+    const [h, m] = horario.split(':').map(Number);
+    await api.inserirSispontoAjuste({ funcionarioId: calendarioFuncionarioId, tipo, motivo, batidoEm: new Date(ano, mesNumero - 1, diaNumero, h, m).toISOString() });
+    await Promise.all([carregarRegistros(), carregarAjustes()]);
+  };
+  const excluirBatidaEng = async (indice, motivo) => {
+    const tempo = registrosCorrecao[indice];
+    if (!tempo) return;
+    await api.deleteSispontoRegistro({ funcionarioId: calendarioFuncionarioId, data: diaCorrecao, tempo, motivo });
+    await Promise.all([carregarRegistros(), carregarAjustes()]);
+  };
+  const ajustesDoCalendario = new Map([...ajustes.values()]
+    .filter((a) => a.funcionarioId === calendarioFuncionarioId)
+    .map((a) => [a.batidoEm, a]));
+
   const statusRegistroEng = (registro, indice, _registrosDoDia, chaveDia = date) => {
-    const expectativas = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, new Date(`${chaveDia}T12:00:00`)) || [];
+    const expectativas = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, new Date(`${chaveDia}T12:00:00`), feriados) || [];
     return statusRegistroComExpectativa(registro, indice, expectativas, justificativas, calendarioFuncionarioId, chaveDia);
   };
 
@@ -94,7 +147,27 @@ export default function SisPontoEngAdminScreen({ destino }) {
     });
 
   useEffect(() => { carregarJustificativas(); }, [activePage]);
+  useEffect(() => { carregarLancamentosBanco(); }, [activePage]);
+  // Os avisos do ponto não vão pro sininho: ficam nos contadores das abas
+  // Justificativas e Pontos a revisar, atualizados a cada minuto.
+  // Esquecimentos sem justificativa (previstas) contam em Justificativas;
+  // registros com problema, em Pontos a revisar.
+  const [contagemRevisao, setContagemRevisao] = useState({ previstas: 0, registros: 0 });
+  // Pontos a revisar = registros com problema + batidas em quarentena.
+  const atualizarContagemRevisao = () => api.getSispontoRevisaoContagem()
+    .then((c) => setContagemRevisao({ previstas: c.previstas || 0, registros: (c.registros || 0) + (c.quarentena || 0) }))
+    .catch(() => {});
+  useEffect(() => {
+    atualizarContagemRevisao();
+    const intervalo = window.setInterval(() => { atualizarContagemRevisao(); carregarJustificativas(); }, 60000);
+    return () => window.clearInterval(intervalo);
+  }, [activePage]);
+  // "Corrigir" na aba Pontos a revisar: abre o modal de correção do dia e,
+  // ao fechar, a lista recarrega.
+  const [versaoCorrecao, setVersaoCorrecao] = useState(0);
+  const corrigirDia = (funcionarioId, dia) => { setCalendarioFuncionarioId(funcionarioId); setDiaCorrecao(dia); };
   useEffect(() => { carregarRegistros(); }, [activePage]);
+  useEffect(() => { carregarAjustes(); }, [activePage]);
   useEffect(() => { carregarHorarios(); }, [activePage]);
   // Se o admin trocar de funcionário no calendário com o popup de
   // justificativa aberto, fecha — do contrário ele continuaria mostrando o
@@ -125,13 +198,13 @@ export default function SisPontoEngAdminScreen({ destino }) {
       setCalendarioFuncionarioId(cadastroFuncionarios[0].id);
     }
   }, [cadastroFuncionarios, calendarioFuncionarioId]);
-  const funcionarios = useMemo(() => buildEngFuncionariosFromStorage(date, padroesHorario, cadastroFuncionarios, justificativas, registrosBackend), [date, padroesHorario, cadastroFuncionarios, justificativas, registrosBackend]);
+  const funcionarios = useMemo(() => buildEngFuncionariosFromStorage(date, padroesHorario, cadastroFuncionarios, justificativas, registrosBackend, feriados), [date, padroesHorario, cadastroFuncionarios, justificativas, registrosBackend, feriados]);
   const setores = Array.from(new Set(funcionarios.map((f) => f.setor))).sort();
-  const justificativasPendentes = justificativas.filter((justificativa) => justificativa.status === 'Em análise').length;
+  const justificativasPendentes = justificativas.filter((justificativa) => justificativa.status === 'Em análise').length + contagemRevisao.previstas;
   const [funcionarioFiltro, setFuncionarioFiltro] = useState('Todos os funcionários');
   const [setorFiltro, setSetorFiltro] = useState('Todos os setores');
   const [statusFiltro, setStatusFiltro] = useState('Todos os status');
-  const [activeTab, setActiveTab] = useState('resumo');
+  const [activeTab, setActiveTab] = useEstadoNavegavel('resumo');
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState(funcionarios[0] || { nome: 'Sem registros', setor: '—', entrada: '—', intervalo: '—', retorno: '—', saida: '—', total: '00h00', status: 'Ausente', justificativa: 0, jornadaPrevista: '08:50', jornadaRealizada: '00h00', jornadaTipo: 'Jornada prevista', banco: '+00h00' });
 
   useEffect(() => {
@@ -214,58 +287,6 @@ export default function SisPontoEngAdminScreen({ destino }) {
   const presentes = funcionarios.filter((f) => f.status === 'Presente' || f.status === 'Atrasado/Saída Antecipada' || f.status === 'Finalizado' || f.status === 'Justificado').length;
   const atrasados = funcionarios.filter((f) => f.status === 'Atrasado/Saída Antecipada').length;
   const ausentes = funcionarios.filter((f) => f.status === 'Ausente').length;
-  // Fallback comum quando o backend está fora do ar: as três ações abaixo
-  // (criar/renomear/excluir) continuam funcionando localmente e sincronizam
-  // com o servidor na próxima vez que a tela carregar.
-  const atualizarCadastroLocalStorage = (setor, transformar) => {
-    const chave = `ccf-sis-ponto-funcionarios-${setor}`;
-    const lista = JSON.parse(localStorage.getItem(chave) || '[]');
-    localStorage.setItem(chave, JSON.stringify(transformar(lista)));
-  };
-
-  const adicionarFuncionarioEng = () => setNovoFuncionarioModal(true);
-  const criarFuncionarioEng = ({ nome, setor, horista }) => {
-    setNovoFuncionarioModal(false);
-    if (!nome?.trim() || !setor?.trim()) return;
-    const funcionario = { id: `${setor.trim().toUpperCase()}-${Date.now()}`, nome: nome.trim(), setor: setor.trim().toUpperCase(), horista: Boolean(horista) };
-    api.createSispontoFuncionario(funcionario).then((novo) => {
-      setCadastroFuncionarios((atuais) => [...atuais, novo]);
-    }).catch(() => {
-      setCadastroFuncionarios((atuais) => [...atuais, funcionario]);
-      atualizarCadastroLocalStorage(funcionario.setor, (lista) => [...lista, funcionario]);
-    });
-  };
-
-  const renomearFuncionarioEng = (funcionario) => setRenomeacaoModal(funcionario);
-  const confirmarRenomeacaoEng = ({ nome }) => {
-    const funcionario = renomeacaoModal;
-    setRenomeacaoModal(null);
-    if (!funcionario || !nome?.trim()) return;
-    const proximoNome = nome.trim();
-    api.updateSispontoFuncionario(funcionario.id, { nome: proximoNome }).then((atualizado) => {
-      setCadastroFuncionarios((atuais) => atuais.map((item) => item.id === funcionario.id ? { ...item, nome: atualizado.nome } : item));
-    }).catch(() => {
-      setCadastroFuncionarios((atuais) => atuais.map((item) => item.id === funcionario.id ? { ...item, nome: proximoNome } : item));
-      atualizarCadastroLocalStorage(funcionario.setor, (lista) => lista.map((item) => item.id === funcionario.id ? { ...item, nome: proximoNome } : item));
-    });
-  };
-
-  const excluirFuncionarioEng = (funcionario) => setConfirmacaoModal({
-    titulo: 'Excluir funcionário',
-    mensagem: `Deseja excluir o funcionário ${funcionario.nome} do cadastro? Os registros de ponto e justificativas dele também serão apagados.`,
-    destrutivo: true,
-    confirmar: () => {
-      setConfirmacaoModal(null);
-      api.deleteSispontoFuncionario(funcionario.id).then(() => {
-        setCadastroFuncionarios((atuais) => atuais.filter((item) => item.id !== funcionario.id));
-        carregarRegistros();
-      }).catch(() => {
-        setCadastroFuncionarios((atuais) => atuais.filter((item) => item.id !== funcionario.id));
-        atualizarCadastroLocalStorage(funcionario.setor, (lista) => lista.filter((item) => item.id !== funcionario.id));
-      });
-    },
-  });
-
   return (
     <main className="sis-ponto-admin-screen">
       <div className="sis-admin-layout">
@@ -283,8 +304,17 @@ export default function SisPontoEngAdminScreen({ destino }) {
                 </span>
               )}
             </button>
+            <button className={`sis-admin-nav-item ${activePage === 'revisao' ? 'active' : ''}`} onClick={() => setActivePage('revisao')}>
+              <CircleAlert size={16} /> Pontos a revisar
+              {contagemRevisao.registros > 0 && (
+                <span title="Registros com problema e batidas em quarentena" style={{ marginLeft: 'auto', minWidth: 20, height: 20, padding: '0 5px', borderRadius: 999, background: '#e5484d', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: activePage === 'revisao' ? '0 0 0 2px #1767e8' : '0 0 0 2px #fff' }}>
+                  {contagemRevisao.registros > 99 ? '99+' : contagemRevisao.registros}
+                </span>
+              )}
+            </button>
             <button className={`sis-admin-nav-item ${activePage === 'relatorios' ? 'active' : ''}`} onClick={() => setActivePage('relatorios')}><ChartNoAxesColumn size={16} /> Relatórios</button>
             <button className={`sis-admin-nav-item ${activePage === 'configuracoes' ? 'active' : ''}`} onClick={() => setActivePage('configuracoes')}><Clock3 size={16} /> Jornada</button>
+            <button className={`sis-admin-nav-item ${activePage === 'feriados' ? 'active' : ''}`} onClick={() => setActivePage('feriados')}><CalendarDays size={16} /> Feriados e prazos</button>
           </nav>
         </aside>
 
@@ -358,7 +388,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
                 <option>Finalizado</option>
               </select>
             </div>
-            <button className="sis-export-button" onClick={exportarRelatorio} type="button">Exportar relatório</button>
+            <button className="sis-export-button" onClick={exportarRelatorio} type="button" title="Resumo do dia. Para a folha, use Relatórios → Baixar CSV para a folha.">Exportar relatório do dia</button>
           </section>
 
           <section className="sis-grid">
@@ -465,11 +495,11 @@ export default function SisPontoEngAdminScreen({ destino }) {
                           return (
                             <div key={justificativa.id} style={{ border: '1px solid #ffd8aa', background: '#fff8ee', borderRadius: 10, padding: 10 }}>
                               <div style={{ fontSize: 11.5, fontWeight: 800, color: '#243755' }}>{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(`${justificativa.dia}T12:00:00`))} · {justificativa.horaInicio}–{justificativa.horaFim}</div>
-                              <p style={{ margin: '4px 0 8px', fontSize: 11, color: '#405371', fontWeight: 600, lineHeight: 1.4 }}>{justificativa.motivo}</p>
+                              <p style={{ margin: '4px 0 8px', fontSize: 11, color: '#405371', fontWeight: 600, lineHeight: 1.4 }}>{[rotuloTipoJustificativa(justificativa.tipo), justificativa.motivo].filter(Boolean).join(' — ')}</p>
                               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                 <button type="button" disabled={processando} onClick={() => decidirJustificativa(justificativa.id, 'Aceita')} style={{ border: 0, borderRadius: 7, padding: '6px 10px', background: '#2aba72', color: '#fff', fontWeight: 800, fontSize: 10.5, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Aceitar</button>
-                                <button type="button" disabled={processando} onClick={() => decidirJustificativa(justificativa.id, 'Inválida')} style={{ border: 0, borderRadius: 7, padding: '6px 10px', background: '#ff9c2e', color: '#fff', fontWeight: 800, fontSize: 10.5, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Inválida</button>
-                                <button type="button" disabled={processando} onClick={() => decidirJustificativa(justificativa.id, 'Recusada')} style={{ border: 0, borderRadius: 7, padding: '6px 10px', background: '#e4544e', color: '#fff', fontWeight: 800, fontSize: 10.5, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Recusar</button>
+                                <button type="button" disabled={processando} title="Conta no banco de horas igual à aceita; fica registrada no relatório" onClick={() => decidirJustificativa(justificativa.id, 'Inválida')} style={{ border: 0, borderRadius: 7, padding: '6px 10px', background: '#ff9c2e', color: '#fff', fontWeight: 800, fontSize: 10.5, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Inválida</button>
+                                <button type="button" disabled={processando} title="Conta no banco de horas igual à aceita; fica registrada no relatório" onClick={() => decidirJustificativa(justificativa.id, 'Recusada')} style={{ border: 0, borderRadius: 7, padding: '6px 10px', background: '#e4544e', color: '#fff', fontWeight: 800, fontSize: 10.5, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Recusar</button>
                               </div>
                             </div>
                           );
@@ -508,21 +538,42 @@ export default function SisPontoEngAdminScreen({ destino }) {
 
           {activePage === 'banco' && (
             <section className="sis-banco-view">
-              {BancoHoras(funcionarios)}
+              <BancoHoras
+                rotulo={`${meses[mes.getMonth()]} ${mes.getFullYear()}`}
+                onExcluirLancamento={setLancamentoExcluir}
+                itens={cadastroFuncionarios.map((funcionario) => ({
+                  id: funcionario.id,
+                  nome: funcionario.nome,
+                  setor: funcionario.setor,
+                  banco: calcularBancoHoras(funcionario, extrairRegistrosFuncionario(registrosBackend, funcionario.id), padroesHorario, justificativas, mes, undefined, feriados, undefined, lancamentosBanco),
+                }))}
+              >
+                <FormLancamentoBanco funcionarios={cadastroFuncionarios} onLancar={async (dados) => { await api.criarSispontoLancamentoBanco(dados); await carregarLancamentosBanco(); }} />
+              </BancoHoras>
+              {lancamentoExcluir && <ConfirmacaoPonto
+                titulo="Excluir lançamento"
+                mensagem={`Excluir o lançamento de ${lancamentoExcluir.nome} (${lancamentoExcluir.dia.split('-').reverse().join('/')}: ${lancamentoExcluir.motivo})?`}
+                destrutivo
+                confirmar={async () => { const alvo = lancamentoExcluir; setLancamentoExcluir(null); await api.excluirSispontoLancamentoBanco(alvo.id).catch(() => {}); await carregarLancamentosBanco(); }}
+                onClose={() => setLancamentoExcluir(null)}
+              />}
             </section>
           )}
 
           {activePage === 'justificativas' && (
             <section className="sis-justificativas-view">
-              <SisPontoJustificativasAdmin justificativas={justificativas} carregando={carregandoJustificativas} onAtualizado={carregarJustificativas} />
+              <SisPontoJustificativasAdmin justificativas={justificativas} carregando={carregandoJustificativas} onAtualizado={() => { carregarJustificativas(); atualizarContagemRevisao(); }} onEsquecimentoDecidido={atualizarContagemRevisao} />
             </section>
           )}
 
-          {activePage === 'relatorios' && (
-            <section className="sis-empty-view">
-              <Card style={{ padding: 26, minHeight: 280 }}><h2 style={{ margin: 0, fontSize: 20 }}>Relatórios</h2><p style={{ margin: '6px 0 24px', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Relatórios e exportações do SIS Ponto aparecerão aqui.</p><button onClick={exportarRelatorio} type="button" style={{ border: 0, borderRadius: 9, padding: '11px 15px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>Exportar relatório</button></Card>
-            </section>
-          )}
+          {activePage === 'revisao' && <SisPontoRevisaoAdmin onCorrigir={corrigirDia} atualizacao={versaoCorrecao} onQuarentenaDecidida={atualizarContagemRevisao} />}
+
+          {activePage === 'relatorios' && <>
+            <SisPontoExportFolha onExportarDia={exportarRelatorio} />
+            <section className="sis-empty-view" style={{ marginTop: 16 }}><SisPontoRelatorioJustificativas justificativas={justificativas} /></section>
+          </>}
+
+          {activePage === 'feriados' && <SisPontoFeriadosAdmin />}
 
           {activePage === 'configuracoes' && (
             <SisPontoJornadaAdmin
@@ -537,7 +588,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
           {activePage === 'funcionarios' && (
             <section className="sis-empty-view">
               <Card style={{ padding: 26, minHeight: 280 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><h2 style={{ margin: 0, fontSize: 20 }}>Funcionários</h2><p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Cadastros nominais usados no painel do administrador.</p></div><button type="button" onClick={adicionarFuncionarioEng} style={{ border: 0, borderRadius: 9, padding: '10px 14px', background: '#1767e8', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>+ Novo funcionário</button></div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><h2 style={{ margin: 0, fontSize: 20 }}>Funcionários</h2><p style={{ margin: '6px 0 0', color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Pessoas com "Registra ponto" ligado. Para incluir, renomear ou desligar alguém, use Configurações → Usuários.</p></div></div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 22 }}>{cadastroFuncionarios.map((funcionario) => {
                   const dados = funcionarios.find((item) => item.nome === funcionario.nome && item.setor === funcionario.setor) || { nome: funcionario.nome, setor: funcionario.setor, total: '00h00', status: 'Ausente' };
                   return <div key={funcionario.id} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px', border: '1px solid #e5edf8', borderRadius: 12, color: '#405371', fontSize: 13, fontWeight: 800, background: '#f8fbff' }}>
@@ -545,10 +596,6 @@ export default function SisPontoEngAdminScreen({ destino }) {
                       <span style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                         <span>{funcionario.nome}</span>
                         <small style={{ color: '#7183a3' }}>{funcionario.setor}</small>
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <button type="button" onClick={() => renomearFuncionarioEng(funcionario)} style={{ border: 0, borderRadius: 8, padding: '8px 10px', background: '#eef4ff', color: '#1767e8', fontWeight: 800, cursor: 'pointer' }}>Renomear</button>
-                        <button type="button" onClick={() => excluirFuncionarioEng(funcionario)} style={{ border: 0, borderRadius: 8, padding: '8px 10px', background: '#ffecef', color: '#be3747', fontWeight: 800, cursor: 'pointer' }}>Excluir</button>
                       </span>
                     </span>
                     <span style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -613,17 +660,29 @@ export default function SisPontoEngAdminScreen({ destino }) {
                             const chave = chaveData(dia);
                             const itens = Array.isArray(calendarioRegistros[chave]) ? calendarioRegistros[chave].map((registro) => new Date(registro)).sort((a, b) => a - b) : [];
                             const statusItens = itens.map((registro, registroIndex) => statusRegistroEng(registro, registroIndex, itens, chave));
-                            const horariosDia = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, dia) || [];
+                            const horariosDia = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, dia, feriados) || [];
                             const { temAtraso, temJustificado, temJustificadoPendente, horariosPreenchidos } = statusCalendarioDoDia(itens, statusItens, horariosDia, justificativas, calendarioFuncionarioId, chave);
                             const pertenceAoMes = dia.getMonth() === mes.getMonth();
                             const ehHoje = chave === chaveData(new Date());
                             const justificativasDoDia = justificativas.filter((item) => item.funcionarioId === calendarioFuncionarioId && item.dia === chave);
+                            const hojeChave = chaveData(new Date());
+                            // Dia útil ou dia com registro: "Corrigir". Fim de semana/feriado sem
+                            // registro não tem nada errado — só um "Incluir" discreto, para lançar
+                            // horas trabalhadas nesse dia (viram crédito no banco).
+                            const editavel = pertenceAoMes && chave <= hojeChave && calendarioFuncionarioId;
+                            const podeCorrigir = editavel && (ehDiaDeTrabalho(horariosDia, feriados.get(chave)) || itens.length > 0);
+                            const podeIncluir = editavel && !podeCorrigir;
+                            const falta = pertenceAoMes && diaSemRegistro({ chave, hoje: hojeChave, itens, horariosDia, feriado: feriados.get(chave), temJustificado, pontoDesde: funcionarioCalendario?.pontoDesde });
                             return <motion.div key={chave} role={justificativasDoDia.length ? 'button' : undefined} tabIndex={justificativasDoDia.length ? 0 : undefined} onClick={() => { if (justificativasDoDia.length) setPopupDiaJustificativa(chave); }} onKeyDown={(evento) => { if (justificativasDoDia.length && (evento.key === 'Enter' || evento.key === ' ')) setPopupDiaJustificativa(chave); }} title={justificativasDoDia.length ? 'Ver justificativa(s) deste dia' : undefined} initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .2 }} whileHover={{ backgroundColor: '#f8fbff' }} className={`sis-eng-calendar-number ${pertenceAoMes ? '' : 'outside'} ${ehHoje ? 'today' : ''}`} style={justificativasDoDia.length ? { cursor: 'pointer' } : undefined}>
                               <div className="sis-eng-calendar-day-head"><span className="sis-eng-calendar-day-circle">{dia.getDate()}</span>{itens.length > 0 && <i className={`sis-eng-calendar-dot ${temAtraso ? 'late' : temJustificado ? 'justified' : ''}`} style={temJustificadoPendente && !temAtraso ? { background: '#f2c14e' } : undefined} />}{itens.length === 0 && temJustificado && <i className="sis-eng-calendar-dot justified" style={temJustificadoPendente ? { background: '#f2c14e' } : undefined} title="Justificado" />}</div>
                               {(itens.length > 0 || horariosPreenchidos.some(Boolean)) && <div className="sis-eng-calendar-entries">
-                                {itens.slice(0, 4).map((registro, registroIndex) => <span key={registro.toISOString()} className={`sis-eng-calendar-entry ${statusItens[registroIndex] === 'Atrasado/Saída Antecipada' ? 'late' : statusItens[registroIndex] === 'Justificado' ? 'justified' : ''}`}><LogIn size={11} style={registroIndex % 2 ? { transform: 'rotate(180deg)' } : undefined} />{hora(registro).slice(0, 5)}</span>)}
+                                {itens.slice(0, 4).map((registro, registroIndex) => { const ajuste = ajustesDoCalendario.get(registro.toISOString()); return <span key={registro.toISOString()} title={ajuste ? `Ajuste do ENG${ajuste.por ? ` (${ajuste.por})` : ''}: ${ajuste.motivo || ''}` : undefined} style={ajuste ? { color: '#7c3aed', fontStyle: 'italic' } : undefined} className={`sis-eng-calendar-entry ${statusItens[registroIndex] === 'Atrasado/Saída Antecipada' ? 'late' : statusItens[registroIndex] === 'Justificado' ? 'justified' : ''}`}><LogIn size={11} style={registroIndex % 2 ? { transform: 'rotate(180deg)' } : undefined} />{hora(registro).slice(0, 5)}{ajuste ? '*' : ''}</span>; })}
                                 {horariosPreenchidos.map((horarioJustificado, indexHorario) => { if (!horarioJustificado || indexHorario < itens.length) return null; const entradaTipo = horariosDia[indexHorario][0] === 'Entrada'; return <span key={`justificado-${chave}-${indexHorario}`} className="sis-eng-calendar-entry justified" style={{ fontStyle: 'italic' }} title="Preenchido pela justificativa aprovada"><LogIn size={11} style={entradaTipo ? undefined : { transform: 'rotate(180deg)' }} />{horarioJustificado}</span>; })}
                               </div>}
+                              {podeCorrigir && <button type="button" onClick={(evento) => { evento.stopPropagation(); setDiaCorrecao(chave); }} style={{ marginTop: 4, padding: '2px 6px', border: '1px solid #d8e6fc', borderRadius: 6, background: '#fff', color: '#1767e8', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>Corrigir</button>}
+                              {podeIncluir && <button type="button" title="Incluir horários trabalhados neste dia" onClick={(evento) => { evento.stopPropagation(); setDiaCorrecao(chave); }} style={{ marginTop: 4, padding: '2px 6px', border: '1px dashed #d8e4f3', borderRadius: 6, background: 'transparent', color: '#8a99b1', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>+ Incluir</button>}
+                              {feriados.get(chave) && <div className="sis-eng-calendar-status" title="Feriado" style={{ color: '#8e9bb0' }}>{feriados.get(chave)}</div>}
+                              {falta && <div className="sis-eng-calendar-status" title="Dia de trabalho sem nenhum registro: desconta do banco de horas" style={{ color: '#e4544e' }}>Falta</div>}
                               {temAtraso && <div className="sis-eng-calendar-status">Atrasado/Saída Antecipada</div>}
                               {!temAtraso && temJustificado && <div className="sis-eng-calendar-status" style={{ color: temJustificadoPendente ? '#b9770e' : '#3177dd' }}>Justificado</div>}
                             </motion.div>;
@@ -648,7 +707,7 @@ export default function SisPontoEngAdminScreen({ destino }) {
                         .filter((dia) => {
                           const chaveDia = chaveData(dia);
                           const registrosDia = Array.isArray(calendarioRegistros[chaveDia]) ? calendarioRegistros[chaveDia] : [];
-                          const expectativasDia = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, dia) || [];
+                          const expectativasDia = expectativasDoFuncionario(funcionarioCalendario, padroesHorario, dia, feriados) || [];
                           return statusJustificativaSlotsFaltantes(justificativas, calendarioFuncionarioId, chaveDia, expectativasDia, registrosDia.length) === 'Aceita';
                         }).length;
                       const justificadasMes = dias.reduce((total, [chaveDia, registrosDia]) => total + registrosDia.filter((registro, indice, lista) => statusRegistroEng(new Date(registro), indice, lista, chaveDia) === 'Justificado').length, 0) + diasDoMesSemRegistroJustificados;
@@ -672,13 +731,17 @@ export default function SisPontoEngAdminScreen({ destino }) {
           )}
         </section>
       </div>
+      {diaCorrecao && <ModalRegistros
+        titulo={`Registros de ${funcionarioCalendario?.nome || ''} · ${new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(`${diaCorrecao}T12:00:00`))}`}
+        registros={registrosCorrecao}
+        statusRegistro={(registro, indice, lista) => statusRegistroEng(new Date(registro), indice, lista, diaCorrecao)}
+        horarioEsperado={horarioEsperadoCorrecao}
+        onExcluir={excluirBatidaEng}
+        onAdicionar={incluirBatidaEng}
+        ajustes={ajustesDoCalendario}
+        onClose={() => { setDiaCorrecao(null); setVersaoCorrecao((v) => v + 1); atualizarContagemRevisao(); }}
+      />}
       {confirmacaoModal && <ConfirmacaoPonto {...confirmacaoModal} onClose={() => setConfirmacaoModal(null)} />}
-      {novoFuncionarioModal && <FormularioModal titulo="Novo funcionário" campos={[
-        { nome: 'nome', label: 'Nome completo', obrigatorio: true },
-        { nome: 'setor', label: 'Setor', obrigatorio: true, valorInicial: 'ENG' },
-        { nome: 'horista', tipo: 'switch', label: 'Tipo de contrato', descricao: 'Arraste para a direita se for horista (recebe por hora, sem horário fixo).', rotuloDesligado: 'Mensalista', rotuloLigado: 'Horista' },
-      ]} textoConfirmar="Adicionar" confirmar={criarFuncionarioEng} onClose={() => setNovoFuncionarioModal(false)} />}
-      {renomeacaoModal && <FormularioModal titulo="Renomear funcionário" campos={[{ nome: 'nome', label: 'Nome completo', obrigatorio: true, valorInicial: renomeacaoModal.nome }]} textoConfirmar="Salvar" confirmar={confirmarRenomeacaoEng} onClose={() => setRenomeacaoModal(null)} />}
       {popupDiaJustificativa && (
         <PopupJustificativasDia
           dia={popupDiaJustificativa}
@@ -715,15 +778,15 @@ function PopupJustificativasDia({ dia, itens, processandoId, onDecidir, onClose 
                   <strong style={{ color: '#1d3156', fontSize: 13 }}>{justificativa.horaInicio}–{justificativa.horaFim}</strong>
                   <span style={{ padding: '4px 10px', borderRadius: 99, background: cor.texto, color: '#fff', fontSize: 10, fontWeight: 900 }}>{justificativa.status}</span>
                 </div>
-                <p style={{ margin: '8px 0 0', color: '#405371', fontSize: 12, fontWeight: 600, lineHeight: 1.5 }}>{justificativa.motivo}</p>
+                <p style={{ margin: '8px 0 0', color: '#405371', fontSize: 12, fontWeight: 600, lineHeight: 1.5 }}>{[rotuloTipoJustificativa(justificativa.tipo), justificativa.motivo].filter(Boolean).join(' — ')}</p>
                 {justificativa.anexoDataUrl && (
                   <button type="button" onClick={() => setImagemAmpliada(justificativa.anexoDataUrl)} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, border: 0, background: 'transparent', padding: 0, cursor: 'pointer', color: '#1767e8', fontSize: 11, fontWeight: 800 }}><FileText size={13} /> Ver atestado anexado</button>
                 )}
                 {justificativa.status === 'Em análise' ? (
                   <div style={{ display: 'flex', gap: 7, marginTop: 10, flexWrap: 'wrap' }}>
                     <button type="button" disabled={processando} onClick={() => onDecidir(justificativa.id, 'Aceita')} style={{ border: 0, borderRadius: 8, padding: '7px 12px', background: '#2aba72', color: '#fff', fontWeight: 800, fontSize: 11, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Aceitar</button>
-                    <button type="button" disabled={processando} onClick={() => onDecidir(justificativa.id, 'Inválida')} style={{ border: 0, borderRadius: 8, padding: '7px 12px', background: '#ff9c2e', color: '#fff', fontWeight: 800, fontSize: 11, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Inválida</button>
-                    <button type="button" disabled={processando} onClick={() => onDecidir(justificativa.id, 'Recusada')} style={{ border: 0, borderRadius: 8, padding: '7px 12px', background: '#e4544e', color: '#fff', fontWeight: 800, fontSize: 11, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Recusar</button>
+                    <button type="button" disabled={processando} title="Conta no banco de horas igual à aceita; fica registrada no relatório" onClick={() => onDecidir(justificativa.id, 'Inválida')} style={{ border: 0, borderRadius: 8, padding: '7px 12px', background: '#ff9c2e', color: '#fff', fontWeight: 800, fontSize: 11, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Inválida</button>
+                    <button type="button" disabled={processando} title="Conta no banco de horas igual à aceita; fica registrada no relatório" onClick={() => onDecidir(justificativa.id, 'Recusada')} style={{ border: 0, borderRadius: 8, padding: '7px 12px', background: '#e4544e', color: '#fff', fontWeight: 800, fontSize: 11, cursor: processando ? 'default' : 'pointer', opacity: processando ? .6 : 1 }}>Recusar</button>
                   </div>
                 ) : (
                   <div style={{ marginTop: 8, color: '#7183a3', fontSize: 10.5, fontWeight: 700 }}>Decidida em {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(justificativa.atualizadoEm))}</div>

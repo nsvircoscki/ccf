@@ -1,15 +1,24 @@
-import { api } from './api';
+import { api, definirToken, aoExpirarSessao, temToken } from './api';
 
 export const authService = {
-  async login(usuario, senha) {
-    return api.login(usuario, senha);
+  async login(login, senha) {
+    return api.login(login, senha);
   },
 
-  async criarSenha(usuario, novaSenha) {
-    return api.criarSenha(usuario, novaSenha);
+  async criarSenha(login, novaSenha) {
+    return api.criarSenha(login, novaSenha);
   },
 
-  async alterarSenha(usuario, senhaAtual, novaSenha) {
-    return api.alterarSenha(usuario, senhaAtual, novaSenha);
+  // A senha trocada é sempre a de quem está logado (o backend lê do token).
+  async alterarSenha(senhaAtual, novaSenha) {
+    return api.alterarSenha(senhaAtual, novaSenha);
   },
+
+  async sessaoAtual() {
+    return api.getSessao();
+  },
+
+  definirToken,
+  aoExpirarSessao,
+  temToken,
 };
