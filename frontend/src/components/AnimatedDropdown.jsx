@@ -1,5 +1,5 @@
 // src/components/AnimatedDropdown.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { FiChevronDown } from 'react-icons/fi';
 
@@ -99,12 +99,43 @@ export function AnimatedSelect({ value, onChange, options, style, placeholder = 
   );
 }
 
-export function AnimatedDropdown({ label, value, onChange, options, width, searchable = false, searchPlaceholder = 'Buscar...' }) {
+export function AnimatedDropdown({
+  label,
+  value,
+  onChange,
+  options,
+  width,
+  searchable = false,
+  searchPlaceholder = 'Buscar...',
+  placeholder = 'Selecionar...',
+  allowCustom = false,
+  disabled = false,
+}) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef(null);
   const selectedOption = options.find(option => option.value === value);
-  const selectedLabel = selectedOption?.label || 'Selecionar...';
+  const selectedLabel = selectedOption?.label || (allowCustom && value) || placeholder;
+  const normalizarBusca = (texto) => String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR');
+  const termoBusca = normalizarBusca(searchQuery.trim());
+  const opcoesFiltradas = searchable
+    ? options.filter(option => (
+      normalizarBusca(option.label).includes(termoBusca) ||
+      normalizarBusca(option.sub).includes(termoBusca) ||
+      normalizarBusca(option.keywords).includes(termoBusca)
+    ))
+    : options;
+  const opcaoExata = opcoesFiltradas.some(
+    option => normalizarBusca(option.label) === termoBusca,
+  );
+
+  const selecionarValor = (novoValor) => {
+    onChange(novoValor);
+    fechar();
+  };
 
   // Fecha limpando a busca no próprio handler: limpar dentro do efeito
   // dispara uma renderização em cascata a cada abre/fecha.
@@ -139,8 +170,10 @@ export function AnimatedDropdown({ label, value, onChange, options, width, searc
     <div ref={dropdownRef} className="animated-dropdown-container" style={{ width }}>
       <button
         type="button"
-        onClick={() => (open ? fechar() : setOpen(true))}
+        disabled={disabled}
+        onClick={() => (open ? fechar() : !disabled && setOpen(true))}
         className="animated-dropdown-button"
+        style={disabled ? { opacity: 0.55, cursor: 'not-allowed' } : undefined}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
           <span style={{ fontSize: '14px', fontWeight: '700' }}>{label}</span>
@@ -171,26 +204,21 @@ export function AnimatedDropdown({ label, value, onChange, options, width, searc
                 placeholder={searchPlaceholder}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' && allowCustom && searchQuery.trim() && !opcaoExata) {
+                    event.preventDefault();
+                    selecionarValor(searchQuery.trim());
+                  }
+                }}
                 style={{ width: '100%', padding: '10px 12px', borderRadius: '12px', border: '1px solid #D1D5DB', outline: 'none', background: '#F9FAFB', boxSizing: 'border-box' }}
               />
             </div>
           )}
-          {(searchable ? options.filter(option => {
-            const termo = searchQuery.trim().toLowerCase();
-            if (!termo) return true;
-            // keywords: texto extra pesquisável (ex.: nome do cliente, matrícula)
-            // que não aparece no label exibido, mas ainda deve ser encontrável.
-            return option.label.toLowerCase().includes(termo) ||
-                   (option.sub || '').toLowerCase().includes(termo) ||
-                   (option.keywords || '').toLowerCase().includes(termo);
-          }) : options).map(option => (
+          {opcoesFiltradas.map(option => (
             <motion.button
               key={option.value}
               type="button"
-              onClick={() => {
-                onChange(option.value);
-                fechar();
-              }}
+              onClick={() => selecionarValor(option.value)}
               variants={itemVariants}
               className="dropdown-option"
             >
@@ -200,6 +228,21 @@ export function AnimatedDropdown({ label, value, onChange, options, width, searc
               )}
             </motion.button>
           ))}
+          {opcoesFiltradas.length === 0 && !allowCustom && (
+            <div style={{ padding: '14px 16px', color: '#64748B', fontSize: 13 }}>
+              Nenhum resultado encontrado.
+            </div>
+          )}
+          {allowCustom && searchQuery.trim() && !opcaoExata && (
+            <button
+              type="button"
+              onClick={() => selecionarValor(searchQuery.trim())}
+              className="dropdown-option"
+              style={{ borderTop: opcoesFiltradas.length ? '1px solid #E2E8F0' : 'none', color: '#1D4ED8', fontWeight: 600 }}
+            >
+              Usar município digitado: “{searchQuery.trim()}”
+            </button>
+          )}
         </div>
       </motion.div>
     </div>
