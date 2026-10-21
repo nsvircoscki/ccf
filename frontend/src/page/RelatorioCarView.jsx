@@ -1,14 +1,18 @@
-import { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Download, FileBarChart2 } from 'lucide-react';
-import { C, Field, MONT, SANS, SelectField } from '../components/cadastros/CadastroKit.jsx';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { C, Field, MONT, SANS, SearchableSelect, SelectField } from '../components/cadastros/CadastroKit.jsx';
 import { AnimatedDropdown } from '../components/AnimatedDropdown';
-import { CAR_ETAPAS, diagnosticarCar } from './car/carLogic.js';
+import { clienteService } from '../services/clienteService.js';
+import { imovelService } from '../services/imovelService.js';
+import { CAR_ETAPAS, converterHaParaM2, converterM2ParaHa, diagnosticarCar } from './car/carLogic.js';
+import { buscarModuloFiscal, buscarMunicipioPorNome, listarMunicipiosPorUf, normalizarUf, UFS_BRASIL } from './car/fmpUtils.js';
 
 const estadoInicial = {
   municipio: 'São Bento do Sul',
   uf: 'SC',
   areaTotalHa: '35',
-  moduloFiscalHa: '14',
+  areaTotalM2: '350000',
+  moduloFiscalHa: '16',
   declarante: 'Proprietário',
   areaVegetacaoNativaHa: '8',
   areaAppHa: '2.5',
@@ -19,30 +23,129 @@ const estadoInicial = {
   aderirPRA: 'Sim',
 };
 
-const opcoesSimNao = [
-  { value: 'Sim', label: 'Sim' },
-  { value: 'Não', label: 'Não' },
-];
-
 const opcoesDeclarante = [
   { value: 'Proprietário', label: 'Proprietário' },
   { value: 'Posseiro', label: 'Posseiro' },
 ];
 
+const paraOpcaoCliente = (cliente) => ({
+  value: cliente.id,
+  label: cliente.nome,
+  sub: cliente.documento || '',
+});
+
+const paraOpcaoImovel = (imovel) => ({
+  value: imovel.id,
+  label: imovel.matricula || 'Sem matrícula',
+  sub: [
+    (imovel.proprietarios || []).map((proprietario) => proprietario.nome).join(', '),
+    [imovel.municipio, imovel.estado].filter(Boolean).join(' / '),
+  ].filter(Boolean).join(' · '),
+});
+
+const converterAreaImovelParaM2 = (area) => {
+  if (area == null || area === '') return '';
+  const valor = String(area).trim().replace(/\s*m²$/i, '');
+  const numero = valor.includes(',')
+    ? Number(valor.replace(/\./g, '').replace(',', '.'))
+    : Number(valor);
+  return Number.isFinite(numero) && numero >= 0 ? String(numero) : '';
+};
+
+function SimNaoField({ label, value, onChange, span = 1 }) {
+  return (
+    <fieldset style={{ gridColumn: span === 2 ? '1 / -1' : 'auto', border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      <legend style={{ fontFamily: MONT, fontWeight: 600, fontSize: 10.5, color: C.label, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
+        {label}
+      </legend>
+      <div role="radiogroup" aria-label={label} style={{ display: 'flex', gap: 10 }}>
+        {['Sim', 'Não'].map((opcao) => {
+          const selecionada = value === opcao;
+          return (
+            <button
+              key={opcao}
+              type="button"
+              role="radio"
+              aria-checked={selecionada}
+              onClick={() => onChange(opcao)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 9,
+                flex: 1,
+                minHeight: 42,
+                padding: '9px 12px',
+                border: `1.5px solid ${selecionada ? C.accent : C.border}`,
+                borderRadius: 10,
+                background: selecionada ? `${C.accent}0d` : '#fff',
+                color: selecionada ? C.navy : C.label,
+                fontFamily: SANS,
+                fontSize: 13,
+                fontWeight: selecionada ? 700 : 500,
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'border-color 0.18s, background 0.18s, color 0.18s',
+              }}
+            >
+              <span style={{
+                width: 17,
+                height: 17,
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: `1.5px solid ${selecionada ? C.accent : C.border}`,
+                borderRadius: 4,
+                background: selecionada ? C.accent : '#fff',
+                color: '#fff',
+              }}>
+                {selecionada && <Check size={12} strokeWidth={3} />}
+              </span>
+              {opcao}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 export default function RelatorioCarView({ onBack, kanban }) {
   const { workflows = [], workflowAtivo, setWorkflowAtivo } = kanban || {};
   const [etapaAtual, setEtapaAtual] = useState(0);
   const [dados, setDados] = useState(estadoInicial);
+  const [clienteSelecionadoId, setClienteSelecionadoId] = useState(null);
+  const [imovelSelecionadoId, setImovelSelecionadoId] = useState(null);
+  const [clientes, setClientes] = useState([]);
+  const [imoveis, setImoveis] = useState([]);
+  const [erroCarregamento, setErroCarregamento] = useState('');
   const processoAtivo = workflows.find((workflow) => workflow.id === workflowAtivo) || workflows[0] || null;
+  const clienteSelecionado = clientes.find((cliente) => cliente.id === clienteSelecionadoId) || null;
+  const imovelSelecionado = imoveis.find((imovel) => imovel.id === imovelSelecionadoId) || null;
   const opcoesProcessos = [
     { value: '', label: 'Nenhum processo selecionado' },
     ...workflows.map((workflow) => ({
       value: workflow.id,
       label: workflow.name,
-      sub: workflow.servico?.nomeCliente || '',
-      keywords: `${workflow.name || ''} ${workflow.servico?.nomeCliente || ''} ${workflow.matricula || ''}`,
+      sub: [workflow.servico?.nomeCliente, workflow.matricula].filter(Boolean).join(' · '),
     })),
   ];
+
+  useEffect(() => {
+    let ativo = true;
+    Promise.all([clienteService.listarTodos(), imovelService.listarTodos()])
+      .then(([listaClientes, listaImoveis]) => {
+        if (!ativo) return;
+        setClientes(Array.isArray(listaClientes) ? listaClientes : []);
+        setImoveis(Array.isArray(listaImoveis) ? listaImoveis : []);
+      })
+      .catch((erro) => {
+        console.error('Erro ao carregar clientes e imóveis para o CAR:', erro);
+        if (ativo) setErroCarregamento('Não foi possível carregar a lista de clientes e imóveis.');
+      });
+
+    return () => { ativo = false; };
+  }, []);
 
   const relatorio = useMemo(() => diagnosticarCar(dados), [dados]);
 
@@ -50,14 +153,79 @@ export default function RelatorioCarView({ onBack, kanban }) {
     setDados((prev) => ({ ...prev, [campo]: valor }));
   };
 
+  const selecionarCliente = (id) => {
+    setClienteSelecionadoId(id);
+    const cliente = clientes.find((item) => item.id === id);
+    if (!cliente) return;
+    const uf = normalizarUf(cliente.estado);
+    const municipio = buscarMunicipioPorNome(uf, cliente.cidade);
+    setDados((prev) => ({
+      ...prev,
+      uf,
+      municipio: municipio?.value || cliente.cidade || '',
+      moduloFiscalHa: municipio ? String(municipio.moduloFiscalHa) : '',
+    }));
+  };
+
+  const selecionarImovel = (id) => {
+    setImovelSelecionadoId(id);
+    const imovel = imoveis.find((item) => item.id === id);
+    if (!imovel) return;
+    const uf = normalizarUf(imovel.estado);
+    const municipio = buscarMunicipioPorNome(uf, imovel.municipio);
+    const areaM2 = converterAreaImovelParaM2(imovel.area);
+    setDados((prev) => ({
+      ...prev,
+      uf,
+      municipio: municipio?.value || imovel.municipio || '',
+      moduloFiscalHa: municipio ? String(municipio.moduloFiscalHa) : '',
+      ...(areaM2 ? { areaTotalM2: areaM2, areaTotalHa: converterM2ParaHa(areaM2) } : {}),
+    }));
+  };
+
+  const atualizarAreaHa = (valor) => {
+    setDados((prev) => ({
+      ...prev,
+      areaTotalHa: valor,
+      areaTotalM2: converterHaParaM2(valor),
+    }));
+  };
+
+  const atualizarAreaM2 = (valor) => {
+    setDados((prev) => ({
+      ...prev,
+      areaTotalM2: valor,
+      areaTotalHa: converterM2ParaHa(valor),
+    }));
+  };
+
   const etapaAnterior = () => setEtapaAtual((atual) => Math.max(0, atual - 1));
   const proximaEtapa = () => setEtapaAtual((atual) => Math.min(CAR_ETAPAS.length - 1, atual + 1));
 
-  const progresso = ((etapaAtual + 1) / CAR_ETAPAS.length) * 100;
+  const municipioOptions = listarMunicipiosPorUf(dados.uf);
+  const selecoesAtivas = [
+    {
+      label: 'Processo',
+      valor: workflowAtivo ? processoAtivo?.name : 'Nenhum processo selecionado',
+      detalhe: workflowAtivo ? processoAtivo?.servico?.nomeCliente : '',
+    },
+    {
+      label: 'Cliente',
+      valor: clienteSelecionado?.nome || 'Nenhum cliente selecionado',
+      detalhe: clienteSelecionado?.documento || '',
+    },
+    {
+      label: 'Imóvel',
+      valor: imovelSelecionado?.matricula || 'Nenhum imóvel selecionado',
+      detalhe: imovelSelecionado
+        ? [imovelSelecionado.municipio, imovelSelecionado.estado].filter(Boolean).join(' / ')
+        : '',
+    },
+  ];
 
   const exportarRelatorio = () => {
     const linhas = [
-      `Processo: ${processoAtivo?.name || 'Nenhum processo selecionado'}`,
+      ...selecoesAtivas.map((selecao) => `${selecao.label}: ${selecao.valor}`),
       `Protocolo: ${relatorio.protocoloConsulta}`,
       `Data: ${relatorio.dataEmissao}`,
       `Resumo do imóvel: ${relatorio.resumoImovel.enquadramento}`,
@@ -80,9 +248,36 @@ export default function RelatorioCarView({ onBack, kanban }) {
     if (etapaAtual === 0) {
       return (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 18 }}>
-          <Field label="Município" value={dados.municipio} onChange={(value) => atualizar('municipio', value)} placeholder="Ex.: São Bento do Sul" span={2} />
-          <Field label="UF" value={dados.uf} onChange={(value) => atualizar('uf', value)} placeholder="SC" />
-          <Field label="Área total do imóvel (ha)" type="number" value={dados.areaTotalHa} onChange={(value) => atualizar('areaTotalHa', value)} placeholder="35" />
+          <AnimatedDropdown
+            label="UF"
+            value={dados.uf}
+            onChange={(uf) => setDados((prev) => ({ ...prev, uf, municipio: '', moduloFiscalHa: '' }))}
+            options={UFS_BRASIL}
+            width="100%"
+            searchable
+            searchPlaceholder="Digite o nome ou a sigla da UF"
+          />
+          <AnimatedDropdown
+            label="Município"
+            value={dados.municipio}
+            disabled={!dados.uf}
+            placeholder={dados.uf ? 'Digite ou selecione...' : 'Selecione primeiro a UF'}
+            searchPlaceholder="Buscar ou digitar município"
+            width="100%"
+            searchable
+            allowCustom
+            options={municipioOptions}
+            onChange={(value) => {
+              const moduloFiscalHa = buscarModuloFiscal(dados.uf, value);
+              setDados((prev) => ({
+                ...prev,
+                municipio: value,
+                moduloFiscalHa: moduloFiscalHa == null ? '' : String(moduloFiscalHa),
+              }));
+            }}
+          />
+          <Field label="Área total do imóvel (ha)" value={dados.areaTotalHa} onChange={atualizarAreaHa} placeholder="35" />
+          <Field label="Área total do imóvel (m²)" value={dados.areaTotalM2} onChange={atualizarAreaM2} placeholder="350000" />
           <SelectField label="Vínculo do declarante" value={dados.declarante} onChange={(value) => atualizar('declarante', value)} options={opcoesDeclarante} span={2} />
         </div>
       );
@@ -91,12 +286,27 @@ export default function RelatorioCarView({ onBack, kanban }) {
     if (etapaAtual === 1) {
       return (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 18 }}>
-          <Field label="Módulo fiscal local (ha)" type="number" value={dados.moduloFiscalHa} onChange={(value) => atualizar('moduloFiscalHa', value)} placeholder="14" />
+          <Field
+            label="Módulo fiscal local (ha)"
+            type="number"
+            value={dados.moduloFiscalHa}
+            onChange={(value) => atualizar('moduloFiscalHa', value)}
+            placeholder="Informe o módulo fiscal"
+            disabled={buscarModuloFiscal(dados.uf, dados.municipio) != null}
+            hint={buscarModuloFiscal(dados.uf, dados.municipio) != null
+              ? 'Valor carregado automaticamente da planilha enviada.'
+              : 'Sem registro correspondente na planilha; informe o valor manualmente.'}
+          />
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: MONT, fontWeight: 600, fontSize: 10.5, color: C.label, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 6 }}>
+              Quantidade estimada
+            </div>
+            <div style={{ width: '100%', height: 42, boxSizing: 'border-box', display: 'flex', alignItems: 'center', padding: '0 14px', background: '#eef6ff', borderRadius: 10, border: `1.5px solid ${C.border}`, color: C.navy, fontFamily: MONT, fontWeight: 700, fontSize: 14 }}>
+              {`${relatorio.resumoImovel.quantidadeMF.toFixed(2)} MF`}
+            </div>
+          </div>
           <Field label="Vegetação nativa remanescente (ha)" type="number" value={dados.areaVegetacaoNativaHa} onChange={(value) => atualizar('areaVegetacaoNativaHa', value)} placeholder="8" />
           <Field label="APP / áreas de uso restrito (ha)" type="number" value={dados.areaAppHa} onChange={(value) => atualizar('areaAppHa', value)} placeholder="2.5" />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#eef6ff', borderRadius: 12, border: `1px solid ${C.border}`, minHeight: 74, color: C.navy, fontFamily: MONT, fontWeight: 700 }}>
-            {`Quantidade estimada: ${Number((Number(dados.areaTotalHa || 0) / (Number(dados.moduloFiscalHa || 14) || 14))).toFixed(2)} MF`}
-          </div>
         </div>
       );
     }
@@ -104,24 +314,17 @@ export default function RelatorioCarView({ onBack, kanban }) {
     if (etapaAtual === 2) {
       return (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 18 }}>
-          <SelectField label="Áreas em APP/RL foram consolidadas antes de 22/07/2008?" value={dados.areaConsolidadaAntes2008} onChange={(value) => atualizar('areaConsolidadaAntes2008', value)} options={opcoesSimNao} span={2} />
+          <SimNaoField label="Áreas em APP/RL foram consolidadas antes de 22/07/2008?" value={dados.areaConsolidadaAntes2008} onChange={(value) => atualizar('areaConsolidadaAntes2008', value)} span={2} />
           <div style={{ gridColumn: '1 / -1', background: '#f8fafc', border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
             <div style={{ fontFamily: MONT, fontWeight: 700, color: C.text, fontSize: 13, marginBottom: 8 }}>Orientação contextual</div>
             <div style={{ fontFamily: SANS, fontSize: 13, color: C.label, lineHeight: 1.7 }}>
               Se houve ocupação ou uso agrícola antes do marco temporal, o sistema considera a área como consolidada e pode reduzir a exigência de recomposição.
             </div>
           </div>
-        </div>
-      );
-    }
-
-    if (etapaAtual === 3) {
-      return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 18 }}>
-          <SelectField label="Há déficit na reserva legal?" value={dados.passivoReservaLegal} onChange={(value) => atualizar('passivoReservaLegal', value)} options={opcoesSimNao} />
-          <SelectField label="Há passivo em APP?" value={dados.passivoApp} onChange={(value) => atualizar('passivoApp', value)} options={opcoesSimNao} />
-          <SelectField label="Há passivo em uso restrito?" value={dados.passivoUsoRestrito} onChange={(value) => atualizar('passivoUsoRestrito', value)} options={opcoesSimNao} />
-          <SelectField label="Deseja orientações para adesão ao PRA?" value={dados.aderirPRA} onChange={(value) => atualizar('aderirPRA', value)} options={opcoesSimNao} />
+          <SimNaoField label="Há déficit na reserva legal?" value={dados.passivoReservaLegal} onChange={(value) => atualizar('passivoReservaLegal', value)} />
+          <SimNaoField label="Há passivo em APP?" value={dados.passivoApp} onChange={(value) => atualizar('passivoApp', value)} />
+          <SimNaoField label="Há passivo em uso restrito?" value={dados.passivoUsoRestrito} onChange={(value) => atualizar('passivoUsoRestrito', value)} />
+          <SimNaoField label="Deseja orientações para adesão ao PRA?" value={dados.aderirPRA} onChange={(value) => atualizar('aderirPRA', value)} />
         </div>
       );
     }
@@ -189,49 +392,72 @@ export default function RelatorioCarView({ onBack, kanban }) {
       </header>
 
       <main className="scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '26px 28px 60px', boxSizing: 'border-box' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, padding: '18px 20px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 18 }}>
-          <div style={{ width: 52, height: 52, borderRadius: 14, background: '#dbeafe', color: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <FileBarChart2 size={22} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: MONT, fontWeight: 700, fontSize: 14, color: C.text }}>Wizard de diagnóstico do CAR</div>
-            <div style={{ fontFamily: SANS, fontSize: 12.5, color: C.muted, marginTop: 2 }}>Fluxo passo a passo para orientar o preenchimento no SICAR.</div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: 'fit-content', maxWidth: '100%', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: '8px 12px' }}>
+            <span style={{ flexShrink: 0, fontFamily: MONT, fontWeight: 700, color: C.text, fontSize: 11.5 }}>Etapa {etapaAtual + 1} de {CAR_ETAPAS.length}</span>
+            <span style={{ fontFamily: SANS, fontSize: 11, color: C.muted, textAlign: 'right' }}>{CAR_ETAPAS[etapaAtual]}</span>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(220px, 0.8fr)', gap: 18, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(220px, 280px)', alignItems: 'start', gap: 14, marginBottom: 20 }}>
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 18, padding: '16px 18px' }}>
-            <AnimatedDropdown
-              label="Processo ativo"
-              value={workflowAtivo || ''}
-              onChange={(value) => setWorkflowAtivo?.(value)}
-              options={opcoesProcessos}
-              width="100%"
-              searchable
-              searchPlaceholder="Buscar processo, cliente ou matrícula"
-            />
-          </div>
-
-          <div style={{ background: '#f8fafc', border: `1px solid ${C.border}`, borderRadius: 18, padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ fontFamily: MONT, fontSize: 10.5, color: C.muted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>Processo em análise</div>
-            <div style={{ fontFamily: MONT, fontWeight: 700, fontSize: 14, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {processoAtivo?.name || 'Nenhum processo selecionado'}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
+              <SearchableSelect
+                label="Processo"
+                icon="doc"
+                value={workflowAtivo || null}
+                onChange={(value) => setWorkflowAtivo?.(value || null)}
+                options={opcoesProcessos}
+                placeholder="Buscar processo, cliente ou matrícula…"
+                accent={C.accent}
+              />
+              <SearchableSelect
+                label="Cliente"
+                icon="user"
+                options={clientes.map(paraOpcaoCliente)}
+                value={clienteSelecionadoId}
+                onChange={selecionarCliente}
+                placeholder="Buscar cliente cadastrado…"
+                accent={C.accent}
+              />
+              <SearchableSelect
+                label="Imóvel"
+                icon="home"
+                options={imoveis.map(paraOpcaoImovel)}
+                value={imovelSelecionadoId}
+                onChange={selecionarImovel}
+                placeholder="Buscar imóvel cadastrado…"
+                accent={C.accent}
+              />
             </div>
-            {processoAtivo?.servico?.nomeCliente && (
-              <div style={{ fontFamily: SANS, fontSize: 12.5, color: C.label, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {processoAtivo.servico.nomeCliente}
+            {erroCarregamento && (
+              <div role="alert" style={{ fontFamily: SANS, fontSize: 12, color: '#b91c1c', marginTop: 12 }}>
+                {erroCarregamento}
               </div>
             )}
           </div>
-        </div>
 
-        <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 18, padding: 22, marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontFamily: MONT, fontWeight: 700, color: C.text, fontSize: 13 }}>Etapa {etapaAtual + 1} de {CAR_ETAPAS.length}</span>
-            <span style={{ fontFamily: SANS, fontSize: 12, color: C.muted }}>{CAR_ETAPAS[etapaAtual]}</span>
-          </div>
-          <div style={{ height: 8, background: '#edf2ff', borderRadius: 999, overflow: 'hidden' }}>
-            <div style={{ width: `${progresso}%`, height: '100%', background: 'linear-gradient(90deg, #2D7AFD, #7c3aed)', borderRadius: 999 }} />
+          <div style={{ background: '#f8fafc', border: `1px solid ${C.border}`, borderRadius: 14, padding: '10px 12px', minWidth: 0 }}>
+            {selecoesAtivas.map((selecao, indice) => (
+              <div
+                key={selecao.label}
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  padding: '5px 0',
+                  borderBottom: indice < selecoesAtivas.length - 1 ? `1px solid ${C.border}` : 'none',
+                }}
+              >
+                <span style={{ flexShrink: 0, fontFamily: MONT, fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {selecao.label}
+                </span>
+                <span title={selecao.detalhe ? `${selecao.valor} · ${selecao.detalhe}` : selecao.valor} style={{ minWidth: 0, fontFamily: SANS, fontSize: 11.5, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right' }}>
+                  {selecao.valor === `Nenhum ${selecao.label.toLowerCase()} selecionado` ? '—' : selecao.valor}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 

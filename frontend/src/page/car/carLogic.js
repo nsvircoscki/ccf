@@ -1,14 +1,38 @@
 export const CAR_ETAPAS = [
   'Dados gerais',
   'Porte e vegetação',
-  'Histórico e APP',
-  'Diagnóstico e PRA',
+  'Histórico, APP e PRA',
   'Relatório final',
 ];
 
+export function converterHaParaM2(hectares) {
+  const valor = String(hectares ?? '').trim().replace(',', '.');
+  if (!valor) return '';
+
+  const numero = Number(valor);
+  return Number.isFinite(numero) && numero >= 0
+    ? String(Number((numero * 10000).toFixed(2)))
+    : '';
+}
+
+export function converterM2ParaHa(metrosQuadrados) {
+  const valor = String(metrosQuadrados ?? '').trim().replace(',', '.');
+  if (!valor) return '';
+
+  const numero = Number(valor);
+  return Number.isFinite(numero) && numero >= 0
+    ? String(Number((numero / 10000).toFixed(6)))
+    : '';
+}
+
+function parseNumero(valor) {
+  const numero = Number(String(valor ?? '').trim().replace(',', '.'));
+  return Number.isFinite(numero) ? numero : 0;
+}
+
 export function calcularQuantidadeMf(areaTotalHa, moduloFiscalHa) {
-  const areaTotal = Number(areaTotalHa);
-  const moduloFiscal = Number(moduloFiscalHa);
+  const areaTotal = parseNumero(areaTotalHa);
+  const moduloFiscal = parseNumero(moduloFiscalHa);
 
   if (!Number.isFinite(areaTotal) || !Number.isFinite(moduloFiscal) || moduloFiscal <= 0) {
     return 0;
@@ -18,11 +42,11 @@ export function calcularQuantidadeMf(areaTotalHa, moduloFiscalHa) {
 }
 
 export function diagnosticarCar(dados = {}) {
-  const areaTotalHa = Number(dados.areaTotalHa ?? 0) || 0;
-  const moduloFiscalHa = Number(dados.moduloFiscalHa ?? 14) || 14;
-  const vegetacaoNativaHa = Number(dados.areaVegetacaoNativaHa ?? 0) || 0;
-  const areaAppHa = Number(dados.areaAppHa ?? 0) || 0;
-  const reservaLegalHa = Number(dados.reservaLegalHa ?? areaTotalHa * 0.2) || 0;
+  const areaTotalHa = parseNumero(dados.areaTotalHa);
+  const moduloFiscalHa = parseNumero(dados.moduloFiscalHa) || 14;
+  const vegetacaoNativaHa = parseNumero(dados.areaVegetacaoNativaHa);
+  const areaAppHa = parseNumero(dados.areaAppHa);
+  const reservaLegalHa = parseNumero(dados.reservaLegalHa ?? areaTotalHa * 0.2) || 0;
   const quantidadeMf = calcularQuantidadeMf(areaTotalHa, moduloFiscalHa);
   const aoMenos4Mf = quantidadeMf <= 4;
 

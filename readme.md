@@ -84,6 +84,23 @@ Se necessário, aplique as migrations do Prisma:
 npx prisma migrate dev
 ```
 
+Para criar o primeiro usuário administrador, configure no `backend/.env`:
+
+```env
+BOOTSTRAP_ADMIN_LOGIN=admin
+BOOTSTRAP_ADMIN_PASSWORD=uma-senha-de-sua-escolha
+BOOTSTRAP_ADMIN_NAME=Administrador
+BOOTSTRAP_ADMIN_EMAIL=admin@exemplo.com
+```
+
+Depois, ainda na pasta `backend/`, execute:
+
+```bash
+npm run seed
+```
+
+O seed cria o usuário no setor `ENG`, armazena a senha com hash bcrypt e não apaga dados existentes. Se o login já existir, ele não altera a conta nem redefine a senha.
+
 ### Frontend
 
 Na pasta `frontend/`:
