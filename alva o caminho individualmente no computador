@@ -1,0 +1,19 @@
+ backend/scripts/ativarEtapasEmAndamento.js         |  37 [32m++++++[m
+ backend/src/controllers/servicoController.js       |   2 [32m+[m[31m-[m
+ backend/src/controllers/workflowController.js      |   2 [32m+[m[31m-[m
+ backend/src/services/etapasKanban.js               |  63 [32m++++++++++[m
+ backend/src/services/notificationService.js        |  41 [31m------[m
+ backend/src/services/ponto/batidaService.js        |  17 [32m++[m[31m-[m
+ backend/src/services/servicoService.js             |   8 [32m+[m[31m-[m
+ backend/src/services/ticketService.js              |   8 [32m+[m[31m-[m
+ backend/src/services/workflowService.js            |   8 [32m+[m[31m-[m
+ frontend/src/assets/discord_icon.png               | Bin [31m0[m -> [32m13974[m bytes
+ frontend/src/components/KanbanView.jsx             |  18 [32m++[m[31m-[m
+ frontend/src/components/ModuleSelectorView.jsx     | 138 [32m++++++++++++++++++++[m[31m-[m
+ frontend/src/components/PesquisaView.jsx           | 104 [32m+++++++++++++++[m[31m-[m
+ frontend/src/page/Orcamento.jsx                    |  37 [32m+++[m[31m---[m
+ .../src/page/orcamento/PropostaOrcamentoModal.jsx  | 132 [32m++++++++++++++++++++[m
+ frontend/src/page/orcamento/propostaPdf.js         |   5 [32m+[m[31m-[m
+ .../page/sisPonto/SisPontoJustificativasAdmin.jsx  |  48 [32m++++++[m[31m-[m
+ .../sisPonto/SisPontoRelatorioJustificativas.jsx   |   1 [31m-[m
+ 18 files changed, 581 insertions(+), 88 deletions(-)
