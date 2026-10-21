@@ -23,7 +23,7 @@ import { formatarTelefone, formatarMatricula, formatarMoeda, desformatarMoeda, n
 import VisualizadorImagem from './VisualizadorImagem.jsx';
 import VisualizadorFicha from './VisualizadorFicha.jsx';
 import { useEstadoNavegavel } from '../hooks/useNavegacao';
-import { abrirPropostaPdf } from './orcamento/propostaPdf.js';
+import PropostaOrcamentoModal from './orcamento/PropostaOrcamentoModal.jsx';
 
 
 const initialServices = [
@@ -616,20 +616,11 @@ function Orcamento({ onBack, onOrcamentoDecidido }) {
     }
   };
 
-  // Proposta de valores formalizada (antes ficava em OS/Contrato): usa os
-  // serviços e valores que estão na tela agora; o total respeita as condições
-  // de pagamento, se definidas.
-  const gerarProposta = () => {
-    abrirPropostaPdf({
-      numero: numero || '',
-      cliente: cliente || '',
-      matricula: matricula || '',
-      area: area ? `${area} m²` : '',
-      municipio: municipio || '',
-      itens: selectedServices.map((service) => ({ nome: service.nome, valor: service.indice * salarioMinimo })),
-      total: pagamento?.valorFinal ?? totalValor,
-    });
-  };
+  // Proposta de valores formalizada (antes ficava em OS/Contrato): abre numa
+  // segunda janela (PropostaOrcamentoModal), já preenchida com os serviços e
+  // valores que estão na tela; lá dá para ajustar tudo antes de gerar o PDF.
+  const [propostaAberta, setPropostaAberta] = useState(false);
+  const gerarProposta = () => setPropostaAberta(true);
 
   const abrirFicha = () => {
     if (!orcamentoId) return;
@@ -1401,6 +1392,22 @@ function Orcamento({ onBack, onOrcamentoDecidido }) {
       <AnimatePresence>
         {notasAberta ? <NotesModal notas={notas} setNotas={setNotas} onClose={() => setNotasAberta(false)} /> : null}
       </AnimatePresence>
+
+      {propostaAberta && (
+        <PropostaOrcamentoModal
+          inicial={{
+            numero: numero || '',
+            cliente: cliente || '',
+            matricula: matricula || '',
+            area: area && area !== '0,00' ? `${area} m²` : '',
+            municipio: municipio || '',
+            itens: selectedServices.map((service) => ({ nome: service.nome, valor: service.indice * salarioMinimo })),
+          }}
+          disponiveis={servicesWithCalculatedTopo.filter((service) => service.ativo).map((service) => ({ nome: service.nome, valor: service.indice * salarioMinimo }))}
+          totalSugerido={pagamento?.valorFinal ?? totalValor}
+          onClose={() => setPropostaAberta(false)}
+        />
+      )}
 
       {pagamentoAberto ? (
         <ModalPagamento

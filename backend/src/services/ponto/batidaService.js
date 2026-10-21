@@ -370,7 +370,10 @@ function etapaDaPrevista(prevista, padraoHorarioId, { padroes, justificativas, p
 
 export async function listarParaRevisao(periodo, agora = new Date()) {
   await gerarPrevistas();
-  const { batidas, porUsuario, usuarios } = await carregarPeriodo(periodo);
+  let dados = await carregarPeriodo(periodo);
+  await reclassificarPeriodo(periodo, dados);
+  dados = await carregarPeriodo(periodo);
+  const { batidas, porUsuario, usuarios } = dados;
   const contexto = await contextoEtapas();
   const hoje = chaveDiaLocal(agora);
   const pares = [];
@@ -416,7 +419,10 @@ export async function contarParaRevisao(agora = new Date()) {
   let registros = 0;
   for (const m of [mesAnterior, mesAtual]) {
     const periodo = interpretarPeriodo({ mes: m });
-    const { porUsuario, usuarios } = await carregarPeriodo(periodo);
+    let dados = await carregarPeriodo(periodo);
+    await reclassificarPeriodo(periodo, dados);
+    dados = await carregarPeriodo(periodo);
+    const { porUsuario, usuarios } = dados;
     for (const usuario of usuarios) {
       for (const par of montarPares(porUsuario.get(usuario.id) || [])) {
         const ref = par.entrada || par.saida;
@@ -591,6 +597,13 @@ async function carregarPeriodo({ inicio, fim }) {
     (porUsuario.get(b.userId) || porUsuario.set(b.userId, []).get(b.userId)).push(b);
   }
   return { batidas, porUsuario, usuarios: [...usuarios.values()] };
+}
+
+async function reclassificarPeriodo(periodo, dados) {
+  const fimInclusivo = new Date(periodo.fim.getTime() - 1);
+  await Promise.all(dados.usuarios.map((usuario) =>
+    reclassificar(usuario.id, [periodo.inicio, fimInclusivo])
+  ));
 }
 
 export async function exportarCsv(periodo) {

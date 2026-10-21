@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import {
   Search, LayoutGrid, Calculator, FileText, ArrowLeft,
-  BookOpen, Wallet, Receipt, ClipboardCheck, Clock3,
+  BookOpen, Receipt, ClipboardCheck, Clock3, Archive,
 } from 'lucide-react';
+import imgDiscord from '../assets/discord_icon.png';
 import { temAcessoAoModulo } from '../utils/permissoes';
 import { GRUPOS, ehGrupo, subitensDoGrupo, podeAbrirSubitem, grupoAcessivel } from '../utils/gruposMenu';
 
@@ -10,6 +11,15 @@ const MONT = '"Montserrat", sans-serif';
 const SANS = '"Open Sans", sans-serif';
 const EASE = 'cubic-bezier(0.22, 0.61, 0.36, 1)';
 const POP_EASE = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
+const CAMINHO_SIS_CAIXA_KEY = 'ccf:sis-caixa:caminho';
+
+function caminhoRedeParaUrl(caminho) {
+  const normalizado = caminho.trim().replace(/\\/g, '/');
+  if (!normalizado.startsWith('//')) {
+    throw new Error('Informe um caminho de rede começando com \\\\servidor\\.');
+  }
+  return `file:${normalizado}`;
+}
 
 // Tiles de grupo (Cadastros, Relatórios, Configurações) abrem uma segunda
 // tela com as opções de dentro — definidos em utils/gruposMenu.js, que a
@@ -24,7 +34,7 @@ const MODULOS = [
   { id: 'kanban', label: 'Kanban', desc: 'Acompanhar o andamento dos projetos por etapa', icon: LayoutGrid, color: '#0e7490' },
   { id: 'orcamento', label: 'Orçamento', desc: 'Montar e aprovar orçamentos de serviço', icon: Calculator, color: '#b45309' },
   { id: 'emissao-documentos', label: 'OS/Contrato', desc: 'Ordem de serviço e contrato do serviço', icon: FileText, color: '#0f766e', wip: true },
-  { id: 'sis-caixa', label: 'SIS CAIXA', desc: 'Controle de caixa do sistema', icon: Wallet, color: '#065f46', wip: true },
+  { id: 'sis-caixa', label: 'SIS CAIXA', desc: 'Abrir planilha de caixa', icon: Archive, color: '#065f46' },
   tileDeGrupo('sis-doc'),
   tileDeGrupo('config'),
   { id: 'sis-mon', label: 'SIS MON', desc: 'Sistema de monografia', icon: BookOpen, color: '#92400e', wip: true },
@@ -32,9 +42,10 @@ const MODULOS = [
   { id: 'faturamento', label: 'Faturamento', desc: 'Emitir boletos e notas fiscais', icon: Receipt, color: '#b91c1c' },
   { id: 'tarefas', label: 'Tarefas', desc: 'Planilha de atividades por setor, com histórico do que já foi concluído', icon: ClipboardCheck, color: '#ea580c' },
   { id: 'sis-ponto', label: 'SIS Ponto', desc: 'Sistema para bater o ponto dos funcionários', icon: Clock3, color: '#2563eb' },
+  { id: 'discord', label: 'Discord', desc: 'Abrir o aplicativo Discord', icon: imgDiscord, color: '#5865f2', externalUrl: 'discord://-/' },
 ];
 
-function ModuleTile({ mod, index, onOpen, semPermissao }) {
+function ModuleTile({ mod, index, onOpen, onConfigure, semPermissao }) {
   const Icon = mod.icon;
   const [hover, setHover] = useState(false);
   const wip = Boolean(mod.wip);
@@ -47,9 +58,22 @@ function ModuleTile({ mod, index, onOpen, semPermissao }) {
     <button
       type="button"
       onClick={bloqueado ? undefined : onOpen}
+      onContextMenu={(evento) => {
+        if (mod.id !== 'sis-caixa' || bloqueado || !onConfigure) return;
+        evento.preventDefault();
+        onConfigure();
+      }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title={wip ? 'Em desenvolvimento — ainda não disponível' : semPermissao ? 'Sem permissão de acesso' : undefined}
+      title={
+        wip
+          ? 'Em desenvolvimento — ainda não disponível'
+          : semPermissao
+            ? 'Sem permissão de acesso'
+            : mod.id === 'sis-caixa'
+              ? 'Clique para abrir; botão direito para alterar o caminho'
+              : undefined
+      }
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
         background: 'none', border: 'none', padding: 0, cursor: bloqueado ? 'default' : 'pointer', outline: 'none',
@@ -75,7 +99,9 @@ function ModuleTile({ mod, index, onOpen, semPermissao }) {
           background: 'linear-gradient(180deg, rgba(255,255,255,0.28), transparent)',
           pointerEvents: 'none',
         }} />
-        <Icon size={32} strokeWidth={1.8} />
+        {typeof Icon === 'string'
+          ? <img src={Icon} alt="" style={{ display: 'block', position: 'relative', zIndex: 1, width: 32, height: 32, objectFit: 'contain', borderRadius: 8 }} />
+          : <Icon size={32} strokeWidth={1.8} />}
       </div>
       <span style={{
         fontFamily: SANS, fontWeight: 600, fontSize: 12.5,
@@ -97,15 +123,67 @@ function ModuleTile({ mod, index, onOpen, semPermissao }) {
 export default function ModuleSelectorView({ usuarioLogado, usuarioAtual, onAbrirModulo }) {
   // Grupo aberto na segunda tela (Cadastros, Relatórios, Configurações), ou null.
   const [submenu, setSubmenu] = useState(null);
+  const [modalCaminhoAberto, setModalCaminhoAberto] = useState(false);
+  const [caminhoDigitado, setCaminhoDigitado] = useState('');
+  const [erroCaminho, setErroCaminho] = useState('');
+
+  const abrirModalCaminho = () => {
+    setCaminhoDigitado(window.localStorage.getItem(CAMINHO_SIS_CAIXA_KEY) || '');
+    setErroCaminho('');
+    setModalCaminhoAberto(true);
+  };
+
+  const salvarCaminhoSisCaixa = (evento) => {
+    evento.preventDefault();
+    const caminho = caminhoDigitado.trim();
+    try {
+      const url = caminhoRedeParaUrl(caminho);
+      window.localStorage.setItem(CAMINHO_SIS_CAIXA_KEY, caminho);
+      setModalCaminhoAberto(false);
+      setErroCaminho('');
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (erro) {
+      setErroCaminho(erro.message);
+    }
+  };
+
+  const abrirSisCaixa = () => {
+    const caminho = window.localStorage.getItem(CAMINHO_SIS_CAIXA_KEY);
+    if (!caminho) {
+      abrirModalCaminho();
+      return;
+    }
+    try {
+      window.open(caminhoRedeParaUrl(caminho), '_blank', 'noopener,noreferrer');
+    } catch {
+      window.localStorage.removeItem(CAMINHO_SIS_CAIXA_KEY);
+      abrirModalCaminho();
+    }
+  };
 
   // Grupo fica bloqueado se a pessoa não abre nada dentro dele; tela comum
   // segue permissoes.js.
   const semPermissao = (mod) => (
-    ehGrupo(mod.id) ? !grupoAcessivel(mod.id, usuarioLogado) : !temAcessoAoModulo(usuarioLogado, mod.id)
+    mod.externalUrl
+    ? false
+    : ehGrupo(mod.id) 
+    ? !grupoAcessivel(mod.id, usuarioLogado) 
+    : !temAcessoAoModulo(usuarioLogado, mod.id)
   );
 
   const abrirTilePrincipal = (mod) => {
     if (mod.wip || semPermissao(mod)) return;
+
+    if (mod.externalUrl) {
+      window.open(mod.externalUrl, '_blank', 'noopener, noreferrer');
+      return;
+    }
+
+    if (mod.id === 'sis-caixa') {
+      abrirSisCaixa();
+      return;
+    }
+
     if (ehGrupo(mod.id)) {
       setSubmenu(mod.id);
       return;
@@ -200,9 +278,57 @@ export default function ModuleSelectorView({ usuarioLogado, usuarioAtual, onAbri
                 index={i}
                 semPermissao={semPermissao(mod)}
                 onOpen={() => abrirTilePrincipal(mod)}
+                onConfigure={mod.id === 'sis-caixa' ? abrirModalCaminho : undefined}
               />
             ))}
         </div>
+        {modalCaminhoAberto && (
+          <div
+            role="presentation"
+            onMouseDown={(evento) => {
+              if (evento.target === evento.currentTarget) setModalCaminhoAberto(false);
+            }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 20, display: 'grid', placeItems: 'center',
+              padding: 20, background: 'rgba(14, 37, 73, .42)',
+            }}
+          >
+            <form
+              onSubmit={salvarCaminhoSisCaixa}
+              style={{
+                width: 'min(440px, 100%)', padding: 26, borderRadius: 18, background: '#fff',
+                boxShadow: '0 24px 70px rgba(14, 37, 73, .25)', textAlign: 'left',
+              }}
+            >
+              <h3 style={{ margin: 0, color: '#0e2549', fontFamily: MONT, fontSize: 19 }}>Configurar SIS CAIXA</h3>
+              <p style={{ margin: '8px 0 18px', color: '#7183a3', fontFamily: SANS, fontSize: 13, lineHeight: 1.5 }}>
+                Informe o caminho de rede do arquivo Excel usado neste computador.
+              </p>
+              <label htmlFor="caminho-sis-caixa" style={{ display: 'block', marginBottom: 7, color: '#3a4a6b', fontFamily: SANS, fontSize: 12, fontWeight: 700 }}>
+                Caminho do arquivo
+              </label>
+              <input
+                id="caminho-sis-caixa"
+                autoFocus
+                value={caminhoDigitado}
+                onChange={(evento) => {
+                  setCaminhoDigitado(evento.target.value);
+                  setErroCaminho('');
+                }}
+                placeholder="\\\\servidor\\pasta\\caixa.xlsx"
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '11px 12px', border: `1px solid ${erroCaminho ? '#d94b4b' : '#d8e4f3'}`,
+                  borderRadius: 9, outline: 'none', color: '#243755', fontFamily: SANS, fontSize: 13,
+                }}
+              />
+              {erroCaminho && <p style={{ margin: '7px 0 0', color: '#c43d3d', fontFamily: SANS, fontSize: 12 }}>{erroCaminho}</p>}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+                <button type="button" onClick={() => setModalCaminhoAberto(false)} style={{ border: '1px solid #d8e4f3', borderRadius: 9, padding: '9px 14px', background: '#fff', color: '#52637f', fontWeight: 800, cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" style={{ border: 0, borderRadius: 9, padding: '9px 16px', background: '#065f46', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>Salvar e abrir</button>
+              </div>
+            </form>
+          </div>
+        )}
       </main>
     </div>
   );

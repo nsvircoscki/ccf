@@ -606,7 +606,8 @@ export const servicoService = {
   // aprovados — ex.: "2026-052-2" é o 2º processo aprovado do serviço 2026-052
   // (não um contador global do tipo). Como o numeroServico é único, isso já
   // garante nomes sem colisão, sem precisar de sigla nem de contador por tipo.
-  async decidirOrcamento(servicoId, decisao) {
+  // quem: pessoa que decidiu (fica no histórico das etapas movidas sozinhas).
+  async decidirOrcamento(servicoId, decisao, quem = null) {
     const servico = await prisma.servico.findUnique({
       where: { id: servicoId },
       include: { workflows: true, itensOrcamento: true }
@@ -681,8 +682,11 @@ export const servicoService = {
         // dois serviços LEG-2024-xxx colidiam no mesmo nome de projeto.
         const nomeProjeto = `${servico.numeroServico}-${numeroDoProcesso}`;
         const removerDossie = temRetificacao && tipoProcesso !== 'Retificação';
+        // Orçamento aprovado: a etapa "Aprovação do Orçamento" já nasce
+        // concluída e a seguinte entra em andamento.
         const projeto = await workflowService.fabricarProjeto(
-          nomeProjeto, [tipoProcesso], servico.terreno || 'Urbano', servico.id, servico.matricula, tx, removerDossie
+          nomeProjeto, [tipoProcesso], servico.terreno || 'Urbano', servico.id, servico.matricula, tx, removerDossie,
+          { etapasConcluidas: ['Aprovação do Orçamento'], quemId: quem?.id || null },
         );
         gerados.push(projeto);
       }

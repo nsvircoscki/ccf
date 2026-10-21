@@ -17,6 +17,7 @@ export default function SisPontoJustificativasAdmin({ justificativas, carregando
   const [setorFiltro, setSetorFiltro] = useState('Todos os setores');
   const [statusFiltro, setStatusFiltro] = useState('Todos os status');
   const [mesFiltro, setMesFiltro] = useState('Todos os meses');
+  const [aba, setAba] = useState('pendentes');
 
   const nomes = useMemo(() => Array.from(new Set(justificativas.map((item) => item.nome))).sort(), [justificativas]);
   const setores = useMemo(() => Array.from(new Set(justificativas.map((item) => item.setor))).sort(), [justificativas]);
@@ -57,10 +58,15 @@ export default function SisPontoJustificativasAdmin({ justificativas, carregando
   });
 
   const ordenadas = [...justificativas]
-    .filter((item) => (funcionarioFiltro === 'Todos os funcionários' || item.nome === funcionarioFiltro)
+    .filter((item) =>
+      aba === 'pendentes'
+        ? item.status === 'Em análise'
+        : ['Aceita', 'Inválida', 'Recusada'].includes(item.status)
+    )
+    .filter((item) => aba === 'historico' || ((funcionarioFiltro === 'Todos os funcionários' || item.nome === funcionarioFiltro)
       && (setorFiltro === 'Todos os setores' || item.setor === setorFiltro)
       && (statusFiltro === 'Todos os status' || item.status === statusFiltro)
-      && (mesFiltro === 'Todos os meses' || item.dia?.startsWith(mesFiltro)))
+      && (mesFiltro === 'Todos os meses' || item.dia?.startsWith(mesFiltro))))
     .sort((a, b) => {
       const porStatus = (ORDEM_STATUS_JUSTIFICATIVA[a.status] ?? 9) - (ORDEM_STATUS_JUSTIFICATIVA[b.status] ?? 9);
       if (porStatus !== 0) return porStatus;
@@ -129,8 +135,42 @@ export default function SisPontoJustificativasAdmin({ justificativas, carregando
 
   return (
     <>
-    {filtros}
-    {esquecimentos}
+    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      <button
+        type="button"
+        onClick={() => setAba('pendentes')}
+        style={{
+          border: 0,
+          borderRadius: 9,
+          padding: '9px 14px',
+          background: aba === 'pendentes' ? '#1767e8' : '#eef4ff',
+          color: aba === 'pendentes' ? '#fff' : '#52637f',
+          fontWeight: 800,
+          fontSize: 12,
+          cursor: 'pointer',
+        }}
+      >
+        Pendentes ({justificativas.filter((item) => item.status === 'Em análise').length})
+      </button>
+      <button
+        type="button"
+        onClick={() => setAba('historico')}
+        style={{
+          border: 0,
+          borderRadius: 9,
+          padding: '9px 14px',
+          background: aba === 'historico' ? '#1767e8' : '#eef4ff',
+          color: aba === 'historico' ? '#fff' : '#52637f',
+          fontWeight: 800,
+          fontSize: 12,
+          cursor: 'pointer',
+        }}
+      >
+        Histórico ({justificativas.filter((item) => ['Aceita', 'Inválida', 'Recusada'].includes(item.status)).length})
+      </button>
+    </div>
+    {aba === 'pendentes' && filtros}
+    {aba === 'pendentes' && esquecimentos}
     {!ordenadas.length && (
       <Card style={{ padding: 26, minHeight: 160, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
         <p style={{ margin: 0, color: '#7183a3', fontSize: 13, fontWeight: 600 }}>Nenhuma justificativa encontrada com esses filtros.</p>

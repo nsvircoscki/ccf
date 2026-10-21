@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FiSearch, FiList, FiTrello, FiX, FiBriefcase, FiPower } from 'react-icons/fi';
 import { AnimatedDropdown } from './AnimatedDropdown';
 import { servicoService } from '../services/servicoService';
+import { api } from '../services/api';
 import { useEstadoNavegavel } from '../hooks/useNavegacao';
+
 
 const TIPOS_PROCESSO = ["Retificação", "Desmembramento", "Unificação", "Usucapião", "Alteração de Divisas", "CAR", "Certificação INCRA", "Escritura", "Conferência", "Cadastral", "Locação", "Movimentação de Terra", "Extremação", "Altimetria", "DANC", "Relatório de Usucapião", "CCIR/ITR"];
 
@@ -120,6 +122,7 @@ export function PesquisaView({
   // contador exibido precisa descontar os serviços já inativados (ver
   // servicosInativos abaixo).
   const [servicosLista, setServicosLista] = useState(null);
+  const [notificacoes, setNotificacoes] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -160,6 +163,61 @@ export function PesquisaView({
   useEffect(() => {
     localStorage.setItem('pesquisa:somenteMinhasEtapas', String(somenteMinhasEtapas));
   }, [somenteMinhasEtapas]);
+
+  useEffect(() => {
+    let ativo = true;
+
+    const carregarNotificacoes = async () => {
+      try {
+        const resposta = await api.getNotificacoes();
+
+        if(ativo) {
+          setNotificacoes(resposta?.notificacoes || []);
+        }
+      } catch (erro) {
+        console.error('Erro ao carregar notificações da pesquisa:', erro);
+      }
+    };
+
+    carregarNotificacoes();
+
+    const intervalo = setInterval(carregarNotificacoes, 20000);
+
+    return () => {
+      ativo = false;
+      clearInterval(intervalo);
+    };
+  }, []);
+
+  const notificacoesDoProjeto = (projetoId) =>
+    notificacoes.filter((notificacao) => notificacao.workflowId === projetoId);
+
+  const marcarNotificacoesDoProjetoComoLidas = async (evento, projetoId) => {
+    evento.stopPropagation();
+
+    const notificacoesProjeto = notificacoesDoProjeto(projetoId);
+    const pendentes = notificacoesProjeto.filter((notificacao) => !notificacao.lida);
+
+    try {
+      await Promise.all(
+        pendentes.map((notificacao) =>
+          api.marcarNotificacaoComoLida(notificacao.id)
+        )
+      );
+
+      setNotificacoes((anteriores) =>
+        anteriores.map((notificacao) =>
+          notificacao.workflowId === projetoId
+            ? { ...notificacao, lida: true }
+            : notificacao
+        )
+      );
+
+      setSelectedId(projetoId);
+    } catch (erro) {
+      console.error('Erro ao marcar notificações do projeto como lidas:', erro);
+    }
+  };
 
   const etapaTerm = normalize(buscaEtapa.trim());
 
@@ -540,11 +598,19 @@ export function PesquisaView({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {resultados.map((p) => {
                 const isActive = ativo?.id === p.id;
+                const notificacoesProjeto = notificacoesDoProjeto(p.id);
+                const quantidadeNotificacoes = notificacoesProjeto.filter(
+                  (notificacao) => !notificacao.lida
+                ).length;
+
                 return (
                   <div
                     key={p.id}
                     onClick={() => setSelectedId(p.id)}
-                    onDoubleClick={() => { setWorkflowAtivo(p.id); setTelaAtiva('kanban'); }}
+                    onDoubleClick={() => {
+                      setWorkflowAtivo(p.id);
+                      setTelaAtiva('kanban');
+                    }}
                     title="Clique duas vezes para abrir no Kanban"
                     style={{
                       cursor: 'pointer', background: '#fff', borderRadius: '12px', padding: '13px 16px',
@@ -553,7 +619,39 @@ export function PesquisaView({
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    <div style={{ fontWeight: 'bold', color: '#333', fontSize: '15px' }}>{p.name}</div>
+                    <div style={{ fontWeight: 'bold', color: '#333', fontSize: '15px' }}>{p.name}
+                      {quantidadeNotificacoes > 0 && (
+                        <button
+                          type="button"
+                          aria-label={`${quantidadeNotificacoes} notificações não lidas`}
+                          title={`${quantidadeNotificacoes} notificações não lidas`}
+                          onClick={(evento) =>
+                            marcarNotificacoesDoProjetoComoLidas(evento, p.id)
+                          }
+                          style={{
+                            minWidth: 20,
+                            height: 20,
+                            padding: '0 6px',
+                            marginLeft: 8,
+                            border: 0,
+                            borderRadius: 999,
+                            background: '#e53935',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            verticalAlign: 'middle',
+                            fontSize: 10,
+                            fontWeight: 900,
+                            lineHeight: 1,
+                            boxShadow: '0 0 0 3px rgba(229, 57, 53, .14)',
+                          }}
+                        >
+                          {quantidadeNotificacoes}
+                        </button>
+                      )}
+                    </div>
                     <div style={{ fontSize: '12px', color: '#777', marginTop: '4px' }}>
                       {[p.nomeCliente, p.matricula ? `Mat: ${p.matricula}` : null, siglasDoTipo(p.description)].filter(Boolean).join(' — ') || 'Sem cliente/matrícula vinculados'}
                     </div>

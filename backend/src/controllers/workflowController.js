@@ -23,7 +23,7 @@ export const workflowController = {
   async criar(req, res) {
     const { name, types, terreno } = req.body;
     try {
-      const projeto = await workflowService.fabricarProjeto(name, types, terreno);
+      const projeto = await workflowService.fabricarProjeto(name, types, terreno, null, null, undefined, false, { quemId: req.usuario?.id || null });
       res.status(201).json({ message: "Projeto Combo fabricado com sucesso!", data: projeto });
     } catch (error) { res.status(400).json({ error: error.message }); }
   },

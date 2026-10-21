@@ -6,6 +6,13 @@ import { AnimatedDropdown } from './AnimatedDropdown';
 
 const USUARIOS = ['DES', 'TOPO', 'ENG', 'CRD'];
 const COLUNAS_VISUAIS = ['Iniciar', 'Em Andamento', 'Concluído'];
+// Nome no banco -> o que a tela mostra. Concluir uma etapa leva a próxima
+// para "Em andamento" sozinho (backend, etapasKanban.js) e avisa o setor dela.
+const ROTULO_COLUNA = {
+  Iniciar: { titulo: 'A iniciar', dica: 'Aguardando a conclusão da etapa anterior' },
+  'Em Andamento': { titulo: 'Em andamento', dica: 'Entram aqui sozinhas quando a anterior é concluída' },
+  'Concluído': { titulo: 'Concluídas', dica: 'Etapas concluídas' },
+};
 const CORES = {
   'ENG': { bg: '#FFF9C4', borda: '#FBC02D' },
   'TOPO': { bg: '#BBDEFB', borda: '#1E88E5' },
@@ -63,9 +70,9 @@ export function KanbanView({
         return;
     }
 
-    // Não há mais bloqueio por etapa anterior pendente — o setor responsável
-    // pela próxima etapa é avisado por notificação (ver Navbar) em vez de ter
-    // o card travado até a etapa anterior terminar.
+    // Sem bloqueio por etapa anterior pendente. Ao concluir, o backend leva a
+    // próxima etapa para "Em andamento" e notifica o setor dela; o quadro
+    // recarrega logo depois do movimento e já mostra isso.
     moverTicketOtimista(ticketArrastado, proximaEtapa, usuarioLogado);
     setTicketArrastado(null);
   };
@@ -237,7 +244,10 @@ export function KanbanView({
             <div key={colunaNome} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, colunaNome)} style={{ width: '374px', background: '#EAEAEA', borderRadius: '15px', display: 'flex', flexDirection: 'column' }}>
               <div style={{ padding: '20px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ width: '15px', height: '15px', borderRadius: '50%', background: getCorStatus(colunaNome), display: 'inline-block' }}></span>
-                <h2 style={{ color: '#555', fontSize: '20px', margin: 0 }}>{colunaNome}</h2>
+                <div>
+                  <h2 style={{ color: '#555', fontSize: '20px', margin: 0 }}>{ROTULO_COLUNA[colunaNome]?.titulo || colunaNome}</h2>
+                  <div style={{ color: '#888', fontSize: '11.5px', fontWeight: 600, marginTop: '2px' }}>{ROTULO_COLUNA[colunaNome]?.dica}</div>
+                </div>
               </div>
               
               <div className="scroll" style={{ padding: '15px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>

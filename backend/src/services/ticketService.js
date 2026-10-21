@@ -1,6 +1,6 @@
 // src/services/ticketService.js
 import { prisma } from '../prisma.js';
-import { notificationService } from './notificationService.js';
+import { iniciarProximaEtapa } from './etapasKanban.js';
 
 // Erro com status: a mensagem pode ir para a tela (as do Prisma não vão).
 function erroComStatus(status, mensagem) {
@@ -78,8 +78,10 @@ export const ticketService = {
         data: { ticketId, fromStepId: ticket.currentStepId, toStepId, userId }
       });
 
-      if (toStep.step_name === 'Concluído') {
-        await notificationService.notificarProximaEtapa(ticket, tx);
+      // Concluiu: a próxima etapa da sequência entra em andamento sozinha e o
+      // setor dela é notificado.
+      if (toStep.step_name === 'Concluído' && ticket.currentStep?.step_name !== 'Concluído') {
+        await iniciarProximaEtapa(tx, ticket, userId);
       }
 
       return updatedTicket;

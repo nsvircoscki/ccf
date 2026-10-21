@@ -97,7 +97,7 @@ export const servicoController = {
   async aprovarOrcamento(req, res) {
     try {
       const decisao = req.body?.decisao === 'REPROVADO' ? 'REPROVADO' : 'APROVADO';
-      const resultado = await servicoService.decidirOrcamento(req.params.id, decisao);
+      const resultado = await servicoService.decidirOrcamento(req.params.id, decisao, req.usuario);
       res.status(200).json(resultado);
     } catch (error) {
       res.status(400).json({ error: error.message });

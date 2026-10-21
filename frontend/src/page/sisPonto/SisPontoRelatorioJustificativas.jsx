@@ -30,7 +30,6 @@ function linhasDoRelatorio(justificativas) {
 export default function SisPontoRelatorioJustificativas({ justificativas }) {
   const [mes, setMes] = useState(mesAtual);
   const [filtro, setFiltro] = useState('ambas');
-
   const linhas = useMemo(() => linhasDoRelatorio(justificativas)
     .filter((l) => l.dia?.startsWith(mes) && (filtro === 'ambas' || l.status === filtro))
     .sort((a, b) => a.nome.localeCompare(b.nome) || a.dia.localeCompare(b.dia) || a.horaInicio.localeCompare(b.horaInicio)),

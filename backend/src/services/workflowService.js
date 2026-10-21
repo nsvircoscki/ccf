@@ -1,6 +1,6 @@
 // src/services/workflowService.js
 import { prisma } from '../prisma.js';
-import { notificationService } from './notificationService.js';
+import { prepararProjetoNovo } from './etapasKanban.js';
 
 // Etapas padrão por tipo de processo — vêm da tabela TipoProcessoEtapa
 // (editável pela tela de Configurações > Etapas), não mais fixas no código.
@@ -43,7 +43,8 @@ export const workflowService = {
 
   // matricula: vem do Servico e já nasce preenchida no projeto, sem precisar
   // de edição manual — é o que aparece no card do Kanban e entra na busca.
-  async fabricarProjeto(name, types, terreno = 'Urbano', servicoId = null, matricula = null, tx = prisma, removerDossie = false) {
+  // opcoes: { etapasConcluidas: [nomes] que já nascem concluídas, quemId } — ver etapasKanban.prepararProjetoNovo.
+  async fabricarProjeto(name, types, terreno = 'Urbano', servicoId = null, matricula = null, tx = prisma, removerDossie = false, opcoes = {}) {
     if (!types || types.length === 0) throw new Error("Selecione pelo menos um tipo de processo");
     const projetoExistente = await tx.workflow.findFirst({ where: { name } });
     if (projetoExistente) throw new Error("Já existe um projeto com este nome.");
@@ -107,7 +108,8 @@ export const workflowService = {
     });
 
     await tx.ticket.createMany({ data: ticketsData });
-    await notificationService.notificarPrimeiraEtapa(workflow.id, tx);
+    // Primeira etapa já entra em andamento (e o setor dela é avisado).
+    await prepararProjetoNovo(tx, workflow.id, opcoes);
     return workflow;
   },
 

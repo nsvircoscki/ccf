@@ -7,7 +7,8 @@ const formatarValor = (valor) => Number(valor || 0).toLocaleString('pt-BR', { mi
 // Proposta de valores (orçamento formalizado) em A4, aberta para imprimir ou
 // salvar em PDF. Antes ficava na tela OS/Contrato.
 // itens: [{ nome (sigla do serviço), valor }]; total: número.
-export function abrirPropostaPdf({ numero, cliente, matricula, area, municipio, itens, total, responsavel = 'Eng. Charles Costi', observacoes = '' }) {
+// Os campos vêm da janela da proposta no Orçamento (PropostaOrcamentoModal).
+export function abrirPropostaPdf({ numero, cliente, matricula, area, municipio, itens, total, responsavel = 'Eng. Charles Costi', observacoes = '', pagamento = 'A combinar', validade = '10 dias' }) {
     const linhasServicos = itens
       .map((item, index) => `
                     <tr>
@@ -89,7 +90,7 @@ export function abrirPropostaPdf({ numero, cliente, matricula, area, municipio, 
                 Matrícula: ${escapeHtml(matricula)} &nbsp;|&nbsp; Área Informada: ${escapeHtml(area)} &nbsp;|&nbsp; Município/UF: ${escapeHtml(municipio)}<br>
                 Responsável Técnico: ${escapeHtml(responsavel)}<br>
                 ${observacoes ? escapeHtml(observacoes) : ''}
-                <div style="margin-top: 15mm;">Pagamento: A combinar.<br>Validade da proposta: 10 dias.</div>
+                <div style="margin-top: 15mm;">Pagamento: ${escapeHtml(pagamento || 'A combinar')}.<br>Validade da proposta: ${escapeHtml(validade || '10 dias')}.</div>
               </section>
 
               <div class="closing">Coloco-me à disposição para maiores esclarecimentos que se fizerem necessários.<br>Atenciosamente,</div>
