@@ -91,6 +91,7 @@ export function Reveal({ open, children }) {
 export function Field({
   label, icon, value, onChange, placeholder, type = 'text', span = 1,
   textarea, rows = 3, disabled, onBlur, hint, list, labelAction,
+  required = false, maxLength, minLength, inputMode, min, max, hintColor = C.muted,
 }) {
   const [focus, setFocus] = useState(false);
   const base = {
@@ -112,7 +113,7 @@ export function Field({
           letterSpacing: '0.07em', textTransform: 'uppercase',
         }}>
           {icon && <span style={{ color: C.muted, display: 'inline-flex' }}><Icon name={icon} size={13} /></span>}
-          {label}
+          {label}{required && <span aria-hidden="true" style={{ color: C.danger, marginLeft: 3 }}>*</span>}
         </label>
         {labelAction}
       </div>
@@ -128,11 +129,12 @@ export function Field({
             onBlur={() => { setFocus(false); onBlur?.(); }} style={{ ...base, fontFamily: 'inherit' }} />
         ) : (
           <input type={type} value={value} placeholder={placeholder} disabled={disabled} list={list}
+            required={required} maxLength={maxLength} minLength={minLength} inputMode={inputMode} min={min} max={max}
             onChange={e => onChange(e.target.value)} onFocus={() => setFocus(true)}
             onBlur={() => { setFocus(false); onBlur?.(); }} style={base} />
         )}
       </div>
-      {hint && <p style={{ fontFamily: SANS, fontSize: 11, color: C.muted, margin: '5px 2px 0' }}>{hint}</p>}
+      {hint && <p style={{ fontFamily: SANS, fontSize: 11, color: hintColor, margin: '5px 2px 0' }}>{hint}</p>}
     </div>
   );
 }
